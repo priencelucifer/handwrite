@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Handwriting capture</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; padding: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  input[type=text] { font-size: 16px; padding: 6px 8px; flex: 1 1 220px; min-width: 0; }
+  #name { flex: 0 0 110px; }
+  button { font-size: 16px; padding: 8px 14px; }
+  canvas { width: 100%; height: 220px; display: block; touch-action: none; background: #fff;
+           border: 1px solid #999; border-radius: 6px; }
+  #msg { min-height: 1.4em; }
+  .hint { color: GrayText; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="row">
+  <input id="text" type="text" aria-label="Text you will write">
+  <button id="next" type="button">Other sentence</button>
+</div>
+<p class="hint">Write the sentence above in one line, in your normal handwriting, filling about half the box height.
+  Fix the text box if you wrote something different. Landscape and a stylus work best.</p>
+<canvas id="pad" aria-label="Writing area"></canvas>
+<div class="row" style="margin-top:8px">
+  <label>Style name <input id="name" type="text" value="mine-1"></label>
+  <button id="undo" type="button">Undo stroke</button>
+  <button id="clear" type="button">Clear</button>
+  <button id="save" type="button"><b>Save</b></button>
+</div>
+<div id="msg" role="status"></div>
+<script>
+const prompts = [
+  "the quick brown fox jumps over",
+  "Pack my box with five dozen jugs",
+  "Hello, how are you doing today?",
+  "I hope this letter finds you well.",
+  "See you soon - love, me",
+];
+let p = 0, strokes = [], cur = null, penSeen = false;
+const $ = id => document.getElementById(id);
+const pad = $("pad"), ctx = pad.getContext("2d");
+$("text").value = prompts[0];
+$("next").onclick = () => { p = (p + 1) % prompts.length; $("text").value = prompts[p]; };
+
+function resize() {
+  const r = pad.getBoundingClientRect(), d = devicePixelRatio || 1;
+  pad.width = r.width * d; pad.height = r.height * d;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  redraw();
+}
+function redraw() {
+  const w = pad.clientWidth, h = pad.clientHeight;
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = "#cde"; ctx.lineWidth = 1;
+  for (const y of [h * 0.45, h * 0.7]) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  ctx.strokeStyle = "#123"; ctx.lineWidth = 2.5; ctx.lineCap = ctx.lineJoin = "round";
+  for (const s of strokes) {
+    ctx.beginPath(); ctx.moveTo(s[0][0], s[0][1]);
+    for (const [x, y] of s) ctx.lineTo(x, y);
+    if (s.length === 1) ctx.lineTo(s[0][0] + 0.1, s[0][1]);
+    ctx.stroke();
+  }
+}
+const pos = e => { const r = pad.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+const ignore = e => (penSeen && e.pointerType === "touch");  // palm rejection once a stylus is used
+
+pad.addEventListener("pointerdown", e => {
+  if (e.pointerType === "pen") penSeen = true;
+  if (ignore(e)) return;
+  pad.setPointerCapture(e.pointerId);
+  cur = [pos(e)]; strokes.push(cur); redraw();
+});
+pad.addEventListener("pointermove", e => {
+  if (!cur || ignore(e)) return;
+  for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) cur.push(pos(ev));
+  redraw();
+});
+for (const t of ["pointerup", "pointercancel"]) pad.addEventListener(t, () => { cur = null; });
+
+$("undo").onclick = () => { strokes.pop(); redraw(); };
+$("clear").onclick = () => { strokes = []; redraw(); };
+$("save").onclick = async () => {
+  if (!strokes.length) { $("msg").textContent = "Write something first."; return; }
+  $("msg").textContent = "Saving…";
+  try {
+    const r = await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("name").value.trim(), text: $("text").value.trim(), strokes }) });
+    const j = await r.json();
+    if (!j.ok) { $("msg").textContent = "Not saved: " + j.error; return; }
+    $("msg").textContent = `Saved as style "${j.style}". Write another sentence to make more styles.`;
+    strokes = []; redraw();
+    const m = $("name").value.match(/^(.*?)(\d+)$/);
+    if (m) $("name").value = m[1] + (Number(m[2]) + 1);
+    $("next").click();
+  } catch (err) { $("msg").textContent = "Not saved: " + err; }
+};
+addEventListener("resize", resize);
+resize();
+</script>
+</body>
+</html>

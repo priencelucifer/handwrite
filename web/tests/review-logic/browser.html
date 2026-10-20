@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>engine file:// check</title>
+<pre id="out"></pre>
+<script src="../../engine.js"></script>
+<script src="../../weights.js"></script>
+<script src="../../styles.js"></script>
+<script>
+  const out = document.getElementById("out");
+  const log = s => { out.textContent += s + "\n"; };
+  try {
+    log("HWEngine global: " + (typeof HWEngine) + ", simdSupported: " + HWEngine.simdSupported);
+    const t0 = performance.now();
+    const model = HWEngine.loadModel(HWEngine.b64ToBytes(HW_WEIGHTS_B64));
+    log("loadModel ms: " + (performance.now() - t0).toFixed(0) + ", simd: " + model.simd);
+    const hand = new HWEngine.Hand(model, HWEngine.decodePreset(HW_PRESETS[9]));
+    const ink = hand.word("hello", 42);
+    log("word strokes: " + ink.length + ", first point: " + JSON.stringify(ink[0][0]) + ", sum x: " + ink.flat().reduce((s, p) => s + p[0], 0));
+  } catch (e) { log("MAIN ERROR: " + e); }
+
+  // Worker by URL (the importScripts route the spec asks for)
+  try {
+    const w = new Worker("worker.js");
+    w.onmessage = e => log("url worker: " + e.data);
+    w.onerror = e => { log("url worker onerror: " + (e.message || "error event")); e.preventDefault(); };
+  } catch (e) { log("url worker construct ERROR: " + e.name + ": " + e.message); }
+
+  // Blob worker that importScripts the engine by absolute file:// URL
+  try {
+    const abs = new URL("../../engine.js", location.href).href;
+    const src = `try { importScripts(${JSON.stringify(abs)}); postMessage("blob importScripts ok: " + typeof HWEngine); } catch (e) { postMessage("blob importScripts ERROR: " + e.name + ": " + e.message); }`;
+    const w2 = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+    w2.onmessage = e => log(e.data);
+    w2.onerror = e => { log("blob worker onerror: " + (e.message || "error event")); e.preventDefault(); };
+  } catch (e) { log("blob worker construct ERROR: " + e.name + ": " + e.message); }
+</script>

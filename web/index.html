@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handwrite</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f8f9fb; --line: #e3e6eb; --text: #1c2230; --muted: #667085;
+    --accent: #3b5bdb; --accent-2: #eef2ff; --accent-text: #ffffff; --danger: #c92a2a; --danger-bg: #fff1f1;
+    --ok: #2b8a3e; --ink: #1b2a6b; --plate: #3a3d42; --plate-grid: #4a4e55; --plate-fine: #42454b;
+    --stage: #e9ebef; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 16px rgba(16,24,40,.06);
+    --radius: 12px; color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111318; --panel: #181b22; --panel-2: #1e222b; --line: #2a2f3a; --text: #e6e8ee; --muted: #9aa3b2;
+      --accent: #748ffc; --accent-2: #1f2540; --accent-text: #0b0f1f; --danger: #ff8787; --danger-bg: #2b1618;
+      --ok: #69db7c; --stage: #0c0e12; --shadow: 0 1px 2px rgba(0,0,0,.4); color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: grid; grid-template-rows: auto 1fr; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: var(--panel);
+    border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; letter-spacing: -.01em; }
+  .brand svg { color: var(--accent); }
+  .brand small { color: var(--muted); font-weight: 400; font-size: 13px; }
+  header .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .pill.busy .dot { background: var(--accent); animation: pulse 1s infinite; }
+  .pill.err .dot { background: var(--danger); }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 14px;
+    border-radius: 9px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-weight: 550;
+    transition: background .12s, border-color .12s, transform .05s; }
+  .btn:hover { background: var(--panel-2); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.small { height: 30px; padding: 0 10px; font-size: 13px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  main { display: grid; grid-template-columns: 380px 1fr; min-height: 0; }
+  aside { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--line); }
+  .scroll { overflow: auto; padding: 14px 16px 8px; display: grid; gap: 14px; align-content: start; }
+  section.card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 14px; }
+  .card h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650;
+    display: flex; align-items: center; justify-content: space-between; }
+  textarea#text { width: 100%; min-height: 150px; resize: vertical; border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; background: var(--panel-2); line-height: 1.5; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+  .warn { color: var(--danger); }
+  .row { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 10px; margin-top: 10px; }
+  .row label { color: var(--muted); font-size: 13px; }
+  select, input[type=number], input[type=text] { height: 34px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel-2); padding: 0 10px; width: 100%; }
+  .slider { display: grid; grid-template-columns: 1fr 44px; align-items: center; gap: 10px; }
+  .slider output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .seg { display: inline-grid; grid-auto-flow: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel-2); padding: 6px 12px; cursor: pointer; color: var(--muted); }
+  .seg button[aria-pressed=true] { background: var(--accent-2); color: var(--accent); font-weight: 600; }
+  .unit { position: relative; }
+  .unit input { padding-right: 34px; }
+  .borders { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .borders .unit { display: flex; align-items: center; gap: 6px; }
+  .borders .unit span { color: var(--muted); font-size: 15px; }
+  .unit::after { content: attr(data-unit); position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 12px; pointer-events: none; }
+  .styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .style { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 4px; cursor: pointer;
+    display: grid; gap: 2px; text-align: center; color: #667085; font-size: 11px; }
+  .style canvas { width: 100%; height: 34px; display: block; }
+  .style[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-2); }
+  .style.mine { background: #fffdf5; }
+  .style-group { grid-column: 1 / -1; font-size: 12px; font-weight: 650; color: var(--muted); margin: 6px 0 -2px; }
+  .styles { max-height: 360px; overflow: auto; padding: 2px; }
+  .actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line);
+    background: var(--panel); }
+  .stage { position: relative; min-width: 0; min-height: 0; background: var(--stage); }
+  #plate { width: 100%; height: 100%; display: block; touch-action: none; }
+  .toolbar { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; }
+  .toolbar .btn { background: var(--panel); box-shadow: var(--shadow); }
+  .info { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 11px; box-shadow: var(--shadow);
+    font-size: 12.5px; color: var(--muted); max-width: 640px; pointer-events: auto; }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip.err { color: var(--danger); background: var(--danger-bg); border-color: transparent; }
+  .legend { display: flex; gap: 12px; align-items: center; }
+  .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px dashed; vertical-align: middle; margin-right: 5px; }
+  #saveAll { grid-column: 1 / -1; }
+  #saveAll[hidden] { display: none; }
+  .pager { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px; box-shadow: var(--shadow); font-weight: 600; }
+  .pager[hidden] { display: none; }
+  .progress { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); }
+
+  dialog { border: 0; border-radius: 16px; padding: 0; width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+    background: var(--panel); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+  dialog::backdrop { background: rgba(15,18,25,.45); }
+  .dlg { display: grid; grid-template-rows: auto 1fr auto; max-height: calc(100vh - 48px); }
+  .dlg > header { border: 0; padding: 18px 22px 6px; display: block; }
+  .dlg > header h3 { margin: 0; font-size: 18px; }
+  .dlg > header p { margin: 4px 0 0; color: var(--muted); }
+  .dlg .body { overflow: auto; padding: 8px 22px 16px; }
+  .dlg footer { display: flex; gap: 10px; justify-content: flex-end; align-items: center; padding: 14px 22px; border-top: 1px solid var(--line); }
+  .dlg footer .msg { margin-right: auto; color: var(--danger); font-size: 13px; }
+  fieldset { border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 12px; margin: 12px 0 0; }
+  legend { padding: 0 6px; font-weight: 650; font-size: 13px; }
+  .field { display: grid; grid-template-columns: 200px 120px 1fr; gap: 12px; align-items: start; padding-top: 10px; }
+  .field label { padding-top: 7px; font-weight: 550; }
+  .field p { margin: 0; padding-top: 6px; color: var(--muted); font-size: 12.5px; }
+  #pad { width: 100%; height: 200px; border: 1px dashed var(--line); border-radius: 12px; background: #fff; touch-action: none; display: block; }
+  .mine-list { display: grid; gap: 8px; margin-top: 10px; }
+  .mine-item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 10px; }
+  .mine-item small { color: var(--muted); }
+  ol.steps { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 8px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-template-rows: auto 60vh; } aside { order: 2; }
+    .field { grid-template-columns: 1fr 110px; } .field p { grid-column: 1 / -1; padding-top: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    Handwrite <small>handwriting for your 3D printer</small>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill" id="status" role="status"><span class="dot"></span><span id="statusText">Starting…</span></span>
+  <button class="btn" id="openMine">My handwriting</button>
+  <button class="btn" id="openSettings">Printer settings</button>
+</header>
+<main>
+  <aside>
+    <div class="scroll">
+      <section class="card">
+        <h2>Text <span id="count" class="hint" style="margin:0;text-transform:none;letter-spacing:0"></span></h2>
+        <textarea id="text" spellcheck="true" aria-label="Text to write"></textarea>
+        <p class="hint" id="capacity" role="status"></p>
+        <p class="hint warn" id="skipped" hidden></p>
+      </section>
+      <section class="card">
+        <h2>Handwriting</h2>
+        <div class="styles" id="styles" role="group" aria-label="Handwriting style"></div>
+        <div class="row"><label for="bias">Neatness</label>
+          <div class="slider"><input type="range" id="bias" min="0" max="2" step="0.05"><output for="bias"></output></div></div>
+        <div class="row"><label for="wobble">Line wobble</label>
+          <div class="slider"><input type="range" id="wobble" min="0" max="2" step="0.05"><output for="wobble"></output></div></div>
+        <div class="row"><label for="xh">Letter size</label>
+          <div class="unit" data-unit="mm"><input type="number" id="xh" min="1" max="20" step="0.1"></div></div>
+      </section>
+      <section class="card">
+        <h2>Page</h2>
+        <div class="row" style="margin-top:0"><label for="printer">Printer</label><select id="printer"></select></div>
+        <div class="row"><label for="paper">Paper</label><select id="paper"></select></div>
+        <div class="row"><label>Orientation</label>
+          <div class="seg" role="group" aria-label="Orientation"><button id="portrait">Portrait</button><button id="landscape">Landscape</button></div></div>
+        <div class="row"><label>Border</label>
+          <div class="borders">
+            <label class="unit" data-unit="mm" title="Left and right border"><span aria-hidden="true">↔</span><input type="number" id="margin" min="0" max="50" step="1" aria-label="Left and right border in mm"></label>
+            <label class="unit" data-unit="mm" title="Top and bottom border"><span aria-hidden="true">↕</span><input type="number" id="marginY" min="0" max="80" step="1" aria-label="Top and bottom border in mm"></label>
+          </div></div>
+        <div class="row"><label for="sounds">Printer sounds</label>
+          <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="sounds"> <span id="soundsNote">Tunes at start, pauses, resume and finish</span></label></div>
+        <p class="hint">Drag the paper on the build plate to where it will sit. Scroll to zoom.</p>
+      </section>
+    </div>
+    <div class="actions">
+      <button class="btn" id="reroll" title="New random handwriting and layout">↻ New version</button>
+      <button class="btn primary" id="save" disabled>Save G-code</button>
+      <button class="btn" id="saveAll" hidden disabled>Save all pages</button>
+    </div>
+  </aside>
+  <div class="stage">
+    <canvas id="plate" aria-label="Build plate preview"></canvas>
+    <div class="pager" id="pager" hidden>
+      <button class="btn small" id="prevPage" aria-label="Previous page">‹</button>
+      <span id="pageLabel" aria-live="polite"></span>
+      <button class="btn small" id="nextPage" aria-label="Next page">›</button>
+    </div>
+    <div class="toolbar">
+      <button class="btn small" id="zoomOut" aria-label="Zoom out">−</button>
+      <button class="btn small" id="zoomIn" aria-label="Zoom in">+</button>
+      <button class="btn small" id="zoomFit">Fit</button>
+    </div>
+    <div class="info">
+      <div class="chip legend"><span><i style="color:#e08a00"></i>plate edge</span><span><i style="color:#7aa2d6"></i>writing area</span><span><i style="color:#c92a2a"></i>paper slide</span></div>
+      <div class="chip" id="summary" hidden></div>
+      <div class="chip err" id="error" hidden></div>
+    </div>
+  </div>
+</main>
+
+<dialog id="settingsDlg">
+  <form method="dialog" class="dlg">
+    <header><h3>Printer settings</h3><p>Copy the pen offset that already works for you in BambuPlot. Pauses are timed: the printer carries on by itself when the time is up.</p></header>
+    <div class="body" id="settingsBody"></div>
+    <footer><span class="msg" id="settingsMsg"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="settingsSave" value="save">Save</button></footer>
+  </form>
+</dialog>
+
+<dialog id="mineDlg">
+  <form method="dialog" class="dlg">
+    <header><h3>My handwriting</h3><p>Write one sentence in your normal handwriting. It becomes a handwriting style straight away.</p></header>
+    <div class="body">
+      <div class="row" style="grid-template-columns:1fr auto;margin-top:0">
+        <input type="text" id="sentence" aria-label="Sentence you will write" maxlength="60">
+        <button type="button" class="btn small" id="nextSentence">Other sentence</button>
+      </div>
+      <p class="hint">Write the sentence above in one line, filling about half the box height. Fix the text if you wrote something different. A pen or touchscreen works best.</p>
+      <canvas id="pad" aria-label="Writing area"></canvas>
+      <div class="row" style="grid-template-columns:auto 1fr auto auto auto">
+        <label for="mineName">Name</label><input type="text" id="mineName" maxlength="30">
+        <button type="button" class="btn small" id="undo">Undo</button>
+        <button type="button" class="btn small" id="clear">Clear</button>
+        <button type="button" class="btn small primary" id="saveMine">Save style</button>
+      </div>
+      <p class="hint" id="mineMsg" role="status"></p>
+      <h4 style="margin:18px 0 0">Saved handwriting</h4>
+      <div class="mine-list" id="mineList"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button type="button" class="btn small" id="exportMine">Export file</button>
+        <label class="btn small" for="importMine">Import file</label>
+        <input type="file" id="importMine" accept=".json,application/json" hidden>
+      </div>
+      <p class="hint">Export to move your handwriting to another computer or browser; your styles are stored only in this browser.</p>
+    </div>
+    <footer><button class="btn" value="close">Done</button></footer>
+  </form>
+</dialog>
+
+<dialog id="savedDlg">
+  <form method="dialog" class="dlg">
+    <header><h3>G-code saved</h3><p id="savedWhere"></p></header>
+    <div class="body">
+      <ol class="steps" id="savedSteps"></ol>
+    </div>
+    <footer><button class="btn primary" value="ok">Got it</button></footer>
+  </form>
+</dialog>
+
+<script src="weights.js"></script>
+<script src="styles.js"></script>
+<script src="engine.js"></script>
+<script src="gcode.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

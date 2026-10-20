@@ -1,0 +1,37 @@
+# All lengths in mm, speeds in mm/min.
+# Copy the pen offset that already works for you in BambuPlot.
+
+[printer]
+model = "Bambu Lab A1"    # pick in the app; G-code is only safe on this printer
+bed_x = 256               # only used when printer is Custom
+bed_y = 256               # only used when printer is Custom
+bed_z = 150               # max nozzle height (mm); only used when printer is Custom
+offset_x = 0.0            # pen tip position minus nozzle position (BambuPlot "tool offset")
+offset_y = 0.0
+home = true               # not used any more: every file homes (G28) first
+paper_pause_s = 30        # head waits over the first letter while you place the paper
+pen_pause_s = 30          # head waits at z_draw while you slide the pen down onto the paper and clamp it
+shift_pause_s = 45        # long pages: time to slide the paper toward the back between passes
+z_draw = 10.0             # nozzle height while writing; the pen is clamped touching the paper at this height
+z_lift = 12.0             # nozzle height for pen-up moves. Low keeps the many pen lifts in handwriting quick
+z_feed = 600
+draw_feed = 1500          # ~25 mm/s, about human writing speed
+travel_feed = 6000
+settle_ms = 60            # pause after each pen down/up so the ink starts cleanly
+
+[paper]
+size = "A5"               # A4, A5, A6, US Letter, Card 4x6 in, Custom
+orientation = "portrait"  # or landscape
+x = 54                    # bed position of the paper's front-left corner; set by dragging the paper in the app
+y = 23
+width = 148               # only for Custom paper
+height = 210              # only for Custom paper
+margin = 15
+
+[writing]
+style = "9"               # 0-12 are presets; your captured styles are named mine-1, mine-2, ...
+bias = 1.0                # neatness: 0 = messy, 1 = normal, 2 = very neat
+wobble = 1.0              # line wobble: 0 = perfectly aligned lines, 1 = natural, 2 = messy
+x_height = 2.8            # height of small letters like a, e, n
+line_spacing = 8.0        # baseline to baseline (ruled paper is 7-8.7)
+word_spacing = 1.0        # gap between words, in x-heights
