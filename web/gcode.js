@@ -406,18 +406,22 @@
     const pr = resolve(settings).printer, [width, height] = PAPERS.A4;
     const cfg = resolve({ ...settings, printer: { ...settings.printer, offset_x: 0, offset_y: 0 },
       paper: { ...settings.paper, size: "A4", orientation: "portrait", x: 0, y: pr.bed_y - height } });
-    const mid = Math.min(pr.bed_x, width) / 2, half = Math.min(50, mid - BED_INSET), Y = OFFSET_TEST_Y;
+    const { left: mid, top: Y } = offsetTestMarks(settings), half = Math.min(50, mid - BED_INSET);
     const marks = [[[mid - half, Y], [mid + half, Y]], [[mid, Y - 10], [mid, Y + 10]]];
     return toGcode(planPasses([marks], cfg), cfg, ["handwrite: pen offset test", ...describe(cfg, 0).slice(1),
       "push A4 paper into the back-left corner of the plate, top and left edges against the plate's edges"]);
   }
+  /** Where the test marks land if the pen offset is 0: mm from the paper's left edge (short mark) and top edge (long line). */
+  function offsetTestMarks(settings) {
+    return { left: Math.min(resolve(settings).printer.bed_x, PAPERS.A4[0]) / 2, top: OFFSET_TEST_Y };
+  }
   /** Offset from the test: mm from the paper's left edge to the short mark, and from its top edge to the long line. */
   function offsetFromTest(settings, fromLeft, fromTop) {
-    const pr = resolve(settings).printer;
-    return { offset_x: round2(fromLeft - Math.min(pr.bed_x, PAPERS.A4[0]) / 2), offset_y: round2(OFFSET_TEST_Y - fromTop) };
+    const m = offsetTestMarks(settings);
+    return { offset_x: round2(fromLeft - m.left), offset_y: round2(m.top - fromTop) };
   }
 
   return { WriteError, SOUND_PRINTERS, TUNES, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
-    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest };
+    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks };
 });

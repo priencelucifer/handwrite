@@ -529,27 +529,39 @@
   function offsetTestBlock() {
     const t = document.createElement("div"); t.className = "offset-test";
     t.innerHTML = `<p class="hint">Don't know the offset? Print the offset test. Push A4 paper into the back-left corner of the plate, with its
-      top and left edges lined up with the plate's back and left edges. Run the file like any other, then measure to the middle of each line the pen drew.</p>
+      top and left edges lined up with the plate's back and left edges. Run the file like any other, then measure to the
+      middle of each line the pen drew and type the distances in: the offset above follows. Click Save to keep it.</p>
       <button type="button" class="btn small" id="otSave">Save offset test G-code</button>
-      <div class="field"><label for="otTop">Long line</label><div class="unit" data-unit="mm"><input type="number" id="otTop" step="any" min="0" max="297"></div><p>Distance from the paper's top edge down to the long line.</p></div>
-      <div class="field"><label for="otLeft">Short mark</label><div class="unit" data-unit="mm"><input type="number" id="otLeft" step="any" min="0" max="210"></div><p>Distance from the paper's left edge to the short mark. Leave empty to keep offset X.</p></div>
-      <button type="button" class="btn small" id="otUse">Work out the offset</button> <span class="hint" id="otMsg" role="status"></span>`;
+      <div class="field"><label for="otTop">Long line</label><div class="unit" data-unit="mm"><input type="number" id="otTop" step="any"></div><p>Distance from the paper's top edge down to the long line.</p></div>
+      <div class="field"><label for="otLeft">Short mark</label><div class="unit" data-unit="mm"><input type="number" id="otLeft" step="any"></div><p>Distance from the paper's left edge to the short mark.</p></div>
+      <p class="hint" id="otMsg" role="status"></p>`;
     t.querySelector("#otSave").onclick = async () => {
       let gcode;
       try { gcode = G.offsetTest(dialogSettings()); } catch (err) { return void (t.querySelector("#otMsg").textContent = err.message); }
       const where = await download(gcode, "pen-offset-test.gcode", "text/plain");
       if (where) t.querySelector("#otMsg").textContent = `${where} Take the pen out, start it, put the paper in the corner in pause 1 and clamp the pen in pause 2.`;
     };
-    t.querySelector("#otUse").onclick = () => {
-      const top = t.querySelector("#otTop").value, left = t.querySelector("#otLeft").value, msg = t.querySelector("#otMsg");
-      if (!(+top > 0) || (left !== "" && !(+left > 0))) return void (msg.textContent = "Enter the distances in mm.");
+    // The distances are the offset in another form, kept in step both ways, so the saved offset shows here too.
+    const top = t.querySelector("#otTop"), left = t.querySelector("#otLeft"), msg = t.querySelector("#otMsg");
+    const fromOffset = () => {
       try {
-        const o = G.offsetFromTest(dialogSettings(), left === "" ? NaN : +left, +top);
-        if (left !== "") $("set_offset_x").value = o.offset_x;
-        $("set_offset_y").value = o.offset_y;
-        msg.textContent = `Offset ${left !== "" ? `X ${o.offset_x}, ` : ""}Y ${o.offset_y} mm filled in above. Click Save to keep it.`;
+        const m = G.offsetTestMarks(dialogSettings()), ox = $("set_offset_x").value, oy = $("set_offset_y").value;
+        left.value = ox === "" ? "" : +(m.left + +ox).toFixed(2); top.value = oy === "" ? "" : +(m.top - +oy).toFixed(2);
+      } catch { /* another field is invalid: Save says which */ }
+    };
+    const toOffset = () => {
+      if (!(+top.value > 0) || !(+left.value > 0)) return void (msg.textContent = "Enter both distances in mm.");
+      try {
+        const o = G.offsetFromTest(dialogSettings(), +left.value, +top.value);
+        $("set_offset_x").value = o.offset_x; $("set_offset_y").value = o.offset_y;
+        msg.textContent = `Pen offset X ${o.offset_x}, Y ${o.offset_y} mm. Click Save to keep it.`;
       } catch (err) { msg.textContent = err.message; }
     };
+    top.oninput = left.oninput = toOffset;
+    queueMicrotask(() => { // the offset fields exist once the dialog is built
+      for (const id of ["set_offset_x", "set_offset_y"]) $(id).addEventListener("input", () => { fromOffset(); msg.textContent = ""; });
+      fromOffset();
+    });
     return t;
   }
   $("settingsSave").onclick = e => {
