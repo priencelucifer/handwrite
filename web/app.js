@@ -356,7 +356,7 @@
     if (big && (big[3] - big[1]) * s > 24 && (big[2] - big[0]) * s > 120) // at its top edge, clear of the chips at the bottom
       label("pen can't reach", pX((big[0] + big[2]) / 2), pY(big[1]) + 19, css("--muted"), "center");
     label(`${pr.model} · plate ${bx} × ${by} mm`, 14, 22, css("--muted"), "left");
-    label("FRONT OF PRINTER", W / 2, H - 58, css("--muted"), "center");
+    label("FRONT OF PRINTER", X(dx + bx / 2), Math.min(Y(dy) + 22, H - 58), css("--muted"), "center"); // just under the plate, above the chips
   }
   function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
   function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
