@@ -245,7 +245,7 @@
       <p class="intro">Everything happens in the browser on your computer. Your text and handwriting never leave it.</p>
       <div class="steps4">
         <div class="card"><h3>Type your text</h3><p>Type or paste it in. The app tells you how many words fit on a page; longer text continues on page 2, 3 and so on.</p></div>
-        <div class="card"><h3>Pick a handwriting</h3><p>Choose from 45 styles, or teach it your own from one written sentence. Neatness and line wobble make it tidier or more casual.</p></div>
+        <div class="card"><h3>Pick a handwriting</h3><p>Choose from 45 styles. Neatness and line wobble make it tidier or more casual.</p></div>
         <div class="card"><h3>Set printer and paper</h3><p>Choose your printer and paper size, then drag the paper on the build-plate preview to where it will sit.</p></div>
         <div class="card"><h3>Save and print</h3><p>Click <span class="ui">Save G-code</span> and run the file like any other. The printer pauses so you can place the paper and attach the pen.</p></div>
       </div>
@@ -255,16 +255,16 @@
       <div class="tour">
         <img src="guide-app.png" alt="The Handwrite app: text box, handwriting styles and sliders on the left, the build-plate preview with the written page on the right" width="1500" height="860" loading="lazy">
         <span class="pin" style="left:20%;top:14%">1</span><span class="pin" style="left:21.5%;top:47%">2</span><span class="pin" style="left:21%;top:90%">3</span>
-        <span class="pin" style="left:42.8%;top:18.6%">4</span><span class="pin" style="left:25%;top:96%">5</span><span class="pin" style="left:80.8%;top:5%">6</span>
+        <span class="pin" style="left:42.8%;top:18.6%">4</span><span class="pin" style="left:25%;top:96%">5</span><span class="pin" style="left:90.4%;top:5%">6</span>
         <span class="pin" style="left:73%;top:93%">7</span>
       </div>
       <ul class="legend">
         <li><b class="n">1</b><span><b>Text.</b> Type or paste what you want written. Characters the model can't write are listed under it.</span></li>
-        <li><b class="n">2</b><span><b>Handwriting.</b> Click a style. Your own styles appear under “Mine”.</span></li>
+        <li><b class="n">2</b><span><b>Handwriting.</b> Click a style to use it.</span></li>
         <li><b class="n">3</b><span><b>Sliders and sizes.</b> Neatness, line wobble, word spacing, letter size and line spacing. <a href="#settings">What each one does</a>.</span></li>
         <li><b class="n">4</b><span><b>Build-plate preview.</b> The page as it will be written. Drag the paper, scroll to zoom.</span></li>
         <li><b class="n">5</b><span><b>New version / Save G-code.</b> New version rewrites the same text with fresh handwriting. Save G-code makes the file.</span></li>
-        <li><b class="n">6</b><span><b>My handwriting / Printer settings.</b> Teach it your hand; set the pen offset, heights, pauses and speeds.</span></li>
+        <li><b class="n">6</b><span><b>Printer settings.</b> The pen offset, pen heights, pauses and speeds.</span></li>
         <li><b class="n">7</b><span><b>Time estimate.</b> How long the page takes, including the pauses.</span></li>
       </ul>
     </div>
@@ -476,25 +476,6 @@
     </div>
   </section>
 
-  <section class="block" id="mine">
-    <div class="wrap two">
-      <div>
-        <p class="kicker">Your own handwriting</p>
-        <h2>Teach it your hand in one sentence</h2>
-        <p class="muted">The model copies the style of a sample it reads first, so one sentence in your own writing is enough to make a new style.</p>
-      </div>
-      <div class="card">
-        <ol class="plain">
-          <li>Click <span class="ui">My handwriting</span> at the top of the app.</li>
-          <li>Write the sentence shown on one line, filling about half the box height. A pen or touchscreen works best.</li>
-          <li>Fix the text above if you wrote something different, give it a name and click <span class="ui">Save style</span>.</li>
-          <li>It appears under <b>Mine</b> in the handwriting list. Try a few sentences and keep the one that looks most like you.</li>
-          <li>Styles are kept in this browser only. Use <span class="ui">Export file</span> and <span class="ui">Import file</span> to move them to another computer or browser.</li>
-        </ol>
-      </div>
-    </div>
-  </section>
-
   <section class="block" id="faq">
     <div class="wrap">
       <p class="kicker">Troubleshooting</p>
@@ -504,7 +485,6 @@
       <details><summary>A word looks garbled or has a stray mark</summary><p>The model occasionally slips. Click <span class="ui">New version</span> to write the page again, or raise <span class="ui">Neatness</span> a little.</p></details>
       <details><summary>Some characters are missing</summary><p>The model knows letters, digits and <code>! " # ' ( ) , - . : ; ?</code>. Accents are dropped (é becomes e), capital Q, X and Z are written lowercase, and anything else is skipped. The app lists what it skipped under the text box.</p></details>
       <details><summary>The nozzle shows a temperature</summary><p>The G-code never heats anything: it only moves, waits and plays sounds. Heat on the screen is the printer's own (left over from a print, or its homing routine). If your pen holder is printed in PLA, keep it away from the hotend.</p></details>
-      <details><summary>My handwriting styles have disappeared</summary><p>Styles live in the browser you made them in. Open the app in that browser and use <span class="ui">My handwriting → Export file</span>, then <span class="ui">Import file</span> in the new one.</p></details>
       <details><summary>Is the G-code safe for my printer?</summary><p>Every setting is range-checked, and every move in the file is checked against the chosen printer's bed (and the P1/X1 filament-cutter corner) before it is saved. If anything is unsafe, the app refuses to save and says why. Only run a file on the printer named at the top of it, and do a dry run first.</p></details>
     </div>
   </section>
