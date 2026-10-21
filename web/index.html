@@ -6,6 +6,7 @@
 <title>Handwrite: handwriting G-code generator for Bambu Lab pen plotting</title>
 <meta name="description" content="Free handwriting G-code generator for Bambu Lab A1, P1S and X1 printers with a pen holder. Type text and your 3D printer writes it in real-looking handwriting.">
 <link rel="canonical" href="https://handwrite.rickykashyap.top/">
+<meta name="author" content="Ricky Kashyap">
 <meta name="theme-color" content="#3b5bdb">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%233b5bdb%27/%3E%3Cpath d=%27M6 21c3-9 5-11 6-8s-1 8 2 5 4-9 6-7-1 7 2 7 3-3 4-4%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%272.4%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E">
 <meta property="og:type" content="website">
@@ -18,7 +19,7 @@
 <meta property="og:image:height" content="1000">
 <meta property="og:image:alt" content="The Handwrite app with a handwritten page on the build-plate preview">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Handwrite", "url": "https://handwrite.rickykashyap.top/app", "description": "Free handwriting G-code generator for Bambu Lab A1, P1S and X1 printers with a pen holder. Type text and your 3D printer writes it in real-looking handwriting.", "image": "https://handwrite.rickykashyap.top/guide-app.png", "applicationCategory": "DesignApplication", "operatingSystem": "Any (runs in a web browser)", "browserRequirements": "Requires JavaScript and WebAssembly", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "sameAs": ["https://github.com/priencelucifer/handwrite"]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Handwrite", "url": "https://handwrite.rickykashyap.top/app", "description": "Free handwriting G-code generator for Bambu Lab A1, P1S and X1 printers with a pen holder. Type text and your 3D printer writes it in real-looking handwriting.", "image": "https://handwrite.rickykashyap.top/guide-app.png", "applicationCategory": "DesignApplication", "operatingSystem": "Any (runs in a web browser)", "browserRequirements": "Requires JavaScript and WebAssembly", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "sameAs": ["https://github.com/priencelucifer/handwrite"], "author": {"@type": "Person", "name": "Ricky Kashyap", "url": "https://www.linkedin.com/in/ricky-kashyap-7b776723a", "sameAs": ["https://www.linkedin.com/in/ricky-kashyap-7b776723a", "https://github.com/priencelucifer"]}}</script>
 <style>
   :root {
     --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f8f9fb; --line: #e3e6eb; --text: #1c2230; --muted: #667085;
@@ -218,6 +219,7 @@
   details p { margin: 0 0 16px; color: var(--muted); }
 
   .final { text-align: center; padding: 64px 20px; }
+  footer .maker { margin: 0 0 10px; color: var(--text); font-size: 15px; }
   footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 13.5px; }
 
   @media (prefers-reduced-motion: reduce) {
@@ -587,9 +589,12 @@
   </section>
 </main>
 <footer>
-  <div class="wrap">Handwriting model and weights from <a href="https://github.com/sjvasquez/handwriting-synthesis">sjvasquez/handwriting-synthesis</a> (trained on IAM-OnDB),
+  <div class="wrap">
+    <p class="maker">Made by <b>Ricky Kashyap</b> · <a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener" target="_blank">LinkedIn</a> · <a href="https://github.com/priencelucifer" rel="me noopener" target="_blank">GitHub</a> · <a href="https://github.com/priencelucifer/handwrite" target="_blank" rel="noopener">Source code</a></p>
+    Handwriting model and weights from <a href="https://github.com/sjvasquez/handwriting-synthesis">sjvasquez/handwriting-synthesis</a> (trained on IAM-OnDB),
     inference ported from <a href="https://github.com/tibordp/kurvengefahr">tibordp/kurvengefahr</a>, G-code conventions from
-    <a href="https://github.com/Joep648/BambuPlot">BambuPlot</a>, printer tunes from <a href="https://github.com/bambulab/BambuStudio">Bambu Studio</a>.</div>
+    <a href="https://github.com/Joep648/BambuPlot">BambuPlot</a>, printer tunes from <a href="https://github.com/bambulab/BambuStudio">Bambu Studio</a>.
+  </div>
 </footer>
 
 <script>
