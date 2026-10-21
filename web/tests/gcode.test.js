@@ -98,11 +98,20 @@ test("A4 on the A1 is split into passes with a safe slide sequence", () => {
   assert.ok(after.slice(wait).includes("M1006 W") && after.slice(wait).some(l => /^G1 Z/.test(l)), "resume tune, then pen-up height");
 });
 
-test("printer sounds: four tunes on supported printers, none elsewhere or when switched off", () => {
+test("printer sounds: Bambu's own start and finish tunes, ours for pauses; none elsewhere or when switched off", () => {
   const { gcode, cfg } = run(G.DEFAULT_SETTINGS, "Hello there", 1);
+  assert.strictEqual(cfg.printer.model, "Bambu Lab A1");
   simulate(gcode, cfg);
   assert.strictEqual((gcode.match(/^M1006 S1$/gm) || []).length, 6); // start, (pause + resume) x 2, finish
-  assert.match(gcode, /^M1006 A72 B26 L100 C72 D26 M100 E72 F26 N100$/m, "loud: every channel plays the note at full volume");
+  // lines exactly as in Bambu Studio's A1 start and end G-code
+  assert.match(gcode, /^M1006 S1\nM1006 A0 B10 L100 C37 D10 M60 E37 F10 N60\nM1006 A0 B10 L100 C41 D10 M60 E41 F10 N60$/m, "Bambu's start tune");
+  assert.match(gcode, /^M1006 A0 B20 L100 C0 D20 M60 E0 F20 N80\nM1006 A0 B20 L100 C37 D20 M30 E37 F20 N60\nM1006 W$/m, "Bambu's finish tune, to its last note");
+  assert.match(gcode, /^M1006 A76 B14 L100 C76 D14 M100 E76 F14 N100$/m, "pause tune: every channel at full volume");
+  for (const [model, tunes] of Object.entries(G.BAMBU_TUNES)) {
+    assert.ok(tunes.start.length > 4 && tunes.finish.length > 4 && [...tunes.start, ...tunes.finish].every(s => s.length === 9), model);
+    const r = run(withSet({ "printer.model": model }), "Hello there", 1);
+    simulate(r.gcode, r.cfg);
+  }
   for (const model of ["Bambu Lab X1 Carbon / X1E", "Bambu Lab P1P / P1S"])
     assert.ok(!/M1006/.test(run(withSet({ "printer.model": model }), "Hello there", 1).gcode), model);
   assert.ok(!/M1006/.test(run(withSet({ "printer.sounds": false }), "Hello there", 1).gcode));

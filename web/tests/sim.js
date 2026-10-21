@@ -27,8 +27,10 @@ function simulate(gcode, s) {
     if (line === "G28") { homed = true; continue; }
     if (line.startsWith("M1006 A")) { // motor music: never while the pen may be on the paper; notes in a sane range
       assert.ok(z === null || z > zd + 1e-9 || draws === 0, `sound with the pen on the paper ${where}`);
-      for (const [, n, d, v] of line.matchAll(/[ACE](\d+) [BDF](\d+) [LMN](\d+)/g).map(m => m.map(Number))) // each channel
-        assert.ok((n === 0 || (n >= 50 && n <= 84)) && d > 0 && d <= 200 && v <= 100, `odd note ${where}`);
+      const ch = [...line.matchAll(/[ACE](\d+) [BDF](\d+) [LMN](\d+)/g)].map(m => m.slice(1).map(Number));
+      for (const [n, d, v] of ch) // each channel; Bambu's own tunes go down to MIDI 37 and use 0 durations on resting channels
+        assert.ok((n === 0 || (n >= 36 && n <= 84)) && d <= 200 && v <= 100, `odd note ${where}`);
+      assert.ok(ch.length === 3 && Math.max(...ch.map(c => c[1])) > 0, `tune line without a duration ${where}`);
       continue;
     }
     if (line.startsWith("M")) continue;

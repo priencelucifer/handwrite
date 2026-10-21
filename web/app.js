@@ -261,8 +261,8 @@
     const zTime = 2 * Math.abs(pr.z_lift - pr.z_draw) / pr.z_feed * 60 + 2 * pr.settle_ms / 1000;
     const sec = draw / pr.draw_feed * 60 * 1.3 + travel / pr.travel_feed * 60 * 1.5 + lifts * zTime +
       pr.paper_pause_s + pr.pen_pause_s + (passes.length - 1) * pr.shift_pause_s + 40; // +40 s homing
-    if (pr.sounds && G.SOUND_PRINTERS.has(pr.model)) { // each tune: a 1 s wait, then its notes (10 ms units)
-      const t = name => 1 + G.TUNES[name].reduce((a, n) => a + n[1], 0) / 100;
+    if (pr.sounds && G.SOUND_PRINTERS.has(pr.model)) { // each tune: a 1 s wait, then its lines (10 ms units, the longest channel)
+      const t = name => 1 + G.tuneOf(pr.model, name).reduce((a, s) => a + Math.max(s[1], s[4], s[7]), 0) / 100;
       return sec + t("start") + t("finish") + (2 + (passes.length - 1)) * (t("pause") + t("resume"));
     }
     return sec;
@@ -445,7 +445,7 @@
     $("sounds").checked = PR_().sounds !== false;
     const ok = G.SOUND_PRINTERS.has(PR_().model);
     $("sounds").disabled = !ok;
-    $("soundsNote").textContent = ok ? "Tunes at start, pauses, resume and finish" : "Not supported by this printer";
+    $("soundsNote").textContent = ok ? "Bambu's own start and finish tunes, plus a tune at each pause" : "Not supported by this printer";
   };
   $("sounds").onchange = () => { PR_().sounds = $("sounds").checked; scheduleRender(0); };
   $("slide").checked = P_().slide === true;

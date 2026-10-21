@@ -30,21 +30,117 @@
   const MIN_PEN_LIFT = 1; // between writing height and pen-up height
   const SLIDE_HOVER = 5;  // above z_draw while the user slides the paper under the pen
 
-  // Motor "music" (Bambu M1006: one note per line, three channels A/B/L, C/D/M, E/F/N = pitch, duration in 10 ms,
-  // volume 0-100; Bambu's own start tune plays two channels at once). Only printers
-  // known to play it: officially the A1 and A1 mini; confirmed by users on the P2S. Not the X1 series.
-  const SOUND_PRINTERS = new Set(["Bambu Lab A1", "Bambu Lab A1 mini", "Bambu Lab P2S"]);
-  const TUNES = { // [MIDI note or 0 for a rest, duration in 10 ms]; kept in the motors' clean range (C4-E5)
-    start: [[60, 12], [64, 12], [67, 12], [72, 26]],
-    pause: [[76, 14], [0, 8], [76, 14], [0, 8], [76, 22]],
-    resume: [[67, 10], [72, 20]],
-    finish: [[72, 14], [67, 14], [64, 14], [60, 14], [0, 6], [64, 12], [67, 12], [72, 40]],
+  // Motor "music" (Bambu M1006): each line plays three channels at once, A/B/L, C/D/M and E/F/N = MIDI note (0 = rest),
+  // duration in 10 ms, volume 0-100. Only printers known to play it: officially the A1 and A1 mini; confirmed by users
+  // on the P2S. Not the X1 series.
+  // start and finish are Bambu's own tunes, copied line for line from each printer's start and end G-code in Bambu Studio
+  // (resources/profiles/BBL/machine/<printer> 0.4 nozzle template machine_start_gcode / machine_end_gcode).
+  // Bambu's G-code has no pause tune, so pause and resume are ours.
+  const notes = s => s.trim().split("\n").map(l => l.match(/\d+/g).map(Number)); // "A0 B10 L100 ..." -> [0, 10, 100, ...]
+  const BAMBU_TUNES = {
+    "Bambu Lab A1": {
+      start: notes(`
+        A0 B10 L100 C37 D10 M60 E37 F10 N60
+        A0 B10 L100 C41 D10 M60 E41 F10 N60
+        A0 B10 L100 C44 D10 M60 E44 F10 N60
+        A0 B10 L100 C0 D10 M60 E0 F10 N60
+        A43 B10 L100 C46 D10 M70 E39 F10 N80
+        A0 B10 L100 C0 D10 M60 E0 F10 N80
+        A0 B10 L100 C43 D10 M60 E39 F10 N80
+        A0 B10 L100 C0 D10 M60 E0 F10 N80
+        A0 B10 L100 C41 D10 M80 E41 F10 N80
+        A0 B10 L100 C44 D10 M80 E44 F10 N80
+        A0 B10 L100 C49 D10 M80 E49 F10 N80
+        A0 B10 L100 C0 D10 M80 E0 F10 N80
+        A44 B10 L100 C48 D10 M60 E39 F10 N80
+        A0 B10 L100 C0 D10 M60 E0 F10 N80
+        A0 B10 L100 C44 D10 M80 E39 F10 N80
+        A0 B10 L100 C0 D10 M60 E0 F10 N80
+        A43 B10 L100 C46 D10 M60 E39 F10 N80`),
+      finish: notes(`
+        A0 B20 L100 C37 D20 M40 E42 F20 N60
+        A0 B10 L100 C44 D10 M60 E44 F10 N60
+        A0 B10 L100 C46 D10 M80 E46 F10 N80
+        A44 B20 L100 C39 D20 M60 E48 F20 N60
+        A0 B10 L100 C44 D10 M60 E44 F10 N60
+        A0 B10 L100 C0 D10 M60 E0 F10 N60
+        A0 B10 L100 C39 D10 M60 E39 F10 N60
+        A0 B10 L100 C0 D10 M60 E0 F10 N60
+        A0 B10 L100 C44 D10 M60 E44 F10 N60
+        A0 B10 L100 C0 D10 M60 E0 F10 N60
+        A0 B10 L100 C39 D10 M60 E39 F10 N60
+        A0 B10 L100 C0 D10 M60 E0 F10 N60
+        A0 B10 L100 C48 D10 M60 E44 F10 N80
+        A0 B10 L100 C0 D10 M60 E0 F10 N80
+        A44 B20 L100 C49 D20 M80 E41 F20 N80
+        A0 B20 L100 C0 D20 M60 E0 F20 N80
+        A0 B20 L100 C37 D20 M30 E37 F20 N60`),
+    },
+    "Bambu Lab A1 mini": {
+      start: notes(`
+        A0 B0 L100 C37 D10 M100 E37 F10 N100
+        A0 B0 L100 C41 D10 M100 E41 F10 N100
+        A0 B0 L100 C44 D10 M100 E44 F10 N100
+        A0 B10 L100 C0 D10 M100 E0 F10 N100
+        A43 B10 L100 C39 D10 M100 E46 F10 N100
+        A0 B0 L100 C0 D10 M100 E0 F10 N100
+        A0 B0 L100 C39 D10 M100 E43 F10 N100
+        A0 B0 L100 C0 D10 M100 E0 F10 N100
+        A0 B0 L100 C41 D10 M100 E41 F10 N100
+        A0 B0 L100 C44 D10 M100 E44 F10 N100
+        A0 B0 L100 C49 D10 M100 E49 F10 N100
+        A0 B0 L100 C0 D10 M100 E0 F10 N100
+        A44 B10 L100 C39 D10 M100 E48 F10 N100
+        A0 B0 L100 C0 D10 M100 E0 F10 N100
+        A0 B0 L100 C39 D10 M100 E44 F10 N100
+        A0 B0 L100 C0 D10 M100 E0 F10 N100
+        A43 B10 L100 C39 D10 M100 E46 F10 N100`),
+      finish: notes(`
+        A0 B20 L100 C37 D20 M100 E42 F20 N100
+        A0 B10 L100 C44 D10 M100 E44 F10 N100
+        A0 B10 L100 C46 D10 M100 E46 F10 N100
+        A44 B20 L100 C39 D20 M100 E48 F20 N100
+        A0 B10 L100 C44 D10 M100 E44 F10 N100
+        A0 B10 L100 C0 D10 M100 E0 F10 N100
+        A0 B10 L100 C39 D10 M100 E39 F10 N100
+        A0 B10 L100 C0 D10 M100 E0 F10 N100
+        A0 B10 L100 C44 D10 M100 E44 F10 N100
+        A0 B10 L100 C0 D10 M100 E0 F10 N100
+        A0 B10 L100 C39 D10 M100 E39 F10 N100
+        A0 B10 L100 C0 D10 M100 E0 F10 N100
+        A44 B10 L100 C0 D10 M100 E48 F10 N100
+        A0 B10 L100 C0 D10 M100 E0 F10 N100
+        A44 B20 L100 C41 D20 M100 E49 F20 N100
+        A0 B20 L100 C0 D20 M100 E0 F20 N100
+        A0 B20 L100 C37 D20 M100 E37 F20 N100`),
+    },
+    "Bambu Lab P2S": {
+      start: notes(`
+        A53 B9 L50 C53 D9 M50 E53 F9 N50
+        A56 B9 L50 C56 D9 M50 E56 F9 N50
+        A61 B9 L50 C61 D9 M50 E61 F9 N50
+        A53 B9 L50 C53 D9 M50 E53 F9 N50
+        A56 B9 L50 C56 D9 M50 E56 F9 N50
+        A61 B18 L50 C61 D18 M50 E61 F18 N50`),
+      finish: notes(`
+        A53 B10 L50 C53 D10 M50 E53 F10 N50
+        A57 B10 L50 C57 D10 M50 E57 F10 N50
+        A0 B15 L0 C0 D15 M0 E0 F15 N0
+        A53 B10 L50 C53 D10 M50 E53 F10 N50
+        A57 B10 L50 C57 D10 M50 E57 F10 N50
+        A0 B15 L0 C0 D15 M0 E0 F15 N0
+        A48 B10 L50 C48 D10 M50 E48 F10 N50
+        A0 B15 L0 C0 D15 M0 E0 F15 N0
+        A60 B10 L50 C60 D10 M50 E60 F10 N50`),
+    },
   };
-  const SOUND_VOLUME = 100; // the same note on all three channels at full volume: as loud as the motors go
-  const tune = name => ["M17", "M400 S1", "M1006 S1", ...TUNES[name].map(([n, d]) => {
-    const v = n ? SOUND_VOLUME : 0;
-    return `M1006 A${n} B${d} L${v} C${n} D${d} M${v} E${n} F${d} N${v}`;
-  }), "M1006 W"];
+  const SOUND_PRINTERS = new Set(Object.keys(BAMBU_TUNES));
+  // [MIDI note or 0 for a rest, duration in 10 ms] -> the same note on all three channels at full volume: as loud as the motors go
+  const loud = steps => steps.map(([n, d]) => { const v = n ? 100 : 0; return [n, d, v, n, d, v, n, d, v]; });
+  const TUNES = { pause: loud([[76, 14], [0, 8], [76, 14], [0, 8], [76, 22]]), resume: loud([[67, 10], [72, 20]]) };
+  const tuneOf = (model, name) => (BAMBU_TUNES[model] || {})[name] || TUNES[name];
+  const tune = (model, name) => ["M17", "M400 S1", "M1006 S1",
+    ...tuneOf(model, name).map(s => "M1006 " + s.map((v, i) => "ABLCDMEFN"[i] + v).join(" ")), "M1006 W"];
 
   const DEFAULT_SETTINGS = {
     printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 0, offset_y: 0,
@@ -381,7 +477,7 @@
     const oneLine = h => Array.from(String(h), c => (c.codePointAt(0) < 32 || c.codePointAt(0) === 0x2028 || c.codePointAt(0) === 0x2029 ? " " : c)).join("");
     const out = header.map(h => "; " + oneLine(h)); // a header can never add a command line
     out.push("; BEFORE STARTING: take the pen out of the holder. Homing touches the nozzle to the plate.");
-    const sound = pr.sounds && SOUND_PRINTERS.has(pr.model) ? tune : () => [];
+    const sound = pr.sounds && SOUND_PRINTERS.has(pr.model) ? name => tune(pr.model, name) : () => [];
     out.push("G90", "G21", ...sound("start"), "G28"); // always home: every move after this assumes a known position
     out.push(`G1 Z${f(pr.z_draw + CLEARANCE)} F${i(pr.z_feed)}`, `G0 ${xy(passes[0].strokes[0][0], 0)} ${travel}`,
       "; place the paper: the first letter goes right under the pen holder", ...sound("pause"), `G4 S${i(pr.paper_pause_s)}`,
@@ -442,7 +538,7 @@
     return { offset_x: round2(fromLeft - m.left), offset_y: round2(m.top - fromTop) };
   }
 
-  return { WriteError, SOUND_PRINTERS, TUNES, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
+  return { WriteError, SOUND_PRINTERS, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
     toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper, penRange };
 });

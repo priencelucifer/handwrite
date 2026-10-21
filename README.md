@@ -34,7 +34,7 @@ and word gaps are never the same twice. You can even teach it your own handwriti
 - **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.
 - **Pen offset test**: print two marks, measure them with a ruler, and the app works out where your pen sits.
 - **Safety first**: every move is checked against your printer's bed before the file is saved (see [Safety](#safety)).
-- **Printer sounds** (A1, A1 mini, P2S) tell you when to place the paper and attach the pen.
+- **Printer sounds** (A1, A1 mini, P2S): Bambu's own start and finish tunes, plus a tune when it's time to place the paper or attach the pen.
 - **Private**: everything runs on your computer. Your text and handwriting never leave the browser.
 
 ## Quick start
@@ -150,6 +150,7 @@ The [`python/`](python/) folder holds the older desktop and command-line version
   [IAM-OnDB](https://fki.tic.heia-fr.ch/databases/iam-on-line-handwriting-database) (academic-use data).
 - Inference ported from [tibordp/kurvengefahr](https://github.com/tibordp/kurvengefahr) (GPL-2.0).
 - G-code conventions from [Joep648/BambuPlot](https://github.com/Joep648/BambuPlot).
+- Start and finish tunes copied from the printer profiles in [Bambu Studio](https://github.com/bambulab/BambuStudio) (AGPL-3.0).
 
-There is no license file yet. Because of the GPL-2.0 code and the academic-use training data, check both before
-sharing this beyond personal use.
+There is no license file yet. Because of the GPL-2.0 and AGPL-3.0 code and the academic-use training data, check them
+before sharing this beyond personal use.
