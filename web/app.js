@@ -3,7 +3,7 @@
 (() => {
   "use strict";
   const E = HWEngine, G = HWGcode, $ = id => document.getElementById(id);
-  const STORE = { settings: "hw.settings", styles: "hw.styles", text: "hw.text", seed: "hw.seed", otSide: "hw.otSide" };
+  const STORE = { settings: "hw.settings", styles: "hw.styles", text: "hw.text", seed: "hw.seed" };
   const load = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
   const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage off: settings last this session */ } };
 
@@ -532,16 +532,15 @@
     for (const inp of $("settingsBody").querySelectorAll("input[data-key]")) next[inp.dataset.sec][inp.dataset.key] = inp.value === "" ? NaN : +inp.value;
     return next;
   }
-  /** Pen offset test: print two lines on A4 in a back corner of the plate, measure them, get the offset. */
+  /** Pen offset test: print two lines on A4 in the plate's back-left corner, measure them, get the offset. */
   function offsetTestBlock() {
     const t = document.createElement("div"); t.className = "offset-test";
-    t.innerHTML = `<p class="hint">Don't know the offset? Print the offset test. Push A4 paper into a back corner of the plate, left or
-      right, with its top edge against the plate's back edge and its side against the plate's side. Run the file like any other, then
-      measure to the middle of each line the pen drew and type the distances in: the offset above follows. Click Save to keep it.</p>
+    t.innerHTML = `<p class="hint">Don't know the offset? Print the offset test. Push A4 paper into the back-left corner of the plate, with its
+      top and left edges lined up with the plate's back and left edges. Run the file like any other, then measure to the
+      middle of each line the pen drew and type the distances in: the offset above follows. Click Save to keep it.</p>
       <button type="button" class="btn small" id="otSave">Save offset test G-code</button>
-      <div class="field"><label for="otSide">Paper corner</label><select id="otSide"><option value="left">Back left</option><option value="right">Back right</option></select><p>The back corner of the plate you pushed the paper into.</p></div>
       <div class="field"><label for="otTop">Long line</label><div class="unit" data-unit="mm"><input type="number" id="otTop" step="any"></div><p>Distance from the paper's top edge down to the long line.</p></div>
-      <div class="field"><label for="otMark">Short mark</label><div class="unit" data-unit="mm"><input type="number" id="otMark" step="any"></div><p id="otMarkHelp"></p></div>
+      <div class="field"><label for="otLeft">Short mark</label><div class="unit" data-unit="mm"><input type="number" id="otLeft" step="any"></div><p>Distance from the paper's left edge to the short mark.</p></div>
       <p class="hint" id="otMsg" role="status"></p>`;
     t.querySelector("#otSave").onclick = async () => {
       let gcode;
@@ -550,29 +549,22 @@
       if (where) t.querySelector("#otMsg").textContent = `${where} Take the pen out, start it, put the paper in the corner in pause 1 and clamp the pen in pause 2.`;
     };
     // The distances are the offset in another form, kept in step both ways, so the saved offset shows here too.
-    const top = t.querySelector("#otTop"), mark = t.querySelector("#otMark"), side = t.querySelector("#otSide"), msg = t.querySelector("#otMsg");
-    side.value = load(STORE.otSide, "left") === "right" ? "right" : "left";
-    const sideHelp = () => { t.querySelector("#otMarkHelp").textContent = `Distance from the paper's ${side.value} edge to the short mark.`; };
-    let typed = false; // distances typed in this dialog (not just shown from the offset)
+    const top = t.querySelector("#otTop"), left = t.querySelector("#otLeft"), msg = t.querySelector("#otMsg");
     const fromOffset = () => {
       try {
         const m = G.offsetTestMarks(dialogSettings()), ox = $("set_offset_x").value, oy = $("set_offset_y").value;
-        mark.value = ox === "" ? "" : +(side.value === "right" ? m.right - +ox : m.left + +ox).toFixed(2);
-        top.value = oy === "" ? "" : +(m.top - +oy).toFixed(2);
+        left.value = ox === "" ? "" : +(m.left + +ox).toFixed(2); top.value = oy === "" ? "" : +(m.top - +oy).toFixed(2);
       } catch { /* another field is invalid: Save says which */ }
     };
     const toOffset = () => {
-      if (!(+top.value > 0) || !(+mark.value > 0)) return void (msg.textContent = "Enter both distances in mm.");
+      if (!(+top.value > 0) || !(+left.value > 0)) return void (msg.textContent = "Enter both distances in mm.");
       try {
-        const o = G.offsetFromTest(dialogSettings(), +mark.value, +top.value, side.value);
+        const o = G.offsetFromTest(dialogSettings(), +left.value, +top.value);
         $("set_offset_x").value = o.offset_x; $("set_offset_y").value = o.offset_y;
         msg.textContent = `Pen offset X ${o.offset_x}, Y ${o.offset_y} mm. Click Save to keep it.`;
       } catch (err) { msg.textContent = err.message; }
     };
-    top.oninput = mark.oninput = () => { typed = true; toOffset(); };
-    // a typed distance was measured from the newly picked edge; otherwise just show the offset from that edge
-    side.onchange = () => { keep(STORE.otSide, side.value); sideHelp(); if (typed) toOffset(); else fromOffset(); };
-    sideHelp();
+    top.oninput = left.oninput = toOffset;
     queueMicrotask(() => { // the offset fields exist once the dialog is built
       for (const id of ["set_offset_x", "set_offset_y"]) $(id).addEventListener("input", () => { fromOffset(); msg.textContent = ""; });
       fromOffset();
