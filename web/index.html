@@ -304,6 +304,7 @@
         <div>
           <p>Handwrite is set up for <b>Plotter</b> by Elli: a pen holder that clips onto the print head of the A1 and A1 mini, no screws.
             It's made for Stabilo pens and fits similar-sized markers. To fit it, take the front cover off the print head.</p>
+          <p>Its pen offset, <b>X 1 · Y −25 mm</b>, is already the app's default, so with this holder you can skip calibrating.</p>
           <p class="small">Designed by Elli and shared free on MakerWorld, so it's downloaded from there.</p>
         </div>
         <a class="btn primary" href="https://makerworld.com/en/models/1247876-plotter#profileId-1269790" target="_blank" rel="noopener">Download the pen holder</a>
@@ -316,8 +317,9 @@
       <p class="kicker">Before your first print</p>
       <h2>Calibrate the pen offset</h2>
       <p class="intro">The pen sits a little beside the nozzle, usually in front of it. The app needs to know by how much, so the writing
-        lands where the preview shows it and the pen never runs off the front of the plate. If BambuPlot already works for you, just copy its
-        “tool offset” into <span class="ui">Printer settings → Pen offset</span>. Otherwise, print the offset test once:</p>
+        lands where the preview shows it and the pen never runs off the front of the plate. Using the <a href="#holder">Plotter holder</a>? Its offset is
+        X 1, Y −25 mm, already filled in (if you opened the app before, type it into <span class="ui">Printer settings → Pen offset</span>).
+        If BambuPlot already works for you, copy its “tool offset” there instead. Otherwise, print the offset test once:</p>
       <figure class="stepper" data-ms="5200">
         <div class="stage">
           <svg id="cal" data-stage="1" viewBox="0 0 400 392" role="img" aria-label="Offset test on the build plate, seen from above">
@@ -476,7 +478,7 @@
             <path class="dim" d="M98 52V80 M94 52H102"/><text x="104" y="68" class="dim-text" style="font-size:10px">10 mm</text>
             <path d="M61 52H96" stroke="#9aa3b2" stroke-dasharray="2 2"/>
           </svg></div></div>
-        <div class="card set"><div><h3>Pen offset</h3><p>Where the pen tip is compared with the nozzle. X is left/right (negative = pen to the left); Y is front/back (negative = pen in front). Measure it with the offset test.</p><span class="def">e.g. X −4.5 · Y −27</span></div>
+        <div class="card set"><div><h3>Pen offset</h3><p>Where the pen tip is compared with the nozzle. X is left/right (negative = pen to the left); Y is front/back (negative = pen in front). Measure it with the offset test.</p><span class="def">X 1 · Y −25 (Plotter holder)</span></div>
           <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
             <text x="6" y="11" class="lbl-dark" style="font-size:8px">↑ BACK</text><text x="6" y="92" class="lbl-dark" style="font-size:8px">↓ FRONT</text>
             <circle cx="100" cy="24" r="9" fill="#c7ccd4" stroke="#9aa3b2"/><text x="114" y="27" class="lbl-dark" style="font-size:9px">nozzle</text>

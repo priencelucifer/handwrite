@@ -73,6 +73,9 @@ Do a dry run first, and stay with the printer the first time.
 The pen sits a little to the side of the nozzle. The app needs to know by how much, so the writing lands where the
 preview shows it and the pen never runs off the edge of the plate.
 
+With the [Plotter holder](https://makerworld.com/en/models/1247876-plotter#profileId-1269790) the offset is **X 1, Y −25 mm**, and that's the
+default, so you can skip this. For any other holder:
+
 1. In **Printer settings → Pen offset**, click **Save offset test G-code** and run it.
 2. Push an A4 sheet into the **top-left (far-left) corner** of the plate, with its top and left edges against the plate's edges.
 3. The pen draws a long line and a short mark. Measure how far the long line is below the paper's top edge,

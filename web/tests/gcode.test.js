@@ -71,7 +71,7 @@ test("NaN in strokes fails closed", () => {
 });
 
 test("P1/X1 filament-cutter corner is refused", () => {
-  const cfg = G.resolve(withSet({ "printer.model": "Bambu Lab P1P / P1S", "paper.size": "A6", "paper.x": 0, "paper.y": 0 }));
+  const cfg = G.resolve(withSet({ "printer.model": "Bambu Lab P1P / P1S", "printer.offset_x": 0, "printer.offset_y": 0, "paper.size": "A6", "paper.x": 0, "paper.y": 0 }));
   const corner = [{ shift: 0, strokes: [[[5, cfg.paper.height - 5], [6, cfg.paper.height - 5]]], hover: null }];
   assert.throws(() => G.toGcode(corner, cfg, ["t"]), G.WriteError);
 });
@@ -251,6 +251,12 @@ test("lines never write into the line above, even at full wobble", () => {
   }
 });
 
+test("defaults: the Plotter holder's offset, and the paper where placePaper puts it", () => {
+  const s = G.DEFAULT_SETTINGS;
+  assert.deepStrictEqual(G.offsetFromTest(s, 106, 85), { offset_x: s.printer.offset_x, offset_y: s.printer.offset_y });
+  assert.deepStrictEqual(G.placePaper(G.resolve(s)), { x: s.paper.x, y: s.paper.y });
+});
+
 test("pen offset test: safe on every printer, and measuring it gives the offset back", () => {
   for (const model of Object.keys(G.PRINTERS).filter(m => G.PRINTERS[m])) {
     const s = withSet({ "printer.model": model, "printer.offset_x": 7, "printer.offset_y": -33 }); // the old offset must not matter
@@ -344,7 +350,7 @@ test("without sliding, the pen stops where it would leave the plate and the text
   }
   assert.throws(() => G.resolve(withSet({ "paper.slide": "yes" })), G.WriteError);
   // lines that would need a slide are refused rather than written with a pause nobody asked for
-  const noSlide = G.resolve(withSet({ "paper.size": "A4", "paper.x": 23, "paper.y": -40, "writing.wobble": 0 }));
+  const noSlide = G.resolve(withSet({ "printer.offset_y": 0, "paper.size": "A4", "paper.x": 23, "paper.y": -40, "writing.wobble": 0 }));
   const lines = G.layout(G.words(Array(32).fill("line of words").join("\n"), 4), oneStroke, { ...noSlide, paper: { ...noSlide.paper, slide: true } }, mulberry(4));
   assert.ok(G.planPasses(lines, { ...noSlide, paper: { ...noSlide.paper, slide: true } }).length > 1, "this text needs a slide");
   assert.throws(() => G.planPasses(lines, noSlide), /sliding the paper/);

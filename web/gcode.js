@@ -145,13 +145,15 @@
   const tune = (model, name) => ["M17", "M400 S1", "M1006 S1",
     ...tuneOf(model, name).map(s => "M1006 " + s.map((v, i) => "ABLCDMEFN"[i] + v).join(" ")), "M1006 W"];
 
+  // Pen offset: the "Plotter" pen holder by Elli (MakerWorld 1247876) on an A1, from the offset test (short mark 106, long line 85).
+  // paper x/y: placePaper() of these defaults, so the first page sits where the pen reaches.
   const DEFAULT_SETTINGS = {
-    printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 0, offset_y: 0,
+    printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 1, offset_y: -25,
       paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12,
       z_feed: 600, draw_feed: 1500, travel_feed: 6000, settle_ms: 60, sounds: true, dry_run: false },
     // ruling: mm between the printed lines of ruled paper (0 = plain); first_line: mm from the top edge to the first
     // printed line; margin_line: mm from the left edge to the printed margin line (0 = none)
-    paper: { size: "A5", orientation: "portrait", x: 54, y: 23, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
+    paper: { size: "A5", orientation: "portrait", x: 55, y: 10, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
       ruling: 0, first_line: 20, margin_line: 0 },
     writing: { style: "s:neat-1", bias: 1.8, wobble: 1, x_height: 2.8, line_spacing: 8, word_spacing: 1, header: "", page_numbers: false },
   };
