@@ -65,26 +65,6 @@ test("align and denoise match model.py", () => {
   assert.ok(maxDiff(E.denoise(Float64Array.from(a.denoise_in)), a.denoise_out) < 1e-6);
 });
 
-test("preparePrimer matches prepare_primer, and a captured style writes", () => {
-  for (const p of FIX.primers) {
-    const d = maxDiff(E.preparePrimer(p.strokes, p.text), p.offsets);
-    assert.ok(d < 1e-5, `max diff ${d}`);
-  }
-  // Like selfcheck.py: preset 9 replayed as dense screen-space pointer samples becomes a usable style.
-  const s9 = presets[9], strokes = [];
-  let x = 0, y = 0, cur = [];
-  for (let t = 0; t < s9.strokes.length / 3; t++) {
-    x += s9.strokes[3 * t] * 4; y -= s9.strokes[3 * t + 1] * 4;
-    cur.push([x, y], [x, y], [x, y]);
-    if (s9.strokes[3 * t + 2] === 1) { strokes.push(cur); cur = []; }
-  }
-  if (cur.length) strokes.push(cur);
-  const primer = E.preparePrimer(strokes, s9.chars);
-  assert.ok(primer.length / 3 <= E.MAX_STROKE_LEN);
-  const ink = new E.Hand(model, { strokes: primer, chars: s9.chars }).word("hello", 0);
-  assert.ok(Math.max(...ink.flat().map(p => p[0])) > 1.5, "captured style should write a full word");
-});
-
 test("teacher-forced MDN params and attention match model.py (both kernels)", t => {
   for (const m of [model, plain]) {
     for (const run of FIX.teacher) {

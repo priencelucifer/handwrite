@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Handwrite app: make handwriting G-code for your Bambu Lab printer</title>
-<meta name="description" content="Write text in realistic handwriting and save G-code for a Bambu Lab printer with a pen holder: 13 handwriting styles, lined paper, preview on the build plate. Free, in the browser.">
+<meta name="description" content="Write text in realistic handwriting and save G-code for a Bambu Lab printer with a pen holder: 45 handwriting styles, lined paper, preview on the build plate. Free, in the browser.">
 <link rel="canonical" href="https://handwrite.rickykashyap.top/app">
 <meta name="author" content="Ricky Kashyap">
 <meta name="theme-color" content="#3b5bdb">
@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Handwrite">
 <meta property="og:title" content="Handwrite app: make handwriting G-code for your Bambu Lab printer">
-<meta property="og:description" content="Write text in realistic handwriting and save G-code for a Bambu Lab printer with a pen holder: 13 handwriting styles, lined paper, preview on the build plate. Free, in the browser.">
+<meta property="og:description" content="Write text in realistic handwriting and save G-code for a Bambu Lab printer with a pen holder: 45 handwriting styles, lined paper, preview on the build plate. Free, in the browser.">
 <meta property="og:url" content="https://handwrite.rickykashyap.top/app">
 <meta property="og:image" content="https://handwrite.rickykashyap.top/guide-app.png">
 <meta property="og:image:width" content="1500">
@@ -96,7 +96,6 @@
     display: grid; gap: 2px; text-align: center; color: #667085; font-size: 11px; }
   .style canvas { width: 100%; height: 34px; display: block; }
   .style[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-2); }
-  .style.mine { background: #fffdf5; }
   .style-group { grid-column: 1 / -1; font-size: 12px; font-weight: 650; color: var(--muted); margin: 6px 0 -2px; }
   .styles { max-height: 360px; overflow: auto; padding: 2px; }
   .actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line);
@@ -137,11 +136,6 @@
   .field p { margin: 0; padding-top: 6px; color: var(--muted); font-size: 12.5px; }
   .offset-test { border-top: 1px dashed var(--line); margin-top: 12px; padding-top: 2px; }
   .offset-test > .btn { margin-top: 10px; }
-  #pad { width: 100%; height: 200px; border: 1px dashed var(--line); border-radius: 12px; background: #fff; touch-action: none; display: block; }
-  .mine-list { display: grid; gap: 8px; margin-top: 10px; }
-  .mine-item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line);
-    border-radius: 10px; padding: 8px 10px; }
-  .mine-item small { color: var(--muted); }
   ol.steps { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 8px; }
   @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-template-rows: auto 60vh; } aside { order: 2; }
     .field { grid-template-columns: 1fr 110px; } .field p { grid-column: 1 / -1; padding-top: 0; } }
@@ -156,7 +150,6 @@
   <div class="spacer"></div>
   <span class="pill" id="status" role="status"><span class="dot"></span><span id="statusText">Starting…</span></span>
   <a class="btn ghost" href="index.html">How to use</a>
-  <button class="btn" id="openMine">My handwriting</button>
   <button class="btn" id="openSettings">Printer settings</button>
 </header>
 <main>
@@ -252,36 +245,6 @@
     <header><h3>Printer settings</h3><p>Copy the pen offset that already works for you in BambuPlot, or measure it with the offset test. Pauses are timed: the printer carries on by itself when the time is up.</p></header>
     <div class="body" id="settingsBody"></div>
     <footer><span class="msg" id="settingsMsg"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="settingsSave" value="save">Save</button></footer>
-  </form>
-</dialog>
-
-<dialog id="mineDlg">
-  <form method="dialog" class="dlg">
-    <header><h3>My handwriting</h3><p>Write one sentence in your normal handwriting. It becomes a handwriting style straight away.</p></header>
-    <div class="body">
-      <div class="row" style="grid-template-columns:1fr auto;margin-top:0">
-        <input type="text" id="sentence" aria-label="Sentence you will write" maxlength="60">
-        <button type="button" class="btn small" id="nextSentence">Other sentence</button>
-      </div>
-      <p class="hint">Write the sentence above in one line, filling about half the box height. Fix the text if you wrote something different. A pen or touchscreen works best.</p>
-      <canvas id="pad" aria-label="Writing area"></canvas>
-      <div class="row" style="grid-template-columns:auto 1fr auto auto auto">
-        <label for="mineName">Name</label><input type="text" id="mineName" maxlength="30">
-        <button type="button" class="btn small" id="undo">Undo</button>
-        <button type="button" class="btn small" id="clear">Clear</button>
-        <button type="button" class="btn small primary" id="saveMine">Save style</button>
-      </div>
-      <p class="hint" id="mineMsg" role="status"></p>
-      <h4 style="margin:18px 0 0">Saved handwriting</h4>
-      <div class="mine-list" id="mineList"></div>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button type="button" class="btn small" id="exportMine">Export file</button>
-        <label class="btn small" for="importMine">Import file</label>
-        <input type="file" id="importMine" accept=".json,application/json" hidden>
-      </div>
-      <p class="hint">Export to move your handwriting to another computer or browser; your styles are stored only in this browser.</p>
-    </div>
-    <footer><button class="btn" value="close">Done</button></footer>
   </form>
 </dialog>
 

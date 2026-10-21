@@ -17,7 +17,6 @@
   const MAX_STROKE_LEN = 1200;
   const MAX_BATCH = 4;   // words written at once (stepMany): 4 already gets most of the gain with 6 workers
   const BLOCK_ROWS = 32; // weight rows per block in stepMany: 32 x 1600 floats = 200 KB, stays in cache while every word uses it
-  const POINTS_PER_CHAR = 28; // median density of the 13 bundled IAM styles; captures are resampled to it
 
   // Word-sampling knobs from kurvengefahr model.rs, in model units of style 9 (its calibration style),
   // scaled to each style's own x-height (see Hand.k).
@@ -117,10 +116,6 @@
     return out;
   }
 
-  const roundHalfEven = v => { const f = Math.floor(v), d = v - f; return d > 0.5 || (d === 0.5 && f % 2) ? f + 1 : f; }; // Python round()
-
-  /** Captured handwriting -> model primer offsets, Float32Array of [dx, dy, eos] rows.
-   *  strokes: array of strokes, each an array of [x, y] screen points (y down) in time order; text: what was written. */
   /** A new handwriting from an existing primer: slant (degrees, + leans right) and width factor. The model copies
    *  the primer's geometry, so a slanted/wider sample gives a slanted/wider hand. Returns new [dx, dy, eos] rows. */
   function transformPrimer(strokes, slantDeg = 0, width = 1) {
@@ -139,38 +134,6 @@
     const med = steps.length ? steps[steps.length >> 1] : 1; // back to median step 1, as the training data was
     for (let t = 0; t < T; t++) { out[3 * t] /= med; out[3 * t + 1] /= med; }
     return out;
-  }
-
-  function preparePrimer(strokes, text) {
-    const nChars = Array.from(text).length;
-    let total = 0;
-    for (const s of strokes) {
-      if (!s.length) throw new Error("empty stroke");
-      for (const p of s) if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) throw new Error("bad stroke point");
-      total += s.length;
-    }
-    if (!nChars || !total) throw new Error("need some ink and the text it says");
-    const factor = Math.min(POINTS_PER_CHAR * nChars, MAX_STROKE_LEN - 50) / total;
-    const rows = [];
-    for (const s of strokes) {
-      const len = s.length, n = Math.max(1, roundHalfEven(len * factor)), step = (len - 1) / (n - 1);
-      for (let i = 0; i < n; i++) {
-        const t = n === 1 ? 0 : i === n - 1 ? len - 1 : i * step; // np.linspace
-        const j = Math.floor(t), f = t - j; // np.interp on the integer grid
-        const pt = j >= len - 1 || f === 0 ? s[j] : null;
-        const x = pt ? pt[0] : (s[j + 1][0] - s[j][0]) * f + s[j][0];
-        const y = pt ? pt[1] : (s[j + 1][1] - s[j][1]) * f + s[j][1];
-        rows.push(x, -y, i === n - 1 ? 1 : 0); // screen y down -> model y up
-      }
-    }
-    const off = coordsToOffsets(denoise(align(Float64Array.from(rows))));
-    const norms = [];
-    for (let i = 0; i < off.length; i += 3) norms.push(Math.sqrt(off[i] * off[i] + off[i + 1] * off[i + 1]));
-    norms.sort((a, b) => a - b);
-    const h = norms.length >> 1, median = norms.length % 2 ? norms[h] : (norms[h - 1] + norms[h]) / 2;
-    if (!(median > 0 && Number.isFinite(median))) throw new Error("strokes have no movement");
-    for (let i = 0; i < off.length; i += 3) { off[i] /= median; off[i + 1] /= median; }
-    return Float32Array.from(off.subarray(0, 3 * MAX_STROKE_LEN));
   }
 
   // ---- WebAssembly SIMD kernel: out[0..cols) += x[0..rows) @ K[rows, cols] (row-major, cols % 4 == 0) ----
@@ -616,6 +579,6 @@
     return { name: p.name, chars: p.chars, strokes: new Float32Array(b64ToBytes(p.strokesB64).buffer) };
   }
 
-  return { ALPHABET, MAX_STROKE_LEN, cleanText, encode, align, denoise, coordsToOffsets, preparePrimer,
+  return { ALPHABET, MAX_STROKE_LEN, cleanText, encode, align, denoise, coordsToOffsets,
     simdSupported, loadModel, Model, makeRng, Hand, wordRunner, runWords, MAX_BATCH, b64ToBytes, decodePreset, transformPrimer };
 });

@@ -24,13 +24,13 @@ letters never join, they connect the same way every time, and the lines are perf
 
 Handwrite uses a neural network trained on real pen strokes ([Graves, 2013](https://arxiv.org/abs/1308.0850)).
 It draws every word stroke by stroke, so letters join, vary and lift like a person's. Each line also wanders a bit,
-and word gaps are never the same twice. You can even teach it your own handwriting from one sentence.
+and word gaps are never the same twice.
 
 <p align="center"><img src="docs/images/sample-page.png" alt="A sample page written by Handwrite" width="420"></p>
 
 ## Features
 
-- **13 built-in handwriting styles**, plus your own: write one sentence with a pen, finger or mouse.
+- **45 handwriting styles**, neat to casual, based on 13 real writers.
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
 - **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.

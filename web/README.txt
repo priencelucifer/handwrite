@@ -31,9 +31,6 @@ Running the file:
 Extras: _underline_ words and *second pen* words in the text (the printer pauses to swap pens), lined paper
 (Page > Lines), a header and page numbers on every sheet, and click a word in the preview to write just it again.
 
-Your own handwriting: "My handwriting" > write a sentence > Save style. Styles are kept in this browser
-only; use Export/Import to move them to another computer.
-
 Safety: every setting is range-checked, and every move in the file is checked against the chosen printer's
 bed (and the P1/X1 filament-cutter corner) before the file is written. If something is unsafe, the app
 refuses to save and says why. The G-code is only for the printer named at the top of the file.

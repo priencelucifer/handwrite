@@ -3,7 +3,7 @@
 (() => {
   "use strict";
   const E = HWEngine, G = HWGcode, $ = id => document.getElementById(id);
-  const STORE = { settings: "hw.settings", styles: "hw.styles", text: "hw.text", seed: "hw.seed" };
+  const STORE = { settings: "hw.settings", text: "hw.text", seed: "hw.seed" };
   const load = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
   const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage off: settings last this session */ } };
 
@@ -23,7 +23,6 @@
   ];
   const presets = CATALOG.map(([group, id, label, b, slant, width, bias]) => ({ key: "s:" + id, label, group, bias,
     data: { chars: base[b].chars, strokes: E.transformPrimer(base[b].strokes, slant, width) } }));
-  let mine = loadMine();
   const state = {
     settings: mergeSettings(load(STORE.settings, null)),
     text: load(STORE.text, "Dear friend,\n\nThis letter was written by my 3D printer, one pen stroke at a time. Can you tell?\n\nBest wishes"),
@@ -38,7 +37,7 @@
   { // older saves named the 13 originals "9" or "p:9"
     const st = String(state.settings.writing.style), old = /^(?:p:)?(d+)$/.exec(st);
     if (old) state.settings.writing.style = `s:everyday-${+old[1] + 1}`;
-    if (!state.settings.writing.style.startsWith("s:") && !state.settings.writing.style.startsWith("u:")) state.settings.writing.style = "s:neat-1";
+    if (!state.settings.writing.style.startsWith("s:")) state.settings.writing.style = "s:neat-1";
   }
 
   function mergeSettings(saved) {
@@ -48,8 +47,7 @@
         for (const k of Object.keys(s[sec])) if (k in saved[sec]) s[sec][k] = saved[sec][k];
     return s;
   }
-  const allStyles = () => [...presets, ...mine];
-  const styleOf = key => allStyles().find(s => s.key === key);
+  const styleOf = key => presets.find(s => s.key === key);
 
   // ---------- word generation: a pool of Web Workers, each with its own copy of the model ----------
   const pool = (() => {
@@ -593,11 +591,11 @@
   function buildStyles() {
     const box = $("styles"); box.textContent = "";
     let group = "";
-    for (const st of allStyles()) {
-      const g = st.group || "Mine";
+    for (const st of presets) {
+      const g = st.group;
       if (g !== group) { const h = document.createElement("div"); h.className = "style-group"; h.textContent = (group = g); box.append(h); }
       const b = document.createElement("button");
-      b.type = "button"; b.className = "style" + (st.key.startsWith("u:") ? " mine" : "");
+      b.type = "button"; b.className = "style";
       b.setAttribute("aria-pressed", W_().style === st.key);
       b.title = st.label;
       const c = document.createElement("canvas"); c.width = 220; c.height = 68;
@@ -722,94 +720,6 @@
     state.settings = next;
     if (moved) centrePaper(); else scheduleRender(0); // a new pen offset changes where the pen reaches
   };
-
-  // ---------- my handwriting: capture, save, import/export ----------
-  const SENTENCES = ["the quick brown fox jumps over", "Pack my box with five dozen jugs", "Hello, how are you doing today?",
-    "I hope this letter finds you well.", "See you soon - love, me"];
-  let sentenceIdx = 0, padStrokes = [], current = null, penSeen = false;
-  const pad = $("pad"), pctx = pad.getContext("2d");
-  $("openMine").onclick = () => {
-    $("sentence").value = SENTENCES[sentenceIdx]; $("mineName").value = `Mine ${mine.length + 1}`; $("mineMsg").textContent = "";
-    padStrokes = []; listMine(); $("mineDlg").showModal(); sizePad();
-  };
-  $("nextSentence").onclick = () => { sentenceIdx = (sentenceIdx + 1) % SENTENCES.length; $("sentence").value = SENTENCES[sentenceIdx]; };
-  function sizePad() { const d = window.devicePixelRatio || 1; pad.width = pad.clientWidth * d; pad.height = pad.clientHeight * d; pctx.setTransform(d, 0, 0, d, 0, 0); drawPad(); }
-  function drawPad() {
-    const w = pad.clientWidth, h = pad.clientHeight;
-    pctx.clearRect(0, 0, w, h);
-    pctx.strokeStyle = "#d6def5"; pctx.lineWidth = 1;
-    for (const y of [h * 0.45, h * 0.7]) { pctx.beginPath(); pctx.moveTo(0, y); pctx.lineTo(w, y); pctx.stroke(); }
-    pctx.strokeStyle = "#1b2a6b"; pctx.lineWidth = 2.5; pctx.lineCap = pctx.lineJoin = "round";
-    for (const s of padStrokes) { pctx.beginPath(); s.forEach(([x, y], i) => i ? pctx.lineTo(x, y) : pctx.moveTo(x, y)); if (s.length === 1) pctx.lineTo(s[0][0] + .1, s[0][1]); pctx.stroke(); }
-  }
-  const padPos = e => { const r = pad.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  const ignoreTouch = e => penSeen && e.pointerType === "touch"; // palm rejection once a stylus is used
-  pad.addEventListener("pointerdown", e => { if (e.pointerType === "pen") penSeen = true; if (ignoreTouch(e)) return; pad.setPointerCapture(e.pointerId); current = [padPos(e)]; padStrokes.push(current); drawPad(); });
-  pad.addEventListener("pointermove", e => { if (!current || ignoreTouch(e)) return; for (const ev of e.getCoalescedEvents ? e.getCoalescedEvents() : [e]) current.push(padPos(ev)); drawPad(); });
-  for (const t of ["pointerup", "pointercancel"]) pad.addEventListener(t, () => { current = null; });
-  $("undo").onclick = () => { padStrokes.pop(); drawPad(); };
-  $("clear").onclick = () => { padStrokes = []; drawPad(); };
-  $("saveMine").onclick = () => {
-    const msg = $("mineMsg"), { clean, dropped } = E.cleanText($("sentence").value.trim());
-    if (dropped.size || clean.includes("\n") || clean.length < 3) return void (msg.textContent = "Use 3-60 letters, digits or basic punctuation in the sentence.");
-    const pts = padStrokes.reduce((n, s) => n + s.length, 0);
-    if (pts < 10 * clean.length) return void (msg.textContent = "Write the whole sentence first.");
-    try {
-      const strokes = E.preparePrimer(padStrokes, clean);
-      const name = ($("mineName").value.trim() || `Mine ${mine.length + 1}`).slice(0, 30);
-      const item = { id: Date.now().toString(36), name, chars: clean, strokesB64: f32ToB64(strokes) };
-      mine.push(toStyle(item)); saveMine();
-      W_().style = "u:" + item.id;
-      padStrokes = []; drawPad(); listMine(); buildStyles(); scheduleRender(0);
-      msg.textContent = `Saved "${name}" and selected it. Write another sentence to make more styles.`;
-      $("mineName").value = `Mine ${mine.length + 1}`;
-    } catch (err) { msg.textContent = "Could not use that sample: " + err.message; }
-  };
-  function listMine() {
-    const box = $("mineList"); box.textContent = "";
-    if (!mine.length) { box.innerHTML = '<p class="hint">None yet.</p>'; return; }
-    for (const st of mine) {
-      const row = document.createElement("div"); row.className = "mine-item";
-      row.innerHTML = "<div><b></b><br><small></small></div>";
-      row.querySelector("b").textContent = st.label; row.querySelector("small").textContent = `“${st.data.chars}”`;
-      const del = document.createElement("button"); del.type = "button"; del.className = "btn small"; del.textContent = "Delete";
-      del.onclick = () => { mine = mine.filter(m => m !== st); saveMine(); if (W_().style === st.key) W_().style = presets[0].key; listMine(); buildStyles(); scheduleRender(0); };
-      row.append(del); box.append(row);
-    }
-  }
-  $("exportMine").onclick = () => download(JSON.stringify({ format: "handwrite-styles", version: 1, styles: mine.map(m => m.raw) }, null, 1), "my-handwriting.json", "application/json");
-  $("importMine").onchange = async e => {
-    const file = e.target.files[0]; e.target.value = "";
-    if (!file) return;
-    try {
-      if (file.size > 5e6) throw new Error("file too large");
-      const data = JSON.parse(await file.text());
-      const items = (data && data.format === "handwrite-styles" && Array.isArray(data.styles)) ? data.styles : null;
-      if (!items) throw new Error("not a handwriting file from this app");
-      let added = 0;
-      for (const it of items.slice(0, 200)) { const st = toStyle(it); if (!mine.some(m => m.key === st.key)) { mine.push(st); added++; } }
-      saveMine(); listMine(); buildStyles();
-      $("mineMsg").textContent = `Imported ${added} handwriting style${added === 1 ? "" : "s"}.`;
-    } catch (err) { $("mineMsg").textContent = "Import failed: " + err.message; }
-  };
-  /** Stored style -> picker entry. Validates everything, since it may come from an imported file. */
-  function toStyle(it) {
-    if (!it || typeof it.id !== "string" || !/^[a-z0-9]{1,20}$/i.test(it.id)) throw new Error("bad style id");
-    if (typeof it.name !== "string" || typeof it.chars !== "string" || typeof it.strokesB64 !== "string") throw new Error("bad style fields");
-    const { clean, dropped } = E.cleanText(it.chars);
-    if (dropped.size || !clean || clean.length > 120) throw new Error("bad style text");
-    const bytes = E.b64ToBytes(it.strokesB64);
-    if (bytes.length % 12 || bytes.length === 0 || bytes.length > E.MAX_STROKE_LEN * 12) throw new Error("bad style strokes");
-    const strokes = new Float32Array(bytes.buffer);
-    if (!strokes.every(Number.isFinite)) throw new Error("bad style strokes");
-    const raw = { id: it.id, name: it.name.slice(0, 30), chars: clean, strokesB64: it.strokesB64 };
-    const bias = typeof it.bias === "number" && it.bias >= 0 && it.bias <= 2 ? it.bias : undefined; // neatness it looks best at
-    if (bias !== undefined) raw.bias = bias;
-    return { key: "u:" + raw.id, label: raw.name, group: "Mine", bias, data: { strokes, chars: clean }, raw };
-  }
-  function loadMine() { const out = []; for (const it of load(STORE.styles, [])) { try { out.push(toStyle(it)); } catch { /* skip damaged */ } } return out; }
-  function saveMine() { keep(STORE.styles, mine.map(m => m.raw)); }
-  function f32ToB64(f) { const b = new Uint8Array(f.buffer, f.byteOffset, f.byteLength); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
 
   // ---------- save G-code ----------
   /** The settings a file is saved with: those shown, plus the dry run when it's ticked (checked like any other). */
