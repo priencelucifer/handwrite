@@ -293,22 +293,27 @@
     ctx.clearRect(0, 0, W, H);
     const cfg = plateCfg();
     if (!cfg) return;
-    const pr = cfg.printer, p = cfg.paper, bx = pr.bed_x, by = pr.bed_y;
+    const pr = cfg.printer, p = cfg.paper, bx = pr.bed_x, by = pr.bed_y, dx = pr.offset_x, dy = pr.offset_y;
     const s = Math.min(W / (bx * 1.35), H / (by * 1.35)) * view.zoom;
     const limX = W / 2 + bx * s / 2 - 60, limY = H / 2 + by * s / 2 - 60; // keep some plate in view
     view.panX = Math.min(Math.max(view.panX, -limX), limX); view.panY = Math.min(Math.max(view.panY, -limY), limY);
-    Object.assign(view, { s, ox: (W - bx * s) / 2 + view.panX, oy: (H - by * s) / 2 + view.panY, by });
+    Object.assign(view, { s, ox: (W - bx * s) / 2 - dx * s + view.panX, oy: (H - by * s) / 2 + dy * s + view.panY, by });
     const X = x => view.ox + x * s, Y = y => view.oy + (by - y) * s;
 
-    // plate + grid
-    ctx.fillStyle = "#3a3d42"; roundRect(X(0), Y(by), bx * s, by * s, 6 * Math.min(1, s)); ctx.fill();
+    // plate + grid, drawn where the pen tip can go (the nozzle's travel moved by the pen offset, like the cutter
+    // corner below), so the strip the pen can't use shows at the front, where the pen would leave the real plate
+    const plate = () => roundRect(X(dx), Y(by + dy), bx * s, by * s, 6 * Math.min(1, s));
+    ctx.fillStyle = "#3a3d42"; plate(); ctx.fill();
     ctx.lineWidth = 1;
     for (let g = 10; g < Math.max(bx, by); g += 10) {
       if (g % 50 && s * 10 < 12) continue; // fine grid only when zoomed in enough to tell lines apart
       ctx.strokeStyle = g % 50 ? "#43464c" : "#52565d";
-      if (g < bx) line(X(g), Y(0), X(g), Y(by));
-      if (g < by) line(X(0), Y(g), X(bx), Y(g));
+      if (g < bx) line(X(g + dx), Y(dy), X(g + dx), Y(by + dy));
+      if (g < by) line(X(dx), Y(g + dy), X(bx + dx), Y(g + dy));
     }
+    ctx.save(); plate(); ctx.clip(); // shade where the pen would be past the real plate's edges
+    ctx.beginPath(); ctx.rect(X(dx), Y(by + dy), bx * s, by * s); ctx.rect(X(0), Y(by), bx * s, by * s);
+    ctx.fillStyle = "rgba(120,126,140,.45)"; ctx.fill("evenodd"); ctx.restore();
     if (pr.keepout) { // nozzle may not go here (P1/X1 filament cutter); shown where the pen would be
       const [a, b, c, d] = pr.keepout;
       ctx.fillStyle = "rgba(201,42,42,.35)";
@@ -345,7 +350,7 @@
         label(`pass ${k + 1}: slide paper ${v.passes[k].shift - v.passes[k - 1].shift} mm back`, pX(p.width) - 6, pY(yy) - 6, "#c92a2a", "right");
       }
     }
-    ctx.setLineDash([7, 5]); ctx.strokeStyle = "#e08a00"; ctx.lineWidth = 2; ctx.strokeRect(X(0), Y(by), bx * s, by * s);
+    ctx.setLineDash([7, 5]); ctx.strokeStyle = "#e08a00"; ctx.lineWidth = 2; ctx.strokeRect(X(dx), Y(by + dy), bx * s, by * s);
     ctx.setLineDash([]);
     const area = q => (q[2] - q[0]) * (q[3] - q[1]), big = lost.reduce((m, q) => (!m || area(q) > area(m) ? q : m), null);
     if (big && (big[3] - big[1]) * s > 24 && (big[2] - big[0]) * s > 120) // at its top edge, clear of the chips at the bottom
