@@ -7,6 +7,8 @@
 Type some text, pick a handwriting, and get G-code that writes it with a pen on a Bambu Lab printer.
 It runs in your browser, works offline, and needs no install.
 
+**Use it now: [handwrite.rickykashyap.top](https://handwrite.rickykashyap.top)**
+
 ![Tests](https://img.shields.io/badge/tests-31_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
 ![Printers](https://img.shields.io/badge/printers-Bambu_Lab_A1_%7C_P1_%7C_P2S_%7C_X1-e08a00)
@@ -44,8 +46,9 @@ and word gaps are never the same twice. You can even teach it your own handwriti
 
 ## Quick start
 
-1. Download **`Handwrite-web.zip`** from the [latest release](https://github.com/priencelucifer/handwrite/releases/latest) and unzip it.
-2. Double-click **`Handwrite.html`**. It opens in Edge, Chrome, Firefox or Safari.
+1. Open **[handwrite.rickykashyap.top](https://handwrite.rickykashyap.top)**, or download **`Handwrite-web.zip`** from the
+   [latest release](https://github.com/priencelucifer/handwrite/releases/latest), unzip it and double-click **`Handwrite.html`**.
+2. It runs in Edge, Chrome, Firefox or Safari, and works offline once loaded.
 3. Type your text, pick a handwriting, choose your printer and paper.
 4. Click **Save G-code** and send the file to the printer like any other plain `.gcode` file.
 
