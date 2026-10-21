@@ -3,265 +3,610 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Handwrite</title>
+<title>Handwrite: real handwriting from your 3D printer</title>
+<meta name="description" content="Turn text into real-looking handwriting G-code for a Bambu Lab printer with a pen holder. How to use it, calibrate the pen and place the paper.">
 <style>
   :root {
     --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f8f9fb; --line: #e3e6eb; --text: #1c2230; --muted: #667085;
-    --accent: #3b5bdb; --accent-2: #eef2ff; --accent-text: #ffffff; --danger: #c92a2a; --danger-bg: #fff1f1;
-    --ok: #2b8a3e; --ink: #1b2a6b; --plate: #3a3d42; --plate-grid: #4a4e55; --plate-fine: #42454b;
-    --stage: #e9ebef; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 16px rgba(16,24,40,.06);
-    --radius: 12px; color-scheme: light;
+    --accent: #3b5bdb; --accent-2: #eef2ff; --accent-text: #ffffff; --danger: #c92a2a; --ok: #2b8a3e; --amber: #e08a00;
+    --ink: #1b2a6b; --plate: #3a3d42; --plate-grid: #4a4e55; --paper: #ffffff; --tape: #f2c14e; --head: #dfe3e8; --head-line: #9aa3b2;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 16px rgba(16,24,40,.06); --radius: 14px; color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #111318; --panel: #181b22; --panel-2: #1e222b; --line: #2a2f3a; --text: #e6e8ee; --muted: #9aa3b2;
-      --accent: #748ffc; --accent-2: #1f2540; --accent-text: #0b0f1f; --danger: #ff8787; --danger-bg: #2b1618;
-      --ok: #69db7c; --stage: #0c0e12; --shadow: 0 1px 2px rgba(0,0,0,.4); color-scheme: dark;
+      --accent: #748ffc; --accent-2: #1f2540; --accent-text: #0b0f1f; --danger: #ff8787; --ok: #69db7c;
+      --head: #2c313b; --head-line: #6b7484; --shadow: 0 1px 2px rgba(0,0,0,.4); color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    display: grid; grid-template-rows: auto 1fr; }
-  button, input, select, textarea { font: inherit; color: inherit; }
-  header { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: var(--panel);
-    border-bottom: 1px solid var(--line); }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; letter-spacing: -.01em; }
-  .brand svg { color: var(--accent); }
-  .brand small { color: var(--muted); font-weight: 400; font-size: 13px; }
-  header .spacer { flex: 1; }
-  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
-    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); font-size: 13px; white-space: nowrap; }
-  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
-  .pill.busy .dot { background: var(--accent); animation: pulse 1s infinite; }
-  .pill.err .dot { background: var(--danger); }
-  @keyframes pulse { 50% { opacity: .3; } }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 14px;
-    border-radius: 9px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-weight: 550;
-    transition: background .12s, border-color .12s, transform .05s; }
-  .btn:hover { background: var(--panel-2); }
-  .btn:active { transform: translateY(1px); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-  .btn.primary:hover { filter: brightness(1.06); }
-  .btn.ghost { border-color: transparent; background: transparent; }
-  .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .btn.small { height: 30px; padding: 0 10px; font-size: 13px; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+  main { overflow-x: clip; } /* the tilted hero sheet must not cause sideways scrolling on phones */
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  main { display: grid; grid-template-columns: 380px 1fr; min-height: 0; }
-  aside { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--line); }
-  .scroll { overflow: auto; padding: 14px 16px 8px; display: grid; gap: 14px; align-content: start; }
-  section.card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 14px; }
-  .card h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650;
-    display: flex; align-items: center; justify-content: space-between; }
-  textarea#text { width: 100%; min-height: 150px; resize: vertical; border: 1px solid var(--line); border-radius: 10px;
-    padding: 10px 12px; background: var(--panel-2); line-height: 1.5; }
-  .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
-  .warn { color: var(--danger); }
-  .row { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 10px; margin-top: 10px; }
-  .row label { color: var(--muted); font-size: 13px; }
-  select, input[type=number], input[type=text] { height: 34px; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--panel-2); padding: 0 10px; width: 100%; }
-  .slider { display: grid; grid-template-columns: 1fr 44px; align-items: center; gap: 10px; }
-  .slider output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
-  input[type=range] { width: 100%; accent-color: var(--accent); }
-  .seg { display: inline-grid; grid-auto-flow: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .seg button { border: 0; background: var(--panel-2); padding: 6px 12px; cursor: pointer; color: var(--muted); }
-  .seg button[aria-pressed=true] { background: var(--accent-2); color: var(--accent); font-weight: 600; }
-  .unit { position: relative; }
-  .unit input { padding-right: 34px; }
-  .borders { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .borders .unit { display: flex; align-items: center; gap: 6px; }
-  .borders .unit span { color: var(--muted); font-size: 15px; }
-  .unit::after { content: attr(data-unit); position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-    color: var(--muted); font-size: 12px; pointer-events: none; }
-  .styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .style { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 4px; cursor: pointer;
-    display: grid; gap: 2px; text-align: center; color: #667085; font-size: 11px; }
-  .style canvas { width: 100%; height: 34px; display: block; }
-  .style[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-2); }
-  .style.mine { background: #fffdf5; }
-  .style-group { grid-column: 1 / -1; font-size: 12px; font-weight: 650; color: var(--muted); margin: 6px 0 -2px; }
-  .styles { max-height: 360px; overflow: auto; padding: 2px; }
-  .actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line);
-    background: var(--panel); }
-  .stage { position: relative; min-width: 0; min-height: 0; background: var(--stage); }
-  #plate { width: 100%; height: 100%; display: block; touch-action: none; }
-  .toolbar { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; }
-  .toolbar .btn { background: var(--panel); box-shadow: var(--shadow); }
-  .info { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; }
-  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 11px; box-shadow: var(--shadow);
-    font-size: 12.5px; color: var(--muted); max-width: 640px; pointer-events: auto; }
-  .chip b { color: var(--text); font-weight: 600; }
-  .chip.err { color: var(--danger); background: var(--danger-bg); border-color: transparent; }
-  .legend { display: flex; gap: 12px; align-items: center; }
-  .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px dashed; vertical-align: middle; margin-right: 5px; }
-  #saveAll { grid-column: 1 / -1; }
-  #saveAll[hidden] { display: none; }
-  .pager { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px; box-shadow: var(--shadow); font-weight: 600; }
-  .pager[hidden] { display: none; }
-  .progress { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); }
+  /* header */
+  header.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--panel) 88%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; align-items: center; gap: 18px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 17px; color: var(--text); text-decoration: none; }
+  .brand svg { color: var(--accent); }
+  nav { display: flex; gap: 4px; margin-left: auto; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 14px; padding: 6px 10px; border-radius: 8px; }
+  nav a:hover { color: var(--text); background: var(--panel-2); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 15px; font-weight: 600;
+    text-decoration: none; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--panel-2); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.small { height: 34px; padding: 0 12px; font-size: 14px; }
+  @media (max-width: 860px) { nav { display: none; } header.top .btn { margin-left: auto; } }
 
-  dialog { border: 0; border-radius: 16px; padding: 0; width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
-    background: var(--panel); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
-  dialog::backdrop { background: rgba(15,18,25,.45); }
-  .dlg { display: grid; grid-template-rows: auto 1fr auto; max-height: calc(100vh - 48px); }
-  .dlg > header { border: 0; padding: 18px 22px 6px; display: block; }
-  .dlg > header h3 { margin: 0; font-size: 18px; }
-  .dlg > header p { margin: 4px 0 0; color: var(--muted); }
-  .dlg .body { overflow: auto; padding: 8px 22px 16px; }
-  .dlg footer { display: flex; gap: 10px; justify-content: flex-end; align-items: center; padding: 14px 22px; border-top: 1px solid var(--line); }
-  .dlg footer .msg { margin-right: auto; color: var(--danger); font-size: 13px; }
-  fieldset { border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 12px; margin: 12px 0 0; }
-  legend { padding: 0 6px; font-weight: 650; font-size: 13px; }
-  .field { display: grid; grid-template-columns: 200px 120px 1fr; gap: 12px; align-items: start; padding-top: 10px; }
-  .field label { padding-top: 7px; font-weight: 550; }
-  .field p { margin: 0; padding-top: 6px; color: var(--muted); font-size: 12.5px; }
-  .offset-test { border-top: 1px dashed var(--line); margin-top: 12px; padding-top: 2px; }
-  .offset-test > .btn { margin-top: 10px; }
-  #pad { width: 100%; height: 200px; border: 1px dashed var(--line); border-radius: 12px; background: #fff; touch-action: none; display: block; }
-  .mine-list { display: grid; gap: 8px; margin-top: 10px; }
-  .mine-item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line);
-    border-radius: 10px; padding: 8px 10px; }
-  .mine-item small { color: var(--muted); }
-  ol.steps { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 8px; }
-  @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-template-rows: auto 60vh; } aside { order: 2; }
-    .field { grid-template-columns: 1fr 110px; } .field p { grid-column: 1 / -1; padding-top: 0; } }
+  /* hero */
+  .hero { display: grid; grid-template-columns: 1fr 1.05fr; gap: 48px; align-items: center; padding-block: 64px 40px; }
+  .hero h1 { font-size: clamp(32px, 5vw, 50px); line-height: 1.08; letter-spacing: -.025em; margin: 0 0 18px; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .lead { font-size: 18px; color: var(--muted); margin: 0 0 26px; max-width: 34em; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .facts { display: flex; gap: 18px; flex-wrap: wrap; margin: 26px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 14px; }
+  .facts li::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+  .sheet { background: var(--paper); border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,.08), 0 18px 40px rgba(16,24,40,.16);
+    padding: 26px 26px 34px; transform: rotate(-1.2deg); position: relative; }
+  .sheet svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .ink { fill: none; stroke: var(--ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  @media (max-width: 860px) { .hero { grid-template-columns: 1fr; gap: 32px; padding-top: 36px; } }
+
+  /* sections */
+  section.block { padding: 56px 0; border-top: 1px solid var(--line); }
+  .kicker { color: var(--accent); font-weight: 650; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  h2 { font-size: clamp(26px, 3.4vw, 34px); line-height: 1.15; letter-spacing: -.02em; margin: 0 0 12px; }
+  h3 { font-size: 18px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .intro { color: var(--muted); max-width: 46em; margin: 0 0 30px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+  .muted { color: var(--muted); }
+  .note { border-left: 3px solid var(--amber); background: var(--panel); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 22px 0 0; }
+  .note.warn { border-color: var(--danger); }
+  kbd, .ui { font: 600 13.5px system-ui, sans-serif; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+
+  .steps4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; counter-reset: s; }
+  .steps4 .card { position: relative; padding-top: 52px; }
+  .steps4 .card::before { counter-increment: s; content: counter(s); position: absolute; top: 18px; left: 20px; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--accent-2); color: var(--accent); font-weight: 700; font-size: 14px; display: grid; place-items: center; }
+  .steps4 p { margin: 0; color: var(--muted); font-size: 15px; }
+  @media (max-width: 960px) { .steps4 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .steps4 { grid-template-columns: 1fr; } }
+
+  .samples { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+  .sample { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px 12px 6px; text-align: center; }
+  .sample svg { width: 100%; height: 46px; }
+  .sample span { display: block; color: #667085; font-size: 12.5px; }
+  @media (max-width: 640px) { .samples { grid-template-columns: 1fr 1fr; } }
+
+  /* app tour */
+  .tour { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: #111318; }
+  .tour img { display: block; width: 100%; height: auto; }
+  .pin { position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; background: var(--amber); color: #1c2230;
+    font-weight: 800; font-size: 14px; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 26px; margin: 20px 0 0; padding: 0; list-style: none; }
+  .legend li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; font-size: 15px; }
+  .legend b.n { width: 24px; height: 24px; border-radius: 50%; background: var(--amber); color: #1c2230; display: grid; place-items: center; font-size: 13px; }
+
+  /* steppers: an SVG whose parts change with data-stage, plus the stage list */
+  .stepper { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; align-items: center; margin: 0; }
+  .stepper .stage { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+  .stepper svg { display: block; width: 100%; height: auto; }
+  .stage-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .stage-list button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 30px 1fr; gap: 12px; width: 100%; padding: 12px 14px;
+    border-radius: 12px; border: 1px solid transparent; cursor: pointer; color: var(--muted); }
+  .stage-list button:hover { background: var(--panel); }
+  .stage-list button:focus-visible { outline: 2px solid var(--accent); }
+  .stage-list button[aria-current=step] { background: var(--panel); border-color: var(--line); color: var(--text); box-shadow: var(--shadow); }
+  .stage-list .n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px;
+    background: var(--panel-2); border: 1px solid var(--line); }
+  .stage-list button[aria-current=step] .n { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .stage-list .h { display: block; color: var(--text); font-size: 15.5px; margin-bottom: 2px; }
+  .stage-list button > span:last-child { display: block; }
+  .stage-list span.t { font-size: 14.5px; }
+  .stage-list .bar { height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 8px; display: none; }
+  .stage-list button[aria-current=step] .bar { display: block; }
+  .stage-list .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+  .playing .stage-list button[aria-current=step] .bar i { animation: fill var(--ms, 5000ms) linear forwards; }
+  @keyframes fill { to { width: 100%; } }
+  @media (max-width: 860px) { .stepper { grid-template-columns: 1fr; } }
+
+  /* diagram parts shared by the SVGs */
+  .plate { fill: var(--plate); }
+  .plate-edge { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 7 5; }
+  .grid { stroke: var(--plate-grid); stroke-width: 1; }
+  .paper { fill: var(--paper); stroke: #c9ced6; stroke-width: 1; }
+  .lbl { font: 600 11px system-ui, sans-serif; fill: var(--muted); letter-spacing: .06em; }
+  .lbl-dark { font: 600 11px system-ui, sans-serif; fill: #667085; }
+  .lbl-on-plate { font: 600 10.5px system-ui, sans-serif; fill: #c3c8d0; letter-spacing: .05em; }
+  .dim { stroke: var(--accent); stroke-width: 1.6; fill: none; }
+  .dim-text { font: 700 12.5px system-ui, sans-serif; fill: var(--accent); }
+  .pen-line { stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; fill: none; }
+  .aim { stroke: #9aa3b2; stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+  .fade { opacity: 0; transition: opacity .5s; }
+  .draw { stroke-dasharray: 1; stroke-dashoffset: 1; transition: none; }
+  .head-body { fill: var(--head); stroke: var(--head-line); stroke-width: 1.2; }
+  .hotend { fill: #c7ccd4; stroke: var(--head-line); }
+  .pen-body { fill: #3b5bdb; } .pen-cap { fill: #22325e; } .pen-tip { fill: #1c2230; }
+  .moving { transition: transform 1.1s cubic-bezier(.5,.1,.2,1), opacity .5s; transform-box: view-box; }
+
+  /* calibration stages */
+  #cal[data-stage="1"] .paper-g { animation: slidein 1.3s cubic-bezier(.5,.1,.2,1) .2s both; transform-box: view-box; }
+  @keyframes slidein { from { transform: translate(46px, 40px); } }
+  #cal[data-stage="1"] .corner, #cal[data-stage="1"] .push { opacity: 1; }
+  #cal[data-stage="2"] .s2, #cal[data-stage="3"] .s2 { opacity: 1; }
+  #cal[data-stage="2"] .draw, #cal[data-stage="3"] .draw { stroke-dashoffset: 0; transition: stroke-dashoffset 1.4s ease .5s; }
+  #cal[data-stage="2"] .draw.late { transition-delay: 2s; }
+  #cal[data-stage="3"] .s3 { opacity: 1; }
+  #cal[data-stage="3"] .aim-g { opacity: .35; }
+  .corner { animation: pulse 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes pulse { 50% { transform: scale(1.5); } }
+
+  /* printing stages: head height and pen per stage */
+  #print .head-y { transform: translate(0, 28px); }
+  #print[data-stage="2"] .head-y { transform: translate(0, -14px); }
+  #print[data-stage="3"] .head-y, #print[data-stage="4"] .head-y { transform: translate(0, 8px); }
+  #print .pen-g { opacity: 0; transform: translate(0, -64px); }
+  #print[data-stage="3"] .pen-g { opacity: 1; transform: translate(0, 0); transition-delay: 1s, 1s; transition-duration: 1.6s, .4s; }
+  #print[data-stage="4"] .pen-g { opacity: 1; transform: translate(0, 0); }
+  #print .paper-g { opacity: 0; transform: translate(220px, 0); }
+  #print[data-stage="2"] .paper-g, #print[data-stage="3"] .paper-g, #print[data-stage="4"] .paper-g { opacity: 1; transform: translate(0, 0); }
+  #print[data-stage="2"] .paper-g { transition-delay: .9s, .9s; }
+  #print .cap { transition: none; }
+  #print[data-stage="1"] .s1, #print[data-stage="2"] .s2, #print[data-stage="3"] .s3, #print[data-stage="4"] .s4 { opacity: 1; transition: opacity .4s .2s; }
+  #print[data-stage="4"] .head-x { animation: write 2.6s ease-in-out infinite; }
+  @keyframes write { 0%,100% { transform: translate(-70px, 0); } 12% { transform: translate(-58px, -4px); } 25% { transform: translate(-30px, 0); }
+    37% { transform: translate(-12px, -4px); } 50% { transform: translate(18px, 0); } 62% { transform: translate(36px, -4px); } 75% { transform: translate(64px, 0); } 88% { transform: translate(10px, -6px); } }
+  #print .inset .ink { stroke-width: 1.4; }
+  #print[data-stage="4"] .inset .draw { stroke-dashoffset: 0; transition: stroke-dashoffset .35s linear; }
+  #print[data-stage="3"] .clamp { fill: var(--amber); transition: fill .3s 2.4s; }
+
+  /* settings reference */
+  .set-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .set { display: grid; grid-template-columns: 1fr 150px; gap: 16px; align-items: center; }
+  .set p { margin: 0; color: var(--muted); font-size: 15px; }
+  .set .def { display: inline-block; margin-top: 8px; font-size: 13px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 1px 10px; }
+  .set svg { width: 100%; height: auto; }
+  .set .viz { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+  .neat-row { display: grid; gap: 4px; }
+  .neat-row div { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 6px; }
+  .neat-row span { font: 600 11px system-ui; color: #667085; }
+  .neat-row svg { height: 30px; }
+  @media (max-width: 900px) { .set-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 460px) { .set { grid-template-columns: 1fr; } .set .viz { max-width: 220px; } }
+  table.ref { width: 100%; border-collapse: collapse; font-size: 15px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  table.ref th, table.ref td { text-align: left; padding: 11px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+  table.ref thead th { border-top: 0; background: var(--panel-2); font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  table.ref td:last-child { white-space: nowrap; color: var(--muted); }
+  table.ref tr.group th { background: var(--panel-2); font-size: 13.5px; color: var(--text); }
+  .table-scroll { overflow-x: auto; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+  ol.plain { margin: 0; padding-left: 22px; } ol.plain li { margin: 6px 0; }
+
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0 18px; margin: 0 0 10px; }
+  details summary { cursor: pointer; padding: 15px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+  details summary::after { content: "+"; color: var(--muted); font-weight: 400; font-size: 20px; line-height: 1; }
+  details[open] summary::after { content: "−"; }
+  details p { margin: 0 0 16px; color: var(--muted); }
+
+  .final { text-align: center; padding: 64px 20px; }
+  footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 13.5px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-    Handwrite <small>handwriting for your 3D printer</small>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      Handwrite
+    </a>
+    <nav aria-label="Guide">
+      <a href="#how">How it works</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn primary small" href="app.html">Open the app</a>
   </div>
-  <div class="spacer"></div>
-  <span class="pill" id="status" role="status"><span class="dot"></span><span id="statusText">Starting…</span></span>
-  <button class="btn" id="openMine">My handwriting</button>
-  <button class="btn" id="openSettings">Printer settings</button>
 </header>
+
 <main>
-  <aside>
-    <div class="scroll">
-      <section class="card">
-        <h2>Text <span id="count" class="hint" style="margin:0;text-transform:none;letter-spacing:0"></span></h2>
-        <textarea id="text" spellcheck="true" aria-label="Text to write"></textarea>
-        <p class="hint" id="capacity" role="status"></p>
-        <p class="hint warn" id="skipped" hidden></p>
-      </section>
-      <section class="card">
-        <h2>Handwriting</h2>
-        <div class="styles" id="styles" role="group" aria-label="Handwriting style"></div>
-        <div class="row"><label for="bias">Neatness</label>
-          <div class="slider"><input type="range" id="bias" min="0" max="2" step="0.05"><output for="bias"></output></div></div>
-        <div class="row"><label for="wobble">Line wobble</label>
-          <div class="slider"><input type="range" id="wobble" min="0" max="2" step="0.05"><output for="wobble"></output></div></div>
-        <div class="row"><label for="wordSpacing" title="Average gap between words, in letter heights. Each gap still varies a little; more with line wobble.">Word spacing</label>
-          <div class="slider"><input type="range" id="wordSpacing" min="0.4" max="3" step="0.05"><output for="wordSpacing"></output></div></div>
-        <div class="row"><label for="xh">Letter size</label>
-          <div class="unit" data-unit="mm"><input type="number" id="xh" min="1" max="20" step="0.1"></div></div>
-        <div class="row"><label for="lineSpacing" title="Average distance from one line to the next. Each line still varies a little; more with line wobble.">Line spacing</label>
-          <div class="unit" data-unit="mm"><input type="number" id="lineSpacing" min="1" max="100" step="0.5"></div></div>
-        <p class="hint">Spacing is an average: every gap still varies a little like real handwriting, more with higher line wobble.</p>
-      </section>
-      <section class="card">
-        <h2>Page</h2>
-        <div class="row" style="margin-top:0"><label for="printer">Printer</label><select id="printer"></select></div>
-        <div class="row"><label for="paper">Paper</label><select id="paper"></select></div>
-        <div class="row"><label>Orientation</label>
-          <div class="seg" role="group" aria-label="Orientation"><button id="portrait">Portrait</button><button id="landscape">Landscape</button></div></div>
-        <div class="row"><label>Border</label>
-          <div class="borders">
-            <label class="unit" data-unit="mm" title="Left and right border"><span aria-hidden="true">↔</span><input type="number" id="margin" min="0" max="50" step="1" aria-label="Left and right border in mm"></label>
-            <label class="unit" data-unit="mm" title="Top and bottom border"><span aria-hidden="true">↕</span><input type="number" id="marginY" min="0" max="80" step="1" aria-label="Top and bottom border in mm"></label>
-          </div></div>
-        <div class="row"><label for="sounds">Printer sounds</label>
-          <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="sounds"> <span id="soundsNote">Bambu's own start and finish tunes, plus a tune at each pause</span></label></div>
-        <div class="row"><label for="slide">Long pages</label>
-          <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="slide"> <span>Slide the paper back mid-page to write the part the pen can't reach. Off: the text continues on the next page.</span></label></div>
-        <p class="hint">Drag the paper on the build plate to where it will sit. Scroll to zoom.
-          <button type="button" class="btn small" id="placePaper" title="Put the paper where the pen reaches, so writing starts at the top border">Place paper automatically</button></p>
-      </section>
+  <div class="wrap hero">
+    <div>
+      <h1>Real handwriting,<br>written by <em>your 3D printer</em>.</h1>
+      <p class="lead">Type a letter, pick a handwriting, and get G-code that writes it with a pen on a Bambu Lab printer.
+        A neural network draws every word stroke by stroke, so letters join and vary like a person's, not like a font.</p>
+      <div class="cta">
+        <a class="btn primary" href="app.html">Open the app</a>
+        <a class="btn" href="#how">How to use it</a>
+      </div>
+      <ul class="facts"><li>Runs in your browser</li><li>Works offline</li><li>Nothing to install</li><li>Every move safety-checked</li></ul>
     </div>
-    <div class="actions">
-      <button class="btn" id="reroll" title="New random handwriting and layout">↻ New version</button>
-      <button class="btn primary" id="save" disabled>Save G-code</button>
-      <button class="btn" id="saveAll" hidden disabled>Save all pages</button>
-    </div>
-  </aside>
-  <div class="stage">
-    <canvas id="plate" aria-label="Build plate preview"></canvas>
-    <div class="pager" id="pager" hidden>
-      <button class="btn small" id="prevPage" aria-label="Previous page">‹</button>
-      <span id="pageLabel" aria-live="polite"></span>
-      <button class="btn small" id="nextPage" aria-label="Next page">›</button>
-    </div>
-    <div class="toolbar">
-      <button class="btn small" id="zoomOut" aria-label="Zoom out">−</button>
-      <button class="btn small" id="zoomIn" aria-label="Zoom in">+</button>
-      <button class="btn small" id="zoomFit">Fit</button>
-    </div>
-    <div class="info">
-      <div class="chip legend"><span><i style="color:#e08a00"></i>plate edge</span><span><i style="color:#7aa2d6"></i>writing area</span><span><i style="color:#c92a2a"></i>paper slide</span></div>
-      <div class="chip" id="summary" hidden></div>
-      <div class="chip err" id="error" hidden></div>
+    <div class="sheet" aria-label="Animation: a pen writing 'Dear friend, this letter was written by my 3D printer.'">
+      <svg id="heroInk" role="img" aria-hidden="true"></svg>
     </div>
   </div>
+
+  <section class="block" id="how">
+    <div class="wrap">
+      <p class="kicker">How it works</p>
+      <h2>Four steps from text to paper</h2>
+      <p class="intro">Everything happens in the browser on your computer. Your text and handwriting never leave it.</p>
+      <div class="steps4">
+        <div class="card"><h3>Type your text</h3><p>Type or paste it in. The app tells you how many words fit on a page; longer text continues on page 2, 3 and so on.</p></div>
+        <div class="card"><h3>Pick a handwriting</h3><p>Choose from 45 styles, or teach it your own from one written sentence. Neatness and line wobble make it tidier or more casual.</p></div>
+        <div class="card"><h3>Set printer and paper</h3><p>Choose your printer and paper size, then drag the paper on the build-plate preview to where it will sit.</p></div>
+        <div class="card"><h3>Save and print</h3><p>Click <span class="ui">Save G-code</span> and run the file like any other. The printer pauses so you can place the paper and attach the pen.</p></div>
+      </div>
+      <div class="samples" id="styleSamples" aria-label="Some of the handwriting styles"></div>
+
+      <h3 style="margin-top:44px">A quick tour of the app</h3>
+      <div class="tour">
+        <img src="guide-app.png" alt="The Handwrite app: text box, handwriting styles and sliders on the left, the build-plate preview with the written page on the right" width="1500" height="860" loading="lazy">
+        <span class="pin" style="left:20%;top:14%">1</span><span class="pin" style="left:21.5%;top:47%">2</span><span class="pin" style="left:21%;top:90%">3</span>
+        <span class="pin" style="left:42.8%;top:18.6%">4</span><span class="pin" style="left:25%;top:96%">5</span><span class="pin" style="left:80.8%;top:5%">6</span>
+        <span class="pin" style="left:73%;top:93%">7</span>
+      </div>
+      <ul class="legend">
+        <li><b class="n">1</b><span><b>Text.</b> Type or paste what you want written. Characters the model can't write are listed under it.</span></li>
+        <li><b class="n">2</b><span><b>Handwriting.</b> Click a style. Your own styles appear under “Mine”.</span></li>
+        <li><b class="n">3</b><span><b>Sliders and sizes.</b> Neatness, line wobble, word spacing, letter size and line spacing. <a href="#settings">What each one does</a>.</span></li>
+        <li><b class="n">4</b><span><b>Build-plate preview.</b> The page as it will be written. Drag the paper, scroll to zoom.</span></li>
+        <li><b class="n">5</b><span><b>New version / Save G-code.</b> New version rewrites the same text with fresh handwriting. Save G-code makes the file.</span></li>
+        <li><b class="n">6</b><span><b>My handwriting / Printer settings.</b> Teach it your hand; set the pen offset, heights, pauses and speeds.</span></li>
+        <li><b class="n">7</b><span><b>Time estimate.</b> How long the page takes, including the pauses.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block" id="calibrate">
+    <div class="wrap">
+      <p class="kicker">Before your first print</p>
+      <h2>Calibrate the pen offset</h2>
+      <p class="intro">The pen sits a little beside the nozzle, usually in front of it. The app needs to know by how much, so the writing
+        lands where the preview shows it and the pen never runs off the front of the plate. If BambuPlot already works for you, just copy its
+        “tool offset” into <span class="ui">Printer settings → Pen offset</span>. Otherwise, print the offset test once:</p>
+      <figure class="stepper" data-ms="5200">
+        <div class="stage">
+          <svg id="cal" data-stage="1" viewBox="0 0 400 392" role="img" aria-label="Offset test on the build plate, seen from above">
+            <text class="lbl" x="198" y="24" text-anchor="middle">BACK OF PRINTER</text>
+            <rect class="plate" x="70" y="36" width="256" height="256" rx="5"/>
+            <g class="grid"><path d="M121 36v256M172 36v256M223 36v256M274 36v256M70 87h256M70 138h256M70 189h256M70 240h256"/></g>
+            <rect class="plate-edge" x="70" y="36" width="256" height="256" rx="5"/>
+            <g class="paper-g moving">
+              <rect class="paper" x="70" y="36" width="210" height="297"/>
+              <text class="lbl-dark" x="175" y="318" text-anchor="middle">A4 PORTRAIT</text>
+            </g>
+            <g class="fade push"><path d="M128 92 L84 50" stroke="var(--amber)" stroke-width="2.5" fill="none" marker-end="url(#arr)"/><text class="lbl-dark" x="132" y="104" style="fill:var(--amber)">push into this corner</text></g>
+            <circle class="fade corner" cx="70" cy="36" r="7" fill="none" stroke="var(--amber)" stroke-width="2.5"/>
+            <!-- nozzle aims 60 mm below the top edge; a pen 27 mm in front and 4.5 mm left draws 87 mm below, 100.5 mm from the left -->
+            <g class="fade s2 aim-g"><path class="aim" d="M125 96 H225 M175 86 V106"/><text class="lbl-dark" x="230" y="92">aimed</text></g>
+            <path class="pen-line draw" pathLength="1" d="M120.5 123 H220.5"/>
+            <path class="pen-line draw late" pathLength="1" d="M170.5 113 V133"/>
+            <g class="fade s2"><text class="lbl-dark" x="228" y="127" style="fill:var(--ink)">drawn</text></g>
+            <g class="fade s3">
+              <path class="dim" d="M98 36 V123 M93 36 H103 M93 123 H103"/><text class="dim-text" x="92" y="84" text-anchor="end">87</text><text class="dim-text" x="92" y="98" text-anchor="end" style="font-size:10px">mm</text>
+              <path class="dim" d="M70 168 H170.5 M70 163 V173 M170.5 163 V173"/><text class="dim-text" x="120" y="160" text-anchor="middle">100.5 mm</text>
+            </g>
+            <text class="lbl" x="198" y="378" text-anchor="middle">FRONT · YOU STAND HERE</text>
+            <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--amber)"/></marker></defs>
+          </svg>
+        </div>
+        <ol class="stage-list">
+          <li><button type="button" data-go="1"><span class="n">1</span><span><b class="h">Print the test and place A4 paper</b><span class="t">In <span class="ui">Printer settings → Pen offset</span>, click <span class="ui">Save offset test G-code</span> and start it with the pen out. In pause 1, push an A4 sheet into the <b>top-left (far-left) corner</b>: top edge on the plate's back edge, left edge on its left edge. Tape it.</span><span class="bar"><i></i></span></span></button></li>
+          <li><button type="button" data-go="2"><span class="n">2</span><span><b class="h">Clamp the pen and let it draw</b><span class="t">In pause 2, slide the pen down until it touches the paper and clamp it. The printer aims a long line 60 mm below the top edge and a short mark across it. Because the pen isn't where the nozzle is, the marks land somewhere else.</span><span class="bar"><i></i></span></span></button></li>
+          <li><button type="button" data-go="3"><span class="n">3</span><span><b class="h">Measure and type in two numbers</b><span class="t">Measure to the middle of each line: the long line from the paper's <b>top</b> edge, the short mark from its <b>left</b> edge. Type them under <span class="ui">Long line</span> and <span class="ui">Short mark</span>; the offset fills in (here X −4.5, Y −27 mm). Click <span class="ui">Save</span>.</span><span class="bar"><i></i></span></span></button></li>
+        </ol>
+      </figure>
+      <p class="note">Save your G-code again after changing the offset: files saved before still use the old one. The test is the same for every printer; on an A1 mini the short mark is aimed at 90 mm instead of 105 mm.</p>
+    </div>
+  </section>
+
+  <section class="block" id="paper">
+    <div class="wrap two">
+      <div>
+        <p class="kicker">Placing the paper</p>
+        <h2>Reading the preview</h2>
+        <p class="muted">The preview shows the build plate from above with the <b>front of the printer at the bottom</b>, drawn where the pen tip can reach. Drag the
+          paper to where it will sit, or click <span class="ui">Place paper automatically</span> to put it where the pen reaches so writing starts at your top border.</p>
+        <ul class="legend" style="grid-template-columns:1fr">
+          <li><svg width="28" height="10" aria-hidden="true"><path d="M0 5H28" stroke="#e08a00" stroke-width="2.5" stroke-dasharray="6 4"/></svg><span><b>Orange dashes:</b> the edge of the area the pen can reach.</span></li>
+          <li><svg width="28" height="10" aria-hidden="true"><path d="M0 5H28" stroke="#7aa2d6" stroke-width="2.5" stroke-dasharray="5 4"/></svg><span><b>Blue dashes:</b> the writing area, inside your borders.</span></li>
+          <li><svg width="28" height="14" aria-hidden="true"><rect width="28" height="14" rx="3" fill="rgba(120,126,140,.55)"/></svg><span><b>Grey:</b> part of the page the pen can't reach (past the front of the plate). Text continues on the next page instead.</span></li>
+          <li><svg width="28" height="10" aria-hidden="true"><path d="M0 5H28" stroke="#c92a2a" stroke-width="2.5" stroke-dasharray="6 4"/></svg><span><b>Red dashes:</b> where you'll slide the paper back, only with <span class="ui">Long pages</span> ticked.</span></li>
+        </ul>
+        <div class="note"><b>The easy way to line it up:</b> in pause 1 the head stops with the pen holder right above where the first letter goes.
+          Put the paper so that spot matches the preview, then tape all four corners. The paper must not move while the pen writes.</div>
+      </div>
+      <div class="card" style="padding:14px">
+        <svg viewBox="0 0 360 380" role="img" aria-label="Preview of a page on the build plate">
+          <rect class="plate" x="40" y="20" width="280" height="280" rx="5"/>
+          <g class="grid"><path d="M96 20v280M152 20v280M208 20v280M264 20v280M40 76h280M40 132h280M40 188h280M40 244h280"/></g>
+          <rect x="40" y="276" width="280" height="24" fill="rgba(120,126,140,.45)"/>
+          <rect class="paper" x="76" y="36" width="208" height="294"/>
+          <rect x="90" y="276" width="180" height="40" fill="rgba(120,126,140,.45)"/>
+          <rect x="90" y="50" width="180" height="226" fill="none" stroke="#7aa2d6" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <g class="ink" id="paperInk"></g>
+          <rect class="plate-edge" x="40" y="20" width="280" height="280" rx="5"/>
+          <rect x="132" y="290" width="96" height="18" rx="4" fill="#2a2f3a"/><text x="180" y="303" text-anchor="middle" class="lbl-on-plate">pen can't reach</text>
+          <g fill="var(--tape)" opacity=".9"><rect x="68" y="30" width="22" height="9" transform="rotate(-35 79 34)"/><rect x="270" y="30" width="22" height="9" transform="rotate(35 281 34)"/><rect x="68" y="322" width="22" height="9" transform="rotate(35 79 326)"/><rect x="270" y="322" width="22" height="9" transform="rotate(-35 281 326)"/></g>
+          <circle id="firstLetter" cx="100" cy="90" r="9" fill="none" stroke="var(--accent)" stroke-width="2"><animate attributeName="r" values="5;11;5" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;.3;1" dur="1.6s" repeatCount="indefinite"/></circle>
+          <text x="96" y="66" class="lbl-dark" style="fill:var(--accent)">↓ the pen stops here in pause 1</text>
+          <text class="lbl" x="180" y="360" text-anchor="middle">FRONT OF PRINTER</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="printing">
+    <div class="wrap">
+      <p class="kicker">Running the file</p>
+      <h2>What happens when you print</h2>
+      <p class="intro">Send the <code>.gcode</code> file to the printer the same way as other plain G-code (for example on the SD card). The pauses are timed:
+        the printer carries on by itself when the time is up. With <span class="ui">Printer sounds</span> on, it plays a tune at each pause.</p>
+      <figure class="stepper" data-ms="5600">
+        <div class="stage">
+          <svg id="print" data-stage="1" viewBox="0 0 560 280" role="img" aria-label="The print head, pen and paper, seen from the side">
+            <text class="lbl" x="40" y="268">FRONT</text><text class="lbl" x="520" y="268" text-anchor="end">BACK</text>
+            <rect class="plate" x="40" y="220" width="480" height="14" rx="3"/>
+            <g class="paper-g moving"><rect x="150" y="214" width="270" height="6" fill="var(--paper)" stroke="#c9ced6"/>
+              <rect x="146" y="211" width="16" height="5" fill="var(--tape)"/><rect x="408" y="211" width="16" height="5" fill="var(--tape)"/></g>
+            <g class="head-y moving">
+              <g class="head-x">
+                <rect class="head-body" x="250" y="60" width="96" height="96" rx="12"/>
+                <rect class="hotend" x="283" y="156" width="30" height="24" rx="3"/>
+                <path d="M287 180h22l-11 12z" fill="#9aa3b2"/>
+                <rect x="214" y="104" width="36" height="34" rx="5" fill="#8d96a7"/>
+                <circle class="clamp" cx="219" cy="121" r="4.5" fill="#5a6273"/>
+                <g class="pen-g moving">
+                  <rect class="pen-cap" x="226" y="62" width="12" height="22" rx="3"/>
+                  <rect class="pen-body" x="226" y="84" width="12" height="104" rx="2"/>
+                  <path class="pen-tip" d="M227 188h10l-5 18z"/>
+                </g>
+              </g>
+            </g>
+            <g class="fade cap s1"><text class="lbl" x="372" y="96" style="fill:var(--text)">pen out of the holder</text><text class="lbl" x="372" y="112">the nozzle touches the plate</text><text class="lbl" x="372" y="128">to find its height</text></g>
+            <g class="fade cap s2"><text class="lbl" x="372" y="96" style="fill:var(--text)">pause 1 · 30 s</text><text class="lbl" x="372" y="112">place the paper under</text><text class="lbl" x="372" y="128">the pen holder, tape it</text></g>
+            <g class="fade cap s3"><text class="lbl" x="372" y="96" style="fill:var(--text)">pause 2 · 30 s</text><text class="lbl" x="372" y="112">slide the pen down to</text><text class="lbl" x="372" y="128">the paper, then clamp it</text></g>
+            <g class="fade s4 inset">
+              <rect x="404" y="4" width="140" height="58" rx="6" fill="var(--paper)" stroke="var(--line)"/>
+              <g id="insetInk" transform="translate(412 12)"></g>
+            </g>
+          </svg>
+        </div>
+        <ol class="stage-list">
+          <li><button type="button" data-go="1"><span class="n">1</span><span><b class="h">Start with the pen out</b><span class="t">Take the pen out of the holder, then start the file. The printer homes first, and on the A1 homing touches the nozzle to the plate: a pen sticking out below it would crash.</span><span class="bar"><i></i></span></span></button></li>
+          <li><button type="button" data-go="2"><span class="n">2</span><span><b class="h">Pause 1: place the paper</b><span class="t">The head rises and stops right above where the first letter goes. Put the paper where the preview shows it and tape it down.</span><span class="bar"><i></i></span></span></button></li>
+          <li><button type="button" data-go="3"><span class="n">3</span><span><b class="h">Pause 2: attach the pen</b><span class="t">The head lowers to the writing height. Slide the pen down through the holder until the tip just touches the paper, then clamp it. That sets the pen's length, so nothing else needs measuring.</span><span class="bar"><i></i></span></span></button></li>
+          <li><button type="button" data-go="4"><span class="n">4</span><span><b class="h">It writes</b><span class="t">The pen lifts and lowers for every stroke at about the speed of real handwriting. Stay with the printer the first time.</span><span class="bar"><i></i></span></span></button></li>
+        </ol>
+      </figure>
+      <p class="note">Change the pause lengths in <span class="ui">Printer settings → Pauses during printing</span>. For long pages with <span class="ui">Long pages</span> ticked,
+        there's a third pause: the pen stops over the last mark it wrote; slide the paper toward the back until that mark is right under the pen tip.</p>
+      <p class="note warn"><b>Do a dry run first.</b> Raise <span class="ui">Writing height</span> by 5–10 mm so the pen stays above the paper, and watch the whole run with a hand near the stop button.</p>
+    </div>
+  </section>
+
+  <section class="block" id="settings">
+    <div class="wrap">
+      <p class="kicker">Reference</p>
+      <h2>What each setting does</h2>
+      <p class="intro">The handwriting settings are on the left of the app. Every gap is an average: real handwriting never repeats exactly, so each word and line still varies a little, more with higher line wobble.</p>
+      <div class="set-grid">
+        <div class="card set"><div><h3>Neatness</h3><p>How carefully the hand writes. Higher is tidier and more regular; lower is messier, with more variation between letters. Each style starts at the neatness it looks best at.</p><span class="def">0 to 2</span></div>
+          <div class="viz neat-row" id="neatSamples"></div></div>
+        <div class="card set"><div><h3>Line wobble</h3><p>How human the page layout is: lines that slope and bow a little, ragged starts, words that drift in size and slant. 0 gives ruler-straight lines.</p><span class="def">0 to 2 · default 1</span></div>
+          <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
+            <text x="4" y="12" class="lbl-dark" style="font-size:9px">0</text>
+            <g fill="#c5cde0"><rect x="16" y="6" width="36" height="7" rx="3"/><rect x="58" y="6" width="22" height="7" rx="3"/><rect x="86" y="6" width="44" height="7" rx="3"/>
+              <rect x="16" y="22" width="28" height="7" rx="3"/><rect x="50" y="22" width="46" height="7" rx="3"/><rect x="102" y="22" width="30" height="7" rx="3"/></g>
+            <text x="4" y="58" class="lbl-dark" style="font-size:9px">2</text>
+            <g fill="var(--ink)" opacity=".75"><rect x="19" y="52" width="34" height="7" rx="3" transform="rotate(-2 36 55)"/><rect x="58" y="51" width="24" height="7" rx="3" transform="rotate(-3 70 54)"/><rect x="88" y="49" width="42" height="7" rx="3" transform="rotate(-4 109 52)"/>
+              <rect x="15" y="70" width="29" height="7" rx="3" transform="rotate(2 30 73)"/><rect x="49" y="71" width="47" height="7" rx="3" transform="rotate(1 72 74)"/><rect x="103" y="69" width="27" height="7" rx="3" transform="rotate(-3 116 72)"/></g>
+          </svg></div></div>
+        <div class="card set"><div><h3>Word and line spacing</h3><p><b>Word spacing</b> is the average gap between words, in letter heights. <b>Line spacing</b> is the distance from one line to the next, in mm; it must be at least 1.5 × the letter size.</p><span class="def">words 1.0 · lines 8 mm</span></div>
+          <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
+            <g fill="#c5cde0"><rect x="10" y="18" width="40" height="10" rx="3"/><rect x="70" y="18" width="30" height="10" rx="3"/><rect x="10" y="62" width="56" height="10" rx="3"/><rect x="86" y="62" width="34" height="10" rx="3"/></g>
+            <path class="dim" d="M51 12H69 M51 9V15 M69 9V15"/><text x="60" y="8" class="dim-text" style="font-size:9px" text-anchor="middle">word</text>
+            <path class="dim" d="M134 28V72 M130 28H138 M130 72H138"/><text x="128" y="54" class="dim-text" style="font-size:9px" text-anchor="end">line</text>
+          </svg></div></div>
+        <div class="card set"><div><h3>Letter size</h3><p>The height of small letters like <i>a</i>, <i>e</i> and <i>x</i> (the x-height), in mm. Capitals and tall letters are about twice that.</p><span class="def">1 to 20 mm · default 2.8</span></div>
+          <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
+            <path d="M8 70H142 M8 49H142" stroke="#c5cde0" stroke-dasharray="3 3"/>
+            <text x="22" y="70" style="font: 44px Georgia, serif; fill: var(--ink)">hx</text>
+            <path class="dim" d="M110 49V70 M106 49H114 M106 70H114"/><text x="118" y="61" class="dim-text" style="font-size:10px">2.8 mm</text>
+          </svg></div></div>
+        <div class="card set"><div><h3>Pen heights</h3><p><b>Writing height</b> is the nozzle's height while the pen is down; the pen is clamped touching the paper at this height in pause 2. <b>Pen-up height</b> is used between strokes, about 2 mm higher.</p><span class="def">10 mm · 12 mm</span></div>
+          <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
+            <rect x="6" y="80" width="138" height="8" rx="2" class="plate"/>
+            <rect x="44" y="12" width="34" height="32" rx="5" class="head-body"/><path d="M56 44h10l-5 8z" fill="#9aa3b2"/>
+            <rect x="32" y="20" width="10" height="56" rx="2" class="pen-body"/><path d="M33 76h8l-4 4z" class="pen-tip"/>
+            <path class="dim" d="M98 52V80 M94 52H102"/><text x="104" y="68" class="dim-text" style="font-size:10px">10 mm</text>
+            <path d="M61 52H96" stroke="#9aa3b2" stroke-dasharray="2 2"/>
+          </svg></div></div>
+        <div class="card set"><div><h3>Pen offset</h3><p>Where the pen tip is compared with the nozzle. X is left/right (negative = pen to the left); Y is front/back (negative = pen in front). Measure it with the offset test.</p><span class="def">e.g. X −4.5 · Y −27</span></div>
+          <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
+            <text x="6" y="11" class="lbl-dark" style="font-size:8px">↑ BACK</text><text x="6" y="92" class="lbl-dark" style="font-size:8px">↓ FRONT</text>
+            <circle cx="100" cy="24" r="9" fill="#c7ccd4" stroke="#9aa3b2"/><text x="114" y="27" class="lbl-dark" style="font-size:9px">nozzle</text>
+            <circle cx="82" cy="64" r="6" class="pen-body"/><text x="60" y="67" class="lbl-dark" style="font-size:9px;fill:var(--ink)" text-anchor="end">pen</text>
+            <path class="dim" d="M100 34V64"/><text x="105" y="52" class="dim-text" style="font-size:9px">Y −27</text>
+            <path class="dim" d="M100 76H82 M100 72V80 M82 72V80"/><text x="91" y="90" class="dim-text" style="font-size:9px" text-anchor="middle">X −4.5</text>
+          </svg></div></div>
+      </div>
+
+      <h3 style="margin:40px 0 12px">Everything else</h3>
+      <div class="table-scroll">
+      <table class="ref">
+        <thead><tr><th>Setting</th><th>What it does</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr class="group"><th colspan="3">Page (left panel)</th></tr>
+          <tr><td>Printer</td><td>Which printer the file is for. Its bed size is used for every safety check, so only run the file on that printer.</td><td>Bambu Lab A1</td></tr>
+          <tr><td>Paper · Orientation</td><td>A4, A5, A6, US Letter, a 4×6 in card or Custom, portrait or landscape.</td><td>A5 portrait</td></tr>
+          <tr><td>Border ↔ / ↕</td><td>Blank margin left and right (↔) and top and bottom (↕) of the page.</td><td>15 mm · 15 mm</td></tr>
+          <tr><td>Printer sounds</td><td>Bambu's own start and finish tunes, plus a tune at each pause. A1, A1 mini and P2S only.</td><td>On</td></tr>
+          <tr><td>Long pages</td><td>For pages longer than the pen reaches (A4 on an A1). Off: the text continues on the next page. On: the printer pauses mid-page so you can slide the paper back.</td><td>Off</td></tr>
+          <tr><td>New version</td><td>Writes the same text again with fresh handwriting and layout. Use it if a word comes out garbled.</td><td></td></tr>
+          <tr><td>Save G-code · Save all pages</td><td>Saves the page on screen, or every page as a zip (1_page.gcode, 2_page.gcode, …). Print them in order with a fresh sheet each time.</td><td></td></tr>
+          <tr class="group"><th colspan="3">Printer settings → Pauses during printing</th></tr>
+          <tr><td>Pause 1: place the paper</td><td>How long the head waits above the first letter so you can place and tape the paper.</td><td>30 s</td></tr>
+          <tr><td>Pause 2: attach the pen</td><td>How long it waits at writing height so you can slide the pen down to the paper and clamp it.</td><td>30 s</td></tr>
+          <tr><td>Pause 3: slide the paper</td><td>Only with Long pages on: time to slide the paper back between passes.</td><td>45 s</td></tr>
+          <tr class="group"><th colspan="3">Printer settings → Speeds</th></tr>
+          <tr><td>Writing speed</td><td>Pen speed while writing. 1500 is about the speed of real handwriting; each stroke varies a little.</td><td>1500 mm/min</td></tr>
+          <tr><td>Travel speed</td><td>Speed of pen-up moves between strokes.</td><td>6000 mm/min</td></tr>
+          <tr><td>Up/down speed</td><td>How fast the pen is lifted and lowered.</td><td>600 mm/min</td></tr>
+          <tr><td>Pen settle time</td><td>A tiny wait after every pen down and up so the ink starts and stops cleanly. Raise it if strokes start faint.</td><td>60 ms</td></tr>
+          <tr class="group"><th colspan="3">Printer settings → Custom sizes</th></tr>
+          <tr><td>Bed width, depth, max height</td><td>Only used when the printer is Custom.</td><td></td></tr>
+          <tr><td>Paper width, height</td><td>Only used when the paper is Custom.</td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="mine">
+    <div class="wrap two">
+      <div>
+        <p class="kicker">Your own handwriting</p>
+        <h2>Teach it your hand in one sentence</h2>
+        <p class="muted">The model copies the style of a sample it reads first, so one sentence in your own writing is enough to make a new style.</p>
+      </div>
+      <div class="card">
+        <ol class="plain">
+          <li>Click <span class="ui">My handwriting</span> at the top of the app.</li>
+          <li>Write the sentence shown on one line, filling about half the box height. A pen or touchscreen works best.</li>
+          <li>Fix the text above if you wrote something different, give it a name and click <span class="ui">Save style</span>.</li>
+          <li>It appears under <b>Mine</b> in the handwriting list. Try a few sentences and keep the one that looks most like you.</li>
+          <li>Styles are kept in this browser only. Use <span class="ui">Export file</span> and <span class="ui">Import file</span> to move them to another computer or browser.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="faq">
+    <div class="wrap">
+      <p class="kicker">Troubleshooting</p>
+      <h2>Questions</h2>
+      <details><summary>The pen goes off the front of the plate on the last lines</summary><p>The pen offset is missing or wrong. Run the <a href="#calibrate">offset test</a>, save the offset, then save your G-code again: files saved before still use the old offset.</p></details>
+      <details><summary>Not all of my text is on the page</summary><p>It continues on the next page. Use the arrows above the preview to see each page and <span class="ui">Save all pages</span> to get them all. For one long A4 page instead, tick <span class="ui">Long pages</span> and slide the paper when asked.</p></details>
+      <details><summary>A word looks garbled or has a stray mark</summary><p>The model occasionally slips. Click <span class="ui">New version</span> to write the page again, or raise <span class="ui">Neatness</span> a little.</p></details>
+      <details><summary>Some characters are missing</summary><p>The model knows letters, digits and <code>! " # ' ( ) , - . : ; ?</code>. Accents are dropped (é becomes e), capital Q, X and Z are written lowercase, and anything else is skipped. The app lists what it skipped under the text box.</p></details>
+      <details><summary>The nozzle shows a temperature</summary><p>The G-code never heats anything: it only moves, waits and plays sounds. Heat on the screen is the printer's own (left over from a print, or its homing routine). If your pen holder is printed in PLA, keep it away from the hotend.</p></details>
+      <details><summary>My handwriting styles have disappeared</summary><p>Styles live in the browser you made them in. Open the app in that browser and use <span class="ui">My handwriting → Export file</span>, then <span class="ui">Import file</span> in the new one.</p></details>
+      <details><summary>Is the G-code safe for my printer?</summary><p>Every setting is range-checked, and every move in the file is checked against the chosen printer's bed (and the P1/X1 filament-cutter corner) before it is saved. If anything is unsafe, the app refuses to save and says why. Only run a file on the printer named at the top of it, and do a dry run first.</p></details>
+    </div>
+  </section>
+
+  <section class="final">
+    <h2>Ready to write?</h2>
+    <p class="muted" style="margin:0 0 22px">It opens in your browser and remembers your settings.</p>
+    <a class="btn primary" href="app.html">Open the app</a>
+  </section>
 </main>
+<footer>
+  <div class="wrap">Handwriting model and weights from <a href="https://github.com/sjvasquez/handwriting-synthesis">sjvasquez/handwriting-synthesis</a> (trained on IAM-OnDB),
+    inference ported from <a href="https://github.com/tibordp/kurvengefahr">tibordp/kurvengefahr</a>, G-code conventions from
+    <a href="https://github.com/Joep648/BambuPlot">BambuPlot</a>, printer tunes from <a href="https://github.com/bambulab/BambuStudio">Bambu Studio</a>.</div>
+</footer>
 
-<dialog id="settingsDlg">
-  <form method="dialog" class="dlg">
-    <header><h3>Printer settings</h3><p>Copy the pen offset that already works for you in BambuPlot, or measure it with the offset test. Pauses are timed: the printer carries on by itself when the time is up.</p></header>
-    <div class="body" id="settingsBody"></div>
-    <footer><span class="msg" id="settingsMsg"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="settingsSave" value="save">Save</button></footer>
-  </form>
-</dialog>
+<script>
+"use strict";
+// Real handwriting from the app's engine (tools/guide-strokes.js writes this block).
+const STROKES = /*STROKES*/{"hero":{"w":320,"h":144,"paths":["M10.8 7.6L10.9 8.2L11 9.4L11.1 11.3L11.1 13.9L11.2 16.9L11.3 20.2L11.5 23.6L11.6 27L11.8 30L12 32.3L12.2 33.8L12.3 34.5","M4 7L4.3 6.5L5.2 5.8L6.6 5.1L8.6 4.7L11.1 4.8L14 5.4L17.1 6.4L20.2 8L23 10L25.4 12.5L27.3 15.2L28.3 18.2L28.6 21.3L28 24.3L26.7 27.1L24.8 29.6L22.3 31.7L19.6 33.3L16.8 34.4L14.2 35L11.9 34.9L10.1 34.3L9 33.6L8.5 33","M28.5 29.4L29 29.1L29.8 28.4L31.1 27.4L32.4 26.1L33.8 24.6L35 23L36 21.4L36.6 20L36.9 18.8L36.7 17.9L36.1 17.6L35.2 17.8L34 18.6L32.8 20.1L31.6 22.2L30.8 24.5L30.4 27L30.5 29.3L31.3 31.3L32.6 32.8L34.5 33.6L36.7 33.7L38.6 33.5L39.9 33.2","M48.1 21.2L47.8 20.8L47.2 20.1L46.3 19.5L45.2 19.5L43.9 20L42.6 21.1L41.4 22.7L40.4 24.8L39.9 26.9L39.9 29L40.4 30.6L41.3 31.7L42.7 32.2L44.2 31.8L45.9 30.8L47.4 29.2L48.8 27.1L49.8 24.7L50.4 22.5L50.7 20.5L50.8 19L50.7 18L50.5 17.8L50.3 18.2L50.2 19.3L50.1 21.1L50.3 23.2L50.6 25.6L51.1 27.8L51.8 29.8L52.6 31.2L53.6 32.1L54.7 32.3L55.7 31.7L56.7 30.4L57.6 28.6L58.3 26.5L58.9 24.3L59.2 22.3L59.4 20.6L59.5 19.4L59.6 18.7L59.5 18.6L59.5 19.1L59.4 20.3L59.3 21.9L59.3 23.9L59.2 25.8L59.3 27.6L59.3 28.9L59.3 29.6L59.4 29.8L59.3 29.3L59.3 28.1L59.2 26.3L59.2 24.1L59.3 21.8L59.6 19.6L60.1 17.5L60.9 15.7L62 14.2L63.2 13.2L64.7 12.5L66.1 12.3L67.6 12.4L68.9 12.8L69.9 13.2L70.4 13.5","M93.8 11.2L93.6 10.4L93.1 9.2L92.4 7.9L91.3 7L90.1 6.6L88.7 6.8L87.4 7.7L86.2 9.3L85.2 11.7L84.6 14.8L84.3 18.3L84.3 22.1L84.6 26.1L85.2 30L85.8 33.6L86.6 36.7L87.2 39.1L87.8 40.6L88.2 41.4L88.3 41.6","M78.9 23.9L79.1 23.8L79.7 23.8L80.7 23.7L82.3 23.5L84.3 23.3L86.7 23.1L88.7 22.8L90 22.6","M96.2 19.3L96.1 19.8L96 20.7L95.8 22.2L95.8 24.1L95.7 26.2L95.8 28.4L95.8 30.3L96 31.9L96.1 32.9L96.2 33.2L96.2 32.8L96.2 31.6L96.2 29.9L96.2 27.6L96.3 25.2L96.5 22.8L96.9 20.7L97.5 18.8L98.3 17.4L99.3 16.4L100.5 16L101.8 16L103.1 16.5L104.5 17.2L105.7 18.1L106.9 19.1L107.8 19.9L108.3 20.5","M111.6 20.1L111.5 20.4L111.4 21.1L111.2 22.2L111 23.8L110.7 25.7L110.6 27.7L110.5 29.6L110.6 31.2L110.8 32.3L111 32.6L111.2 32.5L111.4 32.2","M110.8 9.9L110.8 9.9L110.9 9.9L111 10","M116.9 27.1L117.3 26.8L118.1 26.2L119.2 25.2L120.3 23.8L121.3 22.3L122.1 20.7L122.7 19.2L122.9 17.9L122.8 16.9L122.3 16.4L121.4 16.4L120.4 17L119.3 18.3L118.3 20.1L117.6 22.3L117.4 24.7L117.6 26.9L118.4 28.9L119.6 30.4L121.1 31.2L122.9 31.3L124.8 30.8L126.3 30L127.2 29.3","M128.8 17.5L128.8 17.7L128.9 18.4L129 19.6L129.1 21.2L129.1 23.2L129.2 25.3L129.3 27.2L129.4 28.7L129.6 29.7L129.7 30.1L129.9 29.9L130.1 28.9L130.4 27.3L131 25.3L131.8 23L132.8 20.8L134 18.8L135.3 17.3L136.6 16.2L137.9 15.9L139.2 16.1L140.2 17L141 18.5L141.5 20.4L141.7 22.5L141.8 24.6L141.8 26.6L141.8 28.3L141.9 29.4L142.2 30L142.6 30.2L142.9 30.2","M155.1 21.5L155 21L154.7 20.1L154 19.1L153 18.3L151.7 17.8L150.2 17.9L148.7 18.4L147.2 19.6L146 21.2L145.2 23.1L144.8 25.2L145.1 27.1L145.9 28.7L147.2 29.8L148.9 30.1L150.7 29.7L152.6 28.4L154.4 26.4L156 23.8L157.3 20.7L158.3 17.4L159 14L159.4 10.9L159.6 8.2L159.8 6.1L159.8 4.7L159.7 4L159.7 4.1L159.6 5.1L159.4 6.9L159.3 9.4L159.2 12.4L159.1 15.8L159.1 19.3L159.2 22.6L159.5 25.5L160.1 27.9L160.8 29.7L161.5 30.8L161.9 31.3","M169.4 29L169.4 29.7L169.1 31L168.8 32.8L168.2 34.8L167.5 36.9L166.8 38.8L166.2 40.2L165.8 41.1","M10 47.9L10 48.2L10 49L10.1 50.4L10.1 52.6L10.2 55.5L10.3 58.8L10.4 62.5L10.5 66.4L10.6 70.1L10.8 73.5L11 76.3L11.2 78.3L11.3 79.4L11.3 79.6L11.2 79.3L11.1 78.8","M4 65.1L4.1 64.9L4.6 64.7L5.5 64.4L7 64.1L8.9 63.7L11 63.3L12.7 62.8L13.8 62.5","M17.9 48.5L18 49L18.2 50L18.4 51.7L18.7 54L18.9 56.9L19.2 60.2L19.4 63.7L19.7 67.1L19.8 70.2L20 72.8L20.2 74.5L20.4 75.4L20.6 75.4L21 74.5L21.6 72.9L22.3 70.7L23.3 68.2L24.5 65.7L25.8 63.5L27.2 61.9L28.5 60.8L29.7 60.5L30.6 60.9L31.3 62.1L31.7 63.9L31.9 66.2L32 68.7L32 71L32.1 73L32.3 74.5L32.6 75.3L32.9 75.6","M38.4 62L38.4 62.3L38.4 63L38.3 64.3L38.3 66L38.3 68L38.3 70.2L38.4 72.3L38.6 74L38.9 75.2L39.3 75.6L39.6 75.6L39.8 75.3","M38.9 51.2L38.9 51.1L38.9 51.1L38.9 51.2L39 51.3","M53.5 61.2L53.2 60.8L52.5 60.3L51.3 59.9L49.9 59.8L48.3 60.1L46.8 60.7L45.8 61.6L45.4 62.7L45.7 63.9L46.8 65.1L48.6 66.4L50.9 67.5L53.3 68.7L55.6 69.8L57.6 70.9L58.9 71.9L59.5 72.8L59.3 73.6L58.4 74.3L56.9 74.9L54.9 75.3L52.7 75.5L50.5 75.7L48.6 75.6L47.1 75.5L46.1 75.3L45.6 75L45.5 74.9","M67.9 48.9L68 49.2L68 50L68 51.3L68.1 53.3L68.1 55.8L68 58.8L68 62.2L67.9 65.9L68 69.6L68.1 73L68.4 76L68.9 78.3L69.6 79.8L70.5 80.4L71.3 80.5L71.8 80.4","M74.7 72.8L75.1 72.4L75.9 71.5L77.1 70.2L78.3 68.6L79.6 66.9L80.7 65L81.5 63.3L81.9 61.7L81.8 60.4L81.4 59.7L80.6 59.5L79.5 60.1L78.2 61.4L77.1 63.4L76.2 65.8L75.7 68.6L75.7 71.3L76.3 73.8L77.5 75.8L79.1 77.2L81.1 77.9L83.3 77.8L85.2 77.3L86.4 76.8","M91.2 48L91.3 48.2L91.4 48.8L91.5 50L91.6 52L91.7 54.6L91.9 57.7L92.1 61.1L92.3 64.6L92.5 67.9L92.6 70.9L92.7 73.5L92.8 75.3L92.8 76.3L92.7 76.5L92.6 76.3L92.5 75.9","M86.8 64.3L87 64.4L87.6 64.4L88.7 64.4L90.3 64.3L92.2 64.2L94.4 63.8L96.7 63.2L98.9 62.3L100.8 61.1L102.2 59.9L102.9 59.1","M103.2 45.8L103.3 46.1L103.5 46.9L103.7 48.3L103.8 50.3L103.8 52.9L103.8 55.9L103.9 59.3L103.9 62.8L104 66.2L104.1 69.3L104.2 71.8L104.4 73.6L104.6 74.5L104.7 74.7L104.7 74.4L104.7 74.1","M100.9 64.6L101.1 64.7L101.6 64.9L102.6 65.1L103.9 65.3L105.6 65.4L107.6 65.4L109.8 65.2L112 64.8L114.1 64.1L115.9 63.3L117.2 62.1L118 60.9L118.3 59.7L117.9 58.7L117 58L115.6 57.8L114.1 58.1L112.5 59L111.1 60.5L110 62.4L109.4 64.6L109.5 66.9L110.1 69.1L111.4 70.8L113.1 72.1L115.2 72.8L117.4 72.9L119.5 72.4L121.5 71.4L123.1 69.9L124.4 68L125.2 66L125.7 64.1L126 62.6L126 61.4L126 60.9L126 60.9L125.9 61.5L125.9 62.7L125.9 64.4L125.9 66.5L126 68.5L126.1 70.3L126.2 71.6L126.3 72.4L126.3 72.7L126.3 72.4L126.2 71.5L126 70L125.9 68.1L125.9 66L126.1 63.8L126.6 61.8L127.3 60.1L128.4 58.6L129.7 57.5L131.3 56.7L132.8 56.4L134.4 56.3L135.8 56.5L137.1 56.8L138.1 57.1L138.8 57.3L139.2 57.4","M149.2 63.2L149.2 63.3L149.2 63.7L149.2 64.5L149.2 66.1L149.2 68.2L149.3 70.8L149.5 73.5L149.8 76L150.3 78.1L151.1 79.4L152 79.9L153 79.3L154.1 77.9L155.1 75.7L156 73L156.8 70.4L157.3 68L157.7 66.3L157.8 65.2L157.8 64.8L157.9 65.3L157.9 66.5L158 68.5L158.2 70.8L158.7 73.3L159.4 75.6L160.4 77.4L161.6 78.6L162.9 79L164.2 78.6L165.4 77.3L166.6 75.4L167.4 72.9L168 70.2L168.3 67.5L168.2 65.1L167.9 63.1L167.5 61.7L167 60.8L166.8 60.5L166.8 60.6L167.2 61.1L167.6 61.7L168 62.2","M181 65.4L180.7 64.8L180.1 64L179.2 63.2L178 63L176.6 63.3L175.1 64.4L173.7 66.1L172.5 68.2L171.8 70.7L171.6 73L171.9 75L172.7 76.5L174 77.2L175.5 77.1L177.1 76.1L178.7 74.4L180.2 72.2L181.5 69.6L182.4 67.1L182.9 64.8L183.1 63.1L183.1 62L182.9 61.8L182.7 62.3L182.4 63.6L182.3 65.5L182.2 67.9L182.3 70.4L182.7 72.9L183.3 75.1L184 76.6L184.5 77.4","M197.2 62.4L196.9 61.9L196.2 61.3L195.1 60.8L193.6 60.8L192 61.4L190.5 62.4L189.4 63.6L189 65.1L189.4 66.5L190.5 67.9L192.3 69L194.6 70.1L197 71L199.2 71.8L201 72.6L202.2 73.4L202.6 74.2L202.4 74.9L201.4 75.5L199.9 76.1L197.9 76.6L195.8 76.9L193.7 77.1L192 77.2L190.7 77.1L190 77L189.7 76.8L189.7 76.7","M215.9 63L215.9 63.2L215.8 63.8L215.8 65L215.7 66.9L215.7 69.2L215.8 72L216 74.7L216.4 77.2L217.1 79.1L217.9 80.2L219 80.3L220.1 79.5L221.3 77.8L222.3 75.4L223.2 72.7L223.9 69.9L224.4 67.4L224.6 65.5L224.6 64.2L224.5 63.7L224.4 64L224.3 65L224.2 66.9L224.3 69.3L224.6 72L225.1 74.6L226 76.7L227.1 78.3L228.4 79L229.8 79L231.2 78.1L232.5 76.4L233.5 74.2L234.3 71.7L234.6 69.1L234.7 66.6L234.5 64.6L234.2 63L233.8 62L233.6 61.6","M239.9 66.2L239.9 67L240 68.3L240 70.1L240 72.1L240 74.2L240.1 76.2L240.1 77.9L240.2 79L240.3 79.3L240.4 78.9L240.5 77.7L240.6 75.7L240.7 73.3L240.8 70.6L241 67.9L241.3 65.5L241.7 63.5L242.3 62L243 61.1L243.9 60.8L245 60.9L246.2 61.5L247.1 62.1L247.8 62.6","M252.6 62.8L252.6 63.2L252.7 64L252.7 65.2L252.7 67L252.7 69.1L252.7 71.4L252.7 73.7L252.8 75.8L252.9 77.2L253.2 78L253.4 78.2L253.5 78.1","M252.9 51.1L252.9 50.8L252.9 50.6L253 50.4L253 50.3","M262.8 48.1L262.8 48.6L262.8 49.6L262.6 51.2L262.4 53.5L262.2 56.3L262 59.6L261.9 63.1L261.9 66.6L262 70L262.2 73L262.4 75.3L262.6 76.9L262.8 77.7L262.9 77.6L262.9 77.2L262.9 76.7","M257.7 65.5L258 65.5L258.6 65.6L259.8 65.7L261.4 65.7L263.4 65.6L265.6 65.2L267.4 64.8L268.5 64.5","M273.4 48.9L273.5 49.3L273.5 50.2L273.5 51.7L273.4 53.9L273.3 56.6L273.2 59.8L273.1 63.3L273 66.8L273 70.2L273.1 73L273.3 75.3L273.4 76.7L273.6 77.3L273.6 77.1L273.6 76.6L273.6 76","M269.2 67.2L269.4 67.3L270 67.4L271.1 67.6L272.5 67.7L274.4 67.7L276.5 67.5L278.7 67.1L280.8 66.5L282.8 65.7L284.4 64.7L285.6 63.6L286.2 62.4L286.3 61.3L285.9 60.4L284.9 59.9L283.7 60L282.2 60.7L280.7 61.9L279.4 63.7L278.5 65.9L278.2 68.3L278.4 70.6L279.2 72.7L280.6 74.3L282.4 75.2L284.4 75.5L286.5 75.1L288.5 74L290.4 72.4L291.9 70.3L293.1 68.1L293.9 65.8L294.4 63.9L294.6 62.3L294.7 61.3L294.7 60.9L294.6 61.2L294.5 62.2L294.4 63.8L294.3 65.9L294.2 68.2L294.2 70.4L294.3 72.3L294.4 73.6L294.5 74.4L294.6 74.4L294.8 73.7L295.1 72.4L295.5 70.4L296.2 68.2L297.1 65.8L298.4 63.5L299.8 61.6L301.4 60.2L303 59.3L304.5 59.2L305.9 59.7L307 60.9L307.8 62.6L308.2 64.6L308.4 66.9L308.4 69.2L308.4 71.3L308.3 73.1L308.3 74.4L308.3 75.1L308.4 75.5","M4 93.3L4 93.6L4.1 94.2L4.2 95.5L4.2 97.5L4.3 100L4.4 103L4.5 106.4L4.6 109.9L4.8 113.3L5 116.3L5.3 118.7L5.5 120.3L5.8 121.1L6 121L6.2 120.2L6.4 118.6L6.8 116.4L7.3 113.9L8.1 111.3L9.1 108.9L10.5 106.8L12 105.3L13.7 104.5L15.3 104.4L16.8 105.2L18 106.6L18.9 108.6L19.3 111L19.3 113.4L18.7 115.8L17.6 117.9L16.2 119.6L14.4 120.8L12.6 121.4L10.9 121.6L9.4 121.3L8.3 120.6L7.8 119.6L7.6 118.6L7.6 118","M20.7 106L20.9 106.5L21.2 107.4L21.7 108.8L22.3 110.5L23 112.3L23.9 114.2L24.9 115.8L26 117L27.1 117.6L28.3 117.6L29.1 117.2L29.7 116.7","M33.5 107.1L33.4 107.2L33.2 107.7L32.7 108.7L31.9 110.4L30.9 112.6L29.7 115.3L28.5 118.4L27.4 121.7L26.4 125.1L25.6 128.3L25 131.1L24.7 133.4L24.7 134.9L24.8 135.8L25 136.1","M41.9 108.8L41.9 108.9L42 109.1L42.1 109.8L42.2 111.1L42.3 112.9L42.4 115.1L42.6 117.6L42.7 120L42.8 122.1L42.9 123.7L43 124.6L43.1 124.7L43.1 124L43.1 122.4L43.2 120.2L43.4 117.6L43.9 114.8L44.7 112L45.7 109.6L47 107.8L48.4 106.6L49.7 106.3L51.1 106.8L52.2 108.1L53.1 110L53.8 112.4L54.1 115.1L54.2 117.5L54.2 119.6L54.1 121L54 121.6L53.9 121.4L54 120.4L54.2 118.6L54.6 116.2L55.3 113.6L56.3 110.9L57.5 108.6L58.9 106.7L60.1 105.5L61.3 105.1L62.3 105.4L63 106.6L63.5 108.4L63.8 110.7L64 113.3L64 115.9L64 118.2L64.1 119.8L64.3 120.7L64.6 121L64.7 121","M68.6 105.9L68.7 106.3L68.9 107L69.3 108.3L69.8 109.9L70.5 111.7L71.3 113.6L72.2 115.3L73.2 116.6L74.3 117.4L75.3 117.5L76.1 117.2L76.6 116.9","M80.4 106.7L80.3 106.9L79.9 107.5L79.2 108.6L78.3 110.4L77.3 112.8L76.1 115.7L75 119L73.9 122.5L72.9 125.9L72.2 129.2L71.6 132L71.4 134.3L71.5 135.8L71.7 136.6L71.9 136.9","M90.4 97.5L90.5 97.3L90.7 97.1L91.2 96.7L92.1 96.3L93.5 95.8L95.2 95.5L97.3 95.4L99.4 95.5L101.6 96L103.4 96.8L104.9 97.9L105.6 99.2L105.6 100.7L104.9 102.3L103.4 103.9L101.6 105.3L99.8 106.6L98.3 107.6L97.2 108.3L96.8 108.8L97.1 109L98 109.3L99.5 109.6L101.6 110L104.1 110.7L106.7 111.6L109.2 112.8L111.3 114.2L113 115.7L114 117.3L114.3 118.7L114 120.1L112.9 121.3L111.2 122.4L109 123.3L106.4 124L103.6 124.5L100.8 124.7L98.3 124.8L96 124.8L94.2 124.7L93 124.4L92.3 124.2L92 124.1","M118.8 98.5L118.8 98.5L118.9 98.8L119.1 99.6L119.3 101.1L119.6 103.2L119.9 105.8L120.2 108.7L120.4 111.8L120.6 114.8L120.8 117.4L120.9 119.2L121 120.2","M113.1 98.1L113.5 97.5L114.2 96.8L115.6 95.9L117.6 95.3L120 95L122.9 95.1L126 95.6L129.1 96.6L132.1 98L134.7 99.8L136.8 101.9L138.3 104.2L139 106.7L139 109.1L138.2 111.5L136.9 113.7L135 115.7L132.6 117.3L130.1 118.5L127.5 119.3L125 119.6L122.9 119.6L121.4 119.5L120.6 119.3","M152.8 110.1L152.9 111L152.9 112.7L153.1 115.2L153.2 118.2L153.4 121.5L153.5 125.1L153.6 128.8L153.7 132.3L153.6 135.2L153.6 137.5L153.5 139L153.3 139.4L153.2 139L153 137.6L152.8 135.3L152.6 132.4L152.4 129.2L152.2 125.7L152.1 122.2L152.1 118.9L152.3 115.8L152.8 113.1L153.5 110.7L154.5 108.8L155.9 107.4L157.5 106.7L159.2 106.7L161 107.3L162.7 108.4L164.1 110.1L165 112.1L165.4 114.2L165.1 116.3L164.3 118.2L162.9 119.8L161.2 121L159.3 121.7L157.6 121.9L156.3 121.8L155.6 121.7","M169.6 109.4L169.6 110L169.7 111.2L169.7 112.9L169.8 114.8L169.9 116.7L170.1 118.5L170.2 120L170.4 120.9L170.5 121.2L170.5 120.8L170.5 119.6L170.5 117.8L170.5 115.5L170.5 113.1L170.6 110.8L170.8 108.7L171.3 107L172 105.8L173 105L174.1 104.7L175.5 104.8L177 105.3L178.5 106L180 106.8L181.3 107.5L182.5 108.2L183.5 108.7L184.3 109.1L184.8 109.4L185.2 109.7L185.4 110L185.5 110.4L185.5 111.2L185.4 112.2L185.3 113.5L185.2 115.1L185.1 116.8L185.1 118.4L185.1 119.9L185.2 121L185.3 121.7L185.5 121.8L185.6 121.5L185.6 121.2","M183.7 96.9L183.8 97L183.9 97.1L184.1 97.4L184.2 97.6","M190.7 108.6L190.8 108.9L190.9 109.6L191 110.8L191.1 112.4L191.1 114.3L191.2 116.4L191.3 118.3L191.4 119.9L191.5 121L191.7 121.4L191.9 121.2L192.1 120.2L192.5 118.5L193 116.4L193.7 114.1L194.7 111.7L195.8 109.6L197.1 108L198.5 106.8L199.9 106.3L201.1 106.4L202.1 107.3L202.9 108.7L203.5 110.6L203.8 112.9L203.9 115.3L203.9 117.6L204 119.5L204.2 120.9L204.5 121.6L204.9 121.7L205.1 121.6","M212.1 93L212.1 93.1L212.2 93.4L212.2 94.3L212.3 95.9L212.3 98.2L212.4 101L212.4 104.1L212.5 107.4L212.6 110.7L212.7 113.7L212.9 116.3L213 118.2L213.1 119.5L213.1 119.9L213.1 119.9L213 119.6","M207.6 108.6L207.8 108.7L208.4 108.8L209.4 109L210.9 109.2L212.8 109.4L214.9 109.4L217.2 109.4L219.5 109.1L221.5 108.6L223.2 107.9L224.4 107L225.2 106L225.3 105L225 104.1L224.1 103.4L222.9 103.2L221.5 103.4L220 104.2L218.7 105.5L217.7 107.2L217.2 109.2L217.2 111.3L217.7 113.2L218.8 114.9L220.4 116.2L222.2 117L224.3 117.2L226.4 116.8L228.4 115.9L230.2 114.5L231.6 112.9L232.6 111.1L233.3 109.5L233.7 108.1L233.8 107.1L233.8 106.6L233.7 106.6L233.6 107.1L233.5 108.1L233.3 109.6L233.2 111.4L233.2 113.2L233.1 114.8L233.1 116.1L233.2 116.9L233.2 117.2L233.2 117L233.2 116.2L233.2 114.8L233.2 113L233.3 110.9L233.4 108.8L233.8 106.7L234.3 104.9L235 103.2L235.9 102L237.1 101.1L238.5 100.6L239.9 100.5L241.5 100.6L243 101.1L244.4 101.6L245.4 102.1L246 102.4","M247.9 114.9L247.9 114.9L247.9 115L247.9 115L247.9 114.9"]},"neat":[{"label":"0.3","w":162,"h":45,"paths":["M4 16.3L4.1 16.7L4.2 17.6L4.4 19.2L4.7 21.4L4.9 24.2L5.1 27.3L5.3 30.6L5.4 33.5L5.5 35.8L5.6 37.4L5.7 38.1L5.8 38.1L6 37.2L6.3 35.6L6.9 33.3L7.8 30.8L9 28.1L10.4 25.8L12 24L13.7 23L15.2 22.6L16.5 23.1L17.5 24.3L18.3 26.3L18.6 28.7L18.7 31.4L18.6 34.1L18.4 36.4L18.2 38.2L18.2 39.4L18.2 39.9L18.2 40.1","M31.1 27.7L31.2 27L31.1 26.1L30.7 25.2L29.8 24.6L28.5 24.6L26.9 25.3L25.3 26.6L23.9 28.5L22.9 30.7L22.3 33L22.2 35.1L22.6 36.7L23.2 37.7L24.1 38L25.1 37.6L26.3 36.5L27.4 34.7L28.5 32.5L29.4 30.1L30.2 27.8L30.7 25.8L31 24.5L31.2 23.7L31.2 23.5L31.2 24L31.1 25.2L31 26.9L30.9 29L30.9 31.3L31.1 33.4L31.4 35.3L31.8 36.7L32.3 37.6L32.9 37.8L33.3 37.6L33.6 37.4","M37.5 24.5L37.4 25L37.4 26.1L37.3 27.7L37.4 29.8L37.4 31.9L37.5 34L37.6 35.8L37.8 37.1L38 37.8L38.1 37.9L38.3 37.2L38.5 35.9L38.7 34L39.1 31.7L39.6 29.4L40.4 27.2L41.5 25.4L42.7 24.1L44.1 23.4L45.4 23.3L46.6 23.8L47.6 24.9L48.3 26.4L48.7 28.2L48.8 30.1L48.7 32L48.6 33.6L48.6 34.7L48.7 35.4L48.9 35.5L49.2 35.4L49.4 35.2","M62.1 24.9L61.8 24.5L61.2 23.9L60.2 23.3L58.8 23.1L57.1 23.4L55.4 24.1L53.7 25.3L52.4 26.8L51.6 28.6L51.3 30.4L51.6 31.9L52.3 33.1L53.5 33.7L55 33.9L56.7 33.4L58.3 32.3L59.8 30.5L61.2 28.2L62.3 25.5L63.2 22.6L63.9 19.7L64.5 17L64.9 14.8L65.2 13.1L65.3 12L65.3 11.6L65.3 11.8L65.2 12.8L65 14.5L64.8 16.8L64.6 19.7L64.5 22.8L64.6 25.8L64.7 28.6L65 31L65.3 32.7L65.6 33.7L66 34.2L66.3 34.3L66.6 34.2","M71 20.5L71 20.7L70.9 21.2L70.8 22.1L70.7 23.5L70.6 25.3L70.6 27.1L70.7 28.9L70.8 30.3L71.1 31.3L71.4 31.7L72 31.4L72.6 30.5L73.5 28.9L74.4 27L75.3 25.1L76.1 23.6L76.7 22.5L77 22.1L77.1 22.3L77 23.1L76.9 24.4L76.9 26.1L77 27.8L77.5 29.4L78.2 30.6L79.1 31.4L80.2 31.7L81.3 31.4L82.4 30.5L83.3 29.2L84 27.5L84.5 25.5L84.6 23.5L84.5 21.6L84.2 19.9L83.8 18.7L83.4 17.8L83.1 17.5L83 17.5L83 17.6","M90.3 19.9L90.2 20.4L89.9 21.3L89.6 22.7L89.3 24.2L89.1 25.9L89 27.6L89.1 29.2L89.3 30.6L89.6 31.6L89.9 32.2L90.1 32.1L90.1 31.6L90.1 30.4L90.1 28.8L90.1 26.9L90.2 24.9L90.5 23L91 21.1L91.8 19.5L92.5 18.3L93.4 17.6L94.3 17.3L95.2 17.4L96.3 17.8L97.6 18.4L98.8 18.9L99.8 19.3L100.4 19.5","M105.3 18.6L105.2 18.7L105.2 19.1L105.2 19.9L105.1 20.9L105 22.3L104.9 24L104.8 25.7L104.6 27.4L104.5 28.9L104.5 29.9L104.5 30.4","M104.6 6.6L104.6 6.6L104.8 6.8L104.9 7L105.1 7.2","M114.9 4L114.9 4.6L114.8 5.8L114.7 7.5L114.7 9.8L114.7 12.5L114.8 15.6L114.8 18.8L115 21.9L115.2 24.8L115.4 27.1L115.5 28.7L115.6 29.6L115.5 29.8L115.3 29.3L115 28.7L114.8 28.1","M111.6 19.4L112.1 19.2L113 18.8L114.4 18.3L116.1 18L117.9 17.7L119.7 17.6L121.4 17.5L122.9 17.4L124 17.3L124.8 17.2L125.3 17.1L125.4 17.2L125.3 17.6L125 18.3L124.5 19.6L124.1 21.2L123.6 23.1L123.3 25L123.1 26.8L123.1 28.1L123.2 28.9L123.4 29.3L123.4 29.5","M125.1 7.1L125.2 7.1L125.4 7.2L125.5 7.2L125.7 7.3","M130.4 16.2L130.4 16.3L130.5 16.7L130.6 17.4L130.5 18.6L130.3 20.2L130.1 22L129.8 24L129.5 25.9L129.5 27.5L129.5 28.6L129.8 29L130.2 28.8L130.8 27.8L131.5 26.3L132.3 24.3L133.2 22L134.1 19.7L135.1 17.7L136.2 16.1L137.3 15L138.4 14.5L139.6 14.6L140.7 15.2L141.6 16.4L142.3 18.1L142.7 20.1L142.8 22.2L142.7 24.2L142.5 25.9L142.4 27.3L142.4 28.1L142.4 28.5","M155.3 17L155 16.7L154.4 16.2L153.4 15.7L152.1 15.6L150.6 15.8L149.1 16.5L147.8 17.5L146.9 18.8L146.5 20.1L146.6 21.4L147.3 22.6L148.5 23.5L150 24L151.6 24.1L153.1 23.8L154.4 23.1L155.3 22L155.8 20.8L156 19.6L156 18.6L155.8 17.8L155.6 17.5L155.5 17.5L155.4 18L155.4 19.1L155.5 20.7L155.8 22.6L156.3 24.9L156.9 27.3L157.5 29.7L157.9 32L158 34L157.7 35.7L157.1 36.9L156.2 37.8L154.9 38.2L153.4 38.2L151.8 37.9L150.2 37.3L148.6 36.7L147.3 35.9L146.2 35.2L145.4 34.6L145.1 34.2"]},{"label":"1.0","w":158,"h":48,"paths":["M4 10.4L4.1 10.8L4.2 11.6L4.3 13L4.5 15L4.6 17.7L4.7 20.8L4.8 24.1L4.9 27.3L5 30.2L5.1 32.4L5.2 33.9L5.3 34.5L5.5 34.3L5.7 33.3L6.1 31.6L6.7 29.3L7.6 26.6L8.7 24.1L10 21.8L11.5 20L13 18.9L14.3 18.6L15.5 19L16.5 20.3L17.2 22.2L17.5 24.5L17.6 27.1L17.5 29.7L17.5 31.9L17.5 33.7L17.6 34.8L17.7 35.3","M28.8 22.4L28.6 21.9L28.3 21.3L27.7 20.6L26.9 20.1L25.8 20.2L24.6 20.8L23.3 22.1L22.2 23.9L21.3 26.1L20.8 28.4L20.8 30.6L21.2 32.5L22.1 33.7L23.2 34.2L24.6 33.9L26 32.9L27.4 31.1L28.7 28.8L29.8 26.3L30.6 23.8L31.2 21.7L31.5 20.1L31.5 19.1L31.4 18.9L31.3 19.4L31.1 20.6L30.9 22.4L30.8 24.5L31 26.9L31.3 29.1L31.9 30.9L32.7 32.2L33.6 32.7L34.5 32.5L35.2 31.9L35.7 31.4","M37.1 20L37.2 20.1L37.3 20.6L37.4 21.6L37.5 23.1L37.5 25.1L37.5 27.1L37.4 29L37.4 30.5L37.5 31.5L37.6 31.7L37.8 31.2L38 30.1L38.4 28.3L39 26.1L39.8 23.9L40.9 21.7L42.2 20L43.5 18.7L44.9 18.1L46.1 18.1L47.1 18.8L47.7 20.1L48.1 21.8L48.2 23.9L48.1 26.1L47.9 28.1L47.7 29.8L47.7 31.1L47.9 31.8L48.2 32L48.4 32.1","M59.6 23.2L59.6 22.7L59.4 21.9L59 21.1L58.3 20.4L57.2 20.1L55.9 20.2L54.5 20.8L53.1 22L52 23.5L51.1 25.4L50.7 27.4L50.8 29.3L51.4 30.9L52.4 31.9L53.7 32.3L55.3 32L56.9 31L58.5 29.2L59.9 26.8L61.1 24L62 21L62.6 17.8L63 14.8L63.3 12.2L63.5 10L63.7 8.4L63.8 7.5L63.8 7.3L63.8 8L63.8 9.5L63.8 11.8L63.7 14.6L63.7 17.8L63.7 21L63.8 24.1L64 26.8L64.3 29L64.8 30.4L65.2 31.2L65.4 31.5","M69.4 18.7L69.4 18.7L69.3 18.9L69.3 19.7L69.2 21L69.2 22.8L69.2 25L69.4 27.2L69.7 29.2L70.1 30.7L70.6 31.5L71.3 31.6L72 30.9L72.7 29.5L73.5 27.6L74.2 25.3L74.8 23L75.1 21L75.3 19.5L75.3 18.6L75.3 18.4L75.3 18.9L75.3 20L75.4 21.7L75.7 23.8L76.2 26L76.9 28.1L77.7 29.8L78.7 30.9L79.7 31.3L80.7 31L81.7 30L82.5 28.4L83.2 26.3L83.6 24.1L83.8 21.8L83.7 19.7L83.5 18.1L83.3 16.9L83 16.2L82.9 15.9","M88.9 20.3L88.9 20.6L88.9 21.3L88.9 22.5L88.9 24.1L88.9 25.9L88.9 27.7L88.9 29.3L89 30.5L89.1 31.2L89.3 31.4L89.3 30.9L89.3 29.8L89.2 28.1L89.1 26L89.1 23.7L89.2 21.6L89.5 19.8L90 18.4L90.6 17.4L91.4 17L92.5 17.1L93.6 17.5L94.6 17.9L95.2 18.3","M100.2 17.4L100.3 17.7L100.3 18.3L100.3 19.5L100.2 21.1L100.1 23L100 25.1L99.9 27.1L99.9 28.9L99.9 30.1L99.9 30.7L100 30.8L100 30.6","M100.4 8L100.3 7.6L100.3 7.2L100.3 6.9","M107.4 4L107.5 4.5L107.7 5.5L107.7 7.2L107.7 9.4L107.5 12L107.4 15.1L107.2 18.3L107.1 21.6L107.1 24.6L107.2 27.1L107.3 29L107.4 30.1L107.5 30.3L107.5 29.7L107.5 28.8L107.5 28.1","M104.6 19.2L104.4 19.1L104.4 19.1L104.7 19.1L105.5 19.2L106.8 19.3L108.6 19.3L110.6 19.1L112.6 18.8L114.6 18.3L116.4 17.7L117.8 17.2L118.9 16.9L119.5 16.7L119.7 17L119.7 17.6L119.5 18.7L119.2 20.3L118.9 22.2L118.6 24.2L118.5 26.1L118.5 27.7L118.6 28.8L118.7 29.4","M119.5 7.1L119.5 7.1L119.7 7.3L119.8 7.6L120 7.8","M126 16.8L126.1 16.9L126.1 17.2L126.1 17.9L126 19L125.8 20.6L125.6 22.4L125.4 24.4L125.3 26.2L125.2 27.7L125.2 28.6L125.3 29L125.5 28.6L125.9 27.6L126.4 26L127.2 23.9L128.2 21.6L129.5 19.3L130.9 17.3L132.4 15.7L133.9 14.7L135.3 14.4L136.4 14.7L137.3 15.7L137.7 17.2L137.9 19.2L137.8 21.4L137.6 23.5L137.4 25.5L137.4 26.9L137.8 27.8L138.2 28.2L138.6 28.3","M149.6 19.5L149.6 18.9L149.3 18L148.7 17L147.8 16.3L146.6 16L145.2 16.3L143.8 17.2L142.6 18.5L141.8 20L141.6 21.7L141.8 23.1L142.7 24.1L144 24.6L145.6 24.4L147.3 23.6L148.9 22.4L150.2 21L151.2 19.5L151.8 18.3L152 17.5L151.9 17.1L151.7 17.4L151.4 18.3L151.1 19.8L151 22L150.9 24.6L151.1 27.6L151.3 30.8L151.5 33.9L151.5 36.7L151.3 39.2L150.8 41.2L150.1 42.6L149.1 43.3L147.9 43.5L146.7 43L145.5 42L144.6 40.6L143.9 38.9L143.7 37.1L144 35.2L144.8 33.5L146 31.9L147.5 30.6L149.2 29.7L151 29L152.3 28.6L153.2 28.5"]},{"label":"1.8","w":160,"h":47,"paths":["M4 8.1L4 8.4L4.1 9.1L4.2 10.4L4.3 12.4L4.4 15L4.5 18L4.6 21.4L4.6 24.7L4.7 27.8L4.8 30.5L4.9 32.4L5.1 33.6L5.2 34L5.3 33.6L5.5 32.4L5.9 30.5L6.4 28.1L7.2 25.5L8.3 23L9.5 20.8L10.9 19.1L12.3 18L13.6 17.7L14.8 18.2L15.8 19.4L16.4 21.2L16.8 23.5L16.9 26L16.9 28.4L16.9 30.6L16.8 32.1L16.8 33","M27.7 21L27.6 20.5L27.3 19.9L26.7 19.2L25.8 18.9L24.7 19.1L23.4 19.9L22.1 21.3L21 23.3L20.2 25.5L19.8 27.8L19.9 29.9L20.4 31.5L21.3 32.4L22.5 32.7L23.9 32.1L25.3 30.8L26.6 28.9L27.7 26.6L28.7 24.2L29.3 21.8L29.7 19.9L29.9 18.5L30 17.8L29.9 17.7L29.8 18.3L29.8 19.5L29.7 21.4L29.7 23.6L29.9 25.9L30.2 28.1L30.7 30L31.3 31.4L32 32.1L32.8 32L33.4 31.6L33.8 31.1","M35.7 18.9L35.7 19.1L35.8 19.6L35.9 20.7L35.9 22.2L35.9 24.1L35.9 26.1L35.9 27.9L35.9 29.4L36 30.4L36.1 30.8L36.2 30.6L36.3 29.7L36.6 28.3L37 26.3L37.6 24.1L38.5 22L39.6 20L40.8 18.4L42.1 17.3L43.4 16.9L44.5 17L45.5 17.8L46.2 19.2L46.6 20.9L46.8 23L46.8 25.1L46.7 27L46.6 28.7L46.7 29.9L46.9 30.6L47 31","M58.5 21.7L58.4 21.2L58.2 20.5L57.7 19.7L56.9 19.2L55.8 19L54.5 19.3L53.2 20.1L51.9 21.4L50.8 23.1L50 25L49.8 27L49.9 28.8L50.6 30.2L51.7 31.1L53.1 31.3L54.6 30.8L56.2 29.6L57.7 27.7L59.1 25.3L60.2 22.4L61 19.3L61.6 16.2L62 13.3L62.2 10.7L62.4 8.6L62.5 7.2L62.6 6.4L62.6 6.4L62.6 7.1L62.5 8.7L62.5 11L62.4 13.8L62.4 17L62.5 20.2L62.6 23.3L62.9 26.1L63.3 28.2L63.8 29.6L64.3 30.4L64.6 30.7","M68.6 17.5L68.6 17.5L68.5 17.7L68.5 18.5L68.5 19.7L68.4 21.5L68.5 23.7L68.6 25.8L68.9 27.8L69.4 29.3L69.9 30.2L70.6 30.4L71.3 29.9L72.1 28.6L72.9 26.8L73.7 24.6L74.3 22.5L74.8 20.6L75 19.2L75.1 18.4L75.1 18.1L75.1 18.5L75 19.6L75.1 21.2L75.3 23.1L75.6 25.2L76.2 27.2L77 28.7L77.9 29.8L79 30.1L80.1 29.8L81.2 28.9L82.2 27.4L82.9 25.4L83.4 23.2L83.7 21.1L83.6 19.1L83.4 17.4L83.1 16.2L82.9 15.5L82.7 15.2","M88.8 18.8L88.8 19.1L88.8 19.8L88.8 20.9L88.8 22.3L88.8 24L88.8 25.7L88.8 27.4L88.9 28.7L88.9 29.6L89 30L89.1 29.7L89.1 28.8L89.1 27.4L89.1 25.4L89.2 23.3L89.4 21.1L89.7 19.1L90.1 17.5L90.7 16.2L91.6 15.4L92.5 15.1L93.7 15.2L94.9 15.6L96.3 16.2L97.6 16.9L98.8 17.5L99.9 17.9L100.9 18.1L101.7 18L102.3 17.8L102.7 17.4L103 17.1L103.1 16.9L103.1 17L103.1 17.3L102.9 18.1L102.7 19.3L102.5 20.8L102.3 22.6L102.2 24.5L102.2 26.3L102.2 27.8L102.4 28.8L102.5 29.3","M102.9 6.6L102.9 6.4L102.9 6.2L102.9 6.1L103 6.1","M111.8 4L111.8 4.4L111.8 5.2L111.6 6.5L111.4 8.4L111.2 10.7L110.9 13.3L110.7 16.2L110.6 19.1L110.6 21.9L110.7 24.4L110.8 26.5L111 27.8L111.2 28.5L111.3 28.5L111.3 28.1L111.3 27.7","M107.3 17.7L107.5 17.6L108 17.6L109 17.5L110.4 17.3L112.1 17.2L114.1 16.9L116.2 16.6L118.1 16.2L119.9 15.9L121.2 15.6L122.1 15.4L122.5 15.4L122.6 15.8L122.3 16.5L121.9 17.6L121.5 19.1L121 20.9L120.7 22.8L120.5 24.6L120.6 26.2L120.7 27.3L121 27.8L121.2 27.9L121.4 27.7","M121.8 6.6L121.8 6.6L122 6.7L122.1 7L122.2 7.2","M128.4 15.9L128.4 16.5L128.3 17.6L128.1 19.1L128 20.9L127.8 22.7L127.6 24.5L127.5 26L127.5 27.1L127.6 27.6L127.7 27.6L127.9 27L128.3 25.7L128.8 24L129.5 21.8L130.5 19.6L131.7 17.5L133 15.7L134.4 14.3L135.8 13.4L137.2 13.1L138.3 13.5L139.2 14.5L139.8 16L140.1 17.8L140.2 19.9L140.1 22.1L140 24L139.9 25.7L140 26.8L140.4 27.3L140.8 27.5L141.2 27.4","M152 17.5L151.9 16.9L151.6 16.1L151.1 15.3L150.1 14.8L148.9 14.8L147.6 15.4L146.2 16.4L145 17.8L144.2 19.5L143.9 21.2L144.3 22.6L145.2 23.7L146.6 24.1L148.3 24L150.2 23.2L152 22L153.6 20.4L154.7 18.6L155.4 17L155.7 15.6L155.7 14.7L155.5 14.3L155.2 14.5L154.9 15.2L154.7 16.6L154.6 18.5L154.7 20.9L155 23.6L155.4 26.5L155.7 29.5L155.9 32.4L155.9 35.1L155.6 37.4L154.9 39.3L154 40.8L152.8 41.7L151.4 42L150 41.9L148.6 41.3L147.4 40.3L146.4 39.1L145.9 37.7L145.8 36.2L146.2 34.6L147.1 33.1L148.5 31.8L149.7 30.8L150.6 30.2"]}],"styles":[{"label":"Neat 1","w":177,"h":44,"paths":["M5.6 4.9L5.6 4.9L5.6 5.2L5.6 6.1L5.7 7.5L5.8 9.6L5.9 12.4L6 15.6L6.1 19.2L6.2 23L6.3 26.6L6.4 29.9L6.7 32.6L6.9 34.4L7.2 35.3L7.5 35.6L7.6 35.5","M14.1 4.7L14.1 4.8L14.2 5.2L14.2 6.3L14.2 8.1L14.2 10.5L14.2 13.4L14.3 16.6L14.3 19.9L14.4 23.2L14.5 26.2L14.7 28.7L14.8 30.6L14.9 31.8L14.8 32.2L14.7 32.1L14.6 31.9","M4 21.1L4.3 21.1L5 21L6.3 20.8L8.2 20.5L10.6 20.3L13.2 20L15.4 19.8L16.8 19.7","M29.1 19.3L28.9 19L28.3 18.6L27.5 18.3L26.3 18.4L24.9 18.9L23.3 20L21.9 21.7L20.7 23.7L19.9 25.8L19.7 27.8L20.1 29.5L21.1 30.6L22.4 31.1L23.9 30.8L25.5 29.8L27.1 28.2L28.5 26.1L29.6 23.8L30.4 21.6L30.9 19.7L31.2 18.2L31.2 17.5L31.2 17.3L31.2 17.9L31.1 19.1L31.1 20.9L31.2 23L31.4 25.4L31.8 27.5L32.4 29.3L32.9 30.5L33.3 31.1","M37.4 17.4L37.4 17.7L37.4 18.5L37.5 19.8L37.5 21.5L37.6 23.5L37.7 25.5L37.9 27.3L38 28.6L38.2 29.4L38.4 29.5L38.6 28.9L38.8 27.6L39.2 25.8L39.8 23.6L40.6 21.4L41.7 19.3L42.9 17.6L44.1 16.4L45.4 15.9L46.7 15.9L47.7 16.6L48.6 17.9L49.3 19.6L49.7 21.7L49.9 23.9L50.1 25.9L50.2 27.5L50.3 28.4","M62.2 21.1L62.1 20.6L61.8 19.9L61.2 19.1L60.3 18.5L59.1 18.4L57.7 18.7L56.3 19.5L54.9 20.9L53.8 22.7L53.1 24.6L53 26.6L53.4 28.3L54.3 29.6L55.6 30.3L57.2 30.2L59 29.3L60.7 27.6L62.3 25.3L63.6 22.5L64.7 19.4L65.4 16.2L65.9 13.2L66.2 10.5L66.3 8.4L66.2 6.9L66.1 6.2L66 6.3L66 7.3L65.9 9L66 11.4L66 14.3L66.2 17.4L66.4 20.6L66.8 23.5L67.2 26L67.9 27.8L68.6 28.8L69.4 29.2L70.1 29.1L70.5 28.8","M73.4 16.6L73.4 16.8L73.5 17.4L73.6 18.4L73.7 19.9L73.9 21.8L74.2 23.8L74.6 25.7L75.1 27.2L75.8 28.2L76.6 28.6L77.5 28.2L78.5 27.1L79.5 25.5L80.3 23.6L81 21.8L81.5 20.1L81.8 18.9L81.8 18.2L81.8 18.1L81.7 18.6L81.7 19.8L81.8 21.4L82 23.3L82.4 25.2L83 26.9L83.9 28.1L84.9 28.8L86.1 28.8L87.3 28.1L88.4 26.9L89.4 25.2L90.1 23.3L90.6 21.2L90.7 19.2L90.6 17.4L90.3 16L90 15.1L89.7 14.6L89.5 14.5L89.4 14.5","M95.9 17.8L95.9 18.2L95.8 19.1L95.8 20.5L95.9 22L95.9 23.7L95.9 25.4L96 26.9L96.1 28.1L96.2 28.8L96.3 29L96.3 28.8L96.3 27.9L96.3 26.5L96.3 24.7L96.4 22.7L96.6 20.6L96.9 18.7L97.5 17.1L98.2 15.8L99.1 14.9L100.2 14.5L101.4 14.5L102.6 14.9L104 15.5L105.3 16.2L106.5 16.9L107.5 17.4L108.1 17.7","M110.8 15.7L110.8 15.9L110.8 16.5L110.7 17.5L110.6 19L110.5 20.8L110.5 22.7L110.5 24.7L110.6 26.5L110.8 27.8L111 28.5L111.3 28.7L111.4 28.7","M111.2 5.4L111.2 5.3L111.2 5.1L111.3 5L111.3 5","M120.6 4L120.5 4.6L120.4 5.8L120.2 7.6L120 9.8L119.7 12.5L119.6 15.4L119.5 18.4L119.6 21.3L119.7 23.9L120 26L120.2 27.4L120.4 28.1","M115.6 16.8L115.9 16.8L116.5 16.7L117.6 16.6L119.2 16.5L121.2 16.4L123.4 16.1L125.6 15.9L127.8 15.6L129.7 15.3L131.1 15.1L132.1 15.1L132.5 15.2L132.5 15.6L132.2 16.4L131.8 17.5L131.2 19L130.8 20.8L130.4 22.6L130.3 24.2L130.3 25.6L130.5 26.6L130.8 27L131.1 27L131.3 26.8","M131.7 5.9L131.8 5.9L131.9 5.9L132 6L132.1 6.1","M138.2 14.8L138.2 15.2L138.2 16L138.3 17.2L138.2 18.8L138.1 20.6L138 22.4L137.9 24.1L137.9 25.4L137.9 26.2L138.1 26.5L138.4 26.2L138.7 25.2L139.3 23.7L140.1 21.7L141.1 19.6L142.3 17.5L143.7 15.7L145.1 14.2L146.6 13.3L148 12.9L149.2 13.2L150.1 14.2L150.7 15.6L151 17.5L151.1 19.6L151 21.6L150.9 23.5L151 24.9L151.3 25.8L152 26L152.6 25.9L153.2 25.7","M162.6 16.7L162.5 16.2L162.2 15.4L161.6 14.7L160.6 14.3L159.4 14.4L158 15.1L156.6 16.1L155.6 17.6L155 19.2L154.9 20.7L155.5 21.9L156.7 22.7L158.3 22.9L160.2 22.5L162.2 21.6L164.1 20.3L165.6 18.7L166.6 17.1L167.2 15.8L167.3 14.7L167.2 14.1L166.8 14L166.4 14.4L166.1 15.5L165.8 17L165.7 19L165.9 21.4L166.2 24L166.7 26.6L167.2 29.3L167.7 31.8L167.9 34.1L167.9 36L167.6 37.5L167 38.5L166 39.1L164.8 39.2L163.4 39L161.9 38.4L160.4 37.5L159.1 36.6L158.1 35.5L157.6 34.4L157.5 33.3L157.9 32.3L158.5 31.5L159 31.1"]},{"label":"Italic 1","w":172,"h":50,"paths":["M10.3 4.9L10.1 5.9L9.7 7.8L9.1 10.5L8.3 13.7L7.5 17.3L6.6 21L5.8 24.8L5.1 28.5L4.5 31.8L4.2 34.4L4 36.2L4 37.1","M19.5 4.4L19.5 4.8L19.3 5.7L19 7.3L18.4 9.6L17.7 12.4L16.9 15.7L16.1 19.1L15.3 22.6L14.6 26L14 28.9L13.7 31.3L13.4 32.9L13.2 33.6L13.1 33.6L13 33.1L12.9 32.6","M5.3 20.3L5.6 20.3L6.5 20.3L7.8 20.3L9.7 20.3L12.1 20.3L14.6 20.3L16.7 20.3L18.1 20.4","M31.3 21.3L31.1 21L30.6 20.6L29.7 20.2L28.5 20.1L26.9 20.3L25.2 21.1L23.4 22.5L21.8 24.2L20.5 26.3L19.6 28.3L19.4 30.2L19.6 31.7L20.4 32.6L21.6 32.9L23.2 32.4L24.9 31.2L26.6 29.5L28.3 27.3L29.8 25.1L30.9 23L31.7 21.3L32.1 20.1L32.3 19.7L32.1 20L31.7 21L31.1 22.6L30.5 24.7L30 27.1L29.7 29.2L29.7 31.1L30 32.3L30.8 32.8L31.9 32.5L33.4 31.5L34.9 29.8L36.6 27.7L38.2 25.5L39.6 23.4L40.8 21.6L41.6 20.4L42.1 19.7L42.3 19.6L42.2 20.2L41.8 21.4L41.3 23.2L40.8 25.3L40.2 27.4L39.6 29.3L39.3 30.8L39.1 31.7L39.1 32L39.4 31.6L39.9 30.4L40.7 28.7L41.8 26.6L43.1 24.4L44.6 22.2L46.2 20.4L47.8 19.1L49.2 18.3L50.2 18.2L51 18.7L51.3 19.8L51.2 21.4L50.9 23.3L50.4 25.4L49.9 27.5L49.5 29.3L49.3 30.6L49.6 31.5L50 31.9L50.3 32","M62.5 21.8L62.3 21.4L62 20.9L61.4 20.4L60.6 20.3L59.4 20.6L58.1 21.5L56.7 22.8L55.5 24.5L54.5 26.4L54 28.3L53.9 29.9L54.3 31.1L55.2 31.7L56.5 31.6L58 30.8L59.8 29.3L61.5 27.1L63.2 24.5L64.8 21.6L66.2 18.5L67.3 15.6L68.3 13L69 10.9L69.5 9.3L69.8 8.5L69.9 8.3L69.7 8.9L69.3 10.3L68.6 12.5L67.8 15.3L66.9 18.4L66 21.8L65.2 24.9L64.7 27.7L64.5 29.9L64.7 31.4L65.4 32L66.3 31.8L67.3 31.2L68 30.7","M74.2 18.6L74.2 18.6L74.1 18.9L73.9 19.6L73.6 21L73.2 22.8L72.8 25L72.4 27.1L72.2 29.1L72.2 30.6L72.4 31.5L72.9 31.7L73.6 31.2L74.4 30.1L75.4 28.4L76.5 26.4L77.5 24.4L78.4 22.7L79.1 21.5L79.5 20.7L79.6 20.6L79.5 21.1L79.3 22.2L79 23.8L78.6 25.8L78.4 27.8L78.4 29.6L78.8 30.9L79.4 31.7L80.3 31.8L81.4 31.3L82.7 30.2L83.9 28.5L85.1 26.5L86 24.4L86.7 22.3L87.2 20.5L87.4 19L87.4 18L87.5 17.5L87.5 17.3","M93 19.7L93 20L92.9 20.6L92.7 21.6L92.4 22.9L91.9 24.6L91.3 26.4L90.6 28.1L90.1 29.7L89.7 30.8L89.5 31.5L89.5 31.6L89.7 31L90 29.8L90.6 28.1L91.4 26.1L92.3 24L93.4 22L94.5 20.3L95.5 18.9L96.6 18L97.5 17.7L98.4 17.8L99.2 18.3L100 19L100.9 19.8L101.8 20.5L102.8 20.9L103.9 21L105.1 20.7L106.2 20.1L107.2 19.4L108.1 18.6L108.7 17.9L109 17.5L109.1 17.4L108.9 17.7L108.5 18.6L107.9 20L107.1 21.8L106.1 23.9L105.3 26.1L104.6 28.1L104.2 30L104.1 31.3L104.2 32.1L104.5 32.2L104.9 31.9L105.2 31.5","M110.5 7.7L110.5 7.5L110.5 7.3L110.6 7.2L110.6 7.2","M120.9 4L120.9 4.4L120.6 5.3L120.1 6.8L119.4 8.8L118.4 11.2L117.3 14L116.3 17L115.4 20L114.6 22.9L114 25.5L113.7 27.5L113.5 28.9L113.5 29.5L113.5 29.3L113.7 28.9L113.8 28.4","M113.6 17.9L113.8 17.8L114.4 17.8L115.4 17.8L116.8 17.7L118.6 17.7L120.6 17.5L122.7 17.3L124.7 17L126.3 16.8L127.5 16.7L128.2 16.8L128.3 17.2L127.9 18.1L127.1 19.5L126.1 21.4L124.9 23.4L123.9 25.5L123.1 27.5L122.6 29L122.5 29.8L122.6 30.1L122.9 29.9L123.2 29.5","M129.6 7.8L129.7 7.5L129.7 7.1L129.8 6.8","M134.9 15.7L134.7 16.6L134.3 18.1L133.7 20.1L132.9 22.2L132.1 24.3L131.3 26.1L130.6 27.7L130.1 28.8L129.9 29.4L129.9 29.4L130.1 28.7L130.7 27.3L131.5 25.4L132.7 23.2L134.1 20.8L135.7 18.5L137.5 16.6L139.2 15.1L140.8 14.2L142.1 14.1L143.1 14.6L143.6 15.7L143.7 17.4L143.3 19.4L142.6 21.7L141.8 23.9L141 25.9L140.4 27.4L140.2 28.3L140.4 28.7L140.9 28.7L141.3 28.5","M155.3 18L155.3 17.5L155.1 16.7L154.5 16.1L153.6 15.8L152.3 16.1L150.8 16.9L149.3 18.1L148 19.7L147 21.3L146.6 22.8L146.8 24L147.5 24.6L148.8 24.7L150.4 24.2L152.3 23.2L154.1 21.7L155.7 20L156.9 18.4L157.7 17L158 16L158.1 15.6L157.9 15.7L157.4 16.5L156.9 17.9L156.3 19.8L155.6 22.2L155 25.1L154.4 28.1L153.8 31.3L153.1 34.5L152.2 37.5L151.2 40.2L150 42.4L148.8 44.2L147.5 45.3L146.2 45.9L145.1 45.9L144.2 45.3L143.6 44.2L143.4 42.7L143.8 40.8L144.7 38.6L146.2 36.4L148.2 34.2L150.5 32.2L153 30.4L155.6 28.8L158.2 27.5L160.4 26.5L162.1 25.9L163 25.6"]},{"label":"Rounded 1","w":189,"h":45,"paths":["M7.4 4.1L7.4 4.2L7.4 4.5L7.4 5.4L7.4 7L7.3 9.2L7.2 12.1L7 15.4L6.8 19.1L6.7 22.9L6.5 26.6L6.5 30.1L6.6 32.9L6.8 35L7 36.1L7.3 36.6L7.4 36.6","M17 4.3L17.1 4.4L17.1 4.9L17.1 6L16.9 7.8L16.8 10.3L16.6 13.2L16.4 16.5L16.2 19.8L16.1 23.2L16.1 26.3L16.1 28.9L16.1 30.9L16.1 32.2L16.1 32.8L16 32.8L16 32.6","M4 21.2L4.3 21.1L5.2 20.9L6.6 20.7L8.8 20.5L11.6 20.3L14.7 20.1L17.2 20L18.9 19.9","M33.5 19.1L33.2 18.9L32.6 18.5L31.6 18.3L30.2 18.4L28.5 19.1L26.7 20.3L24.9 22L23.4 24.1L22.4 26.2L22.1 28.2L22.5 29.7L23.4 30.7L24.9 31L26.6 30.7L28.4 29.6L30.2 27.9L31.9 25.8L33.3 23.5L34.3 21.3L35 19.4L35.4 18.1L35.5 17.4L35.5 17.3L35.4 17.9L35.3 19.3L35.1 21.2L35 23.4L35.1 25.8L35.4 27.9L35.9 29.6L36.5 30.8L37 31.3","M43.1 17.2L43.1 17.6L43.1 18.5L43.1 19.8L43 21.6L42.8 23.6L42.7 25.6L42.6 27.3L42.6 28.5L42.7 29.2L42.8 29.2L42.9 28.6L43.3 27.2L43.8 25.4L44.5 23.2L45.6 21L46.8 18.9L48.2 17.2L49.7 16L51.2 15.3L52.6 15.3L54 16L55.1 17.2L55.9 18.9L56.5 21L56.8 23.3L57 25.5L57.1 27.2L57.1 28.2","M70.9 21.5L70.8 20.9L70.5 20.2L69.9 19.3L68.9 18.7L67.6 18.5L65.9 18.7L64.2 19.5L62.5 20.9L61.1 22.6L60.1 24.5L59.8 26.4L60.1 28.1L61 29.3L62.3 29.8L64 29.6L66 28.5L68.1 26.7L70.1 24.2L71.9 21.3L73.3 18.1L74.5 14.9L75.3 12L75.8 9.5L76 7.6L76.1 6.5L76.1 6.2L75.9 6.7L75.7 8.1L75.5 10.2L75.3 12.9L75.1 16L75.1 19.1L75.3 22.2L75.6 24.8L76.1 26.7L76.4 27.8","M81.7 17.5L81.6 18L81.4 18.9L81.2 20.3L81.1 22.1L81.1 24.1L81.3 26L81.8 27.5L82.7 28.6L83.8 29L85.1 28.7L86.5 27.6L87.9 25.9L89.1 23.8L90.1 21.7L90.7 19.7L91 18.2L91.1 17.1L91 16.7L90.8 16.9L90.6 17.8L90.3 19.3L90.2 21.3L90.3 23.4L90.8 25.5L91.7 27.1L92.9 28.2L94.3 28.7L95.9 28.5L97.3 27.5L98.6 26L99.6 24L100.3 21.8L100.5 19.7L100.5 17.7L100.3 16.3L100.2 15.5","M106.1 17.3L106 17L106 16.7L105.9 16.8L105.9 17.4L105.8 18.5L105.7 20.2L105.6 22.1L105.5 24L105.5 25.6L105.5 26.9L105.6 27.6L105.6 27.6L105.7 27L105.8 25.7L105.9 23.8L106.1 21.7L106.4 19.5L106.8 17.4L107.5 15.6L108.4 14.1L109.4 13.2L110.7 12.7L111.7 12.5L112.4 12.5","M118.9 14L118.9 14.4L118.8 15.2L118.7 16.4L118.5 18L118.3 19.9L118.2 21.9L118.1 23.9L118.2 25.5L118.5 26.7L118.8 27.2L119.1 27.2L119.4 27.1","M120.3 4L120.4 4L120.5 4L120.7 4.1L120.8 4.3","M131.7 4.7L131.7 4.8L131.7 5.2L131.6 6.1L131.3 7.5L131 9.5L130.6 12L130.3 14.8L130 17.8L129.9 20.7L129.9 23.4L130.1 25.6L130.4 27.1L130.8 27.9L131.2 27.9L131.5 27.5L131.7 27.1","M126.6 16.4L126.9 16.4L127.8 16.3L129.2 16.2L131.1 16.1L133.3 15.9L135.8 15.7L138.2 15.5L140.5 15.2L142.4 15.1L143.8 15L144.7 15.1L145.1 15.5L145.1 16.2L144.8 17.3L144.3 18.8L143.7 20.6L143.2 22.4L142.8 24L142.7 25.5L142.7 26.4L142.9 26.5L143.2 25.9L143.5 24.9L143.7 24","M145 5.9L145.1 5.8L145.2 5.8L145.3 5.9L145.5 6","M152.2 13.6L152.2 14.3L152 15.4L151.8 17.1L151.5 19L151.1 21L150.8 22.9L150.6 24.5L150.5 25.7L150.4 26.4L150.5 26.5L150.7 25.8L151.2 24.6L151.8 22.8L152.6 20.7L153.7 18.4L155.1 16.3L156.6 14.5L158.2 13.2L159.8 12.4L161.2 12.3L162.5 12.9L163.4 14L164 15.7L164.1 17.8L164 20L163.8 22.3L163.6 24L163.4 25","M176.3 16.6L176.2 16L175.9 15.3L175.3 14.5L174.3 14.2L173 14.4L171.5 15.2L170.1 16.3L169.1 17.7L168.5 19.1L168.6 20.3L169.3 21.2L170.6 21.7L172.3 21.6L174.2 21L176.1 19.9L177.7 18.6L178.9 17.2L179.7 15.9L180.1 14.9L180.2 14.2L180 14L179.7 14.2L179.3 15.1L179 16.5L178.8 18.5L178.7 20.9L178.9 23.5L179.2 26.4L179.4 29.3L179.5 32.1L179.3 34.7L178.8 36.9L178 38.6L176.8 39.8L175.3 40.4L173.6 40.4L171.9 39.8L170.3 38.7L169.2 37.7L168.5 36.9"]},{"label":"Casual 1","w":228,"h":48,"paths":["M10.6 14.5L10.5 14.4L10.5 14.3L10.5 14.4L10.4 15L10.1 16.2L9.7 18L9.1 20.5L8.2 23.5L7.3 26.7L6.3 30.1L5.4 33.2L4.7 35.9L4.2 37.8L4 39L4 39.5L4 39.5","M5.6 29.6L5.6 29.7L5.8 29.7L6.4 29.8L7.4 29.8L8.8 29.6L10.6 29L12.7 28L14.9 26.8L17.3 25.2L19.6 23.5L21.8 21.6L23.7 19.7L25.3 18L26.3 16.7L26.9 15.9L26.9 15.7L26.4 16.2L25.3 17.5L23.8 19.6L22 22.4L20.2 25.7L18.7 29.1L17.7 32.2L17.3 34.8L17.6 36.7L18.5 37.9L19.9 38.3L21.7 37.9L23.9 36.8L26.3 35.3L28.9 33.4L31.4 31.3L33.8 29.4L35.9 27.9L37.6 26.7L39 26.1L39.8 25.9L40.3 26L40.5 26.1L40.5 26.3L40.5 26.4L40.4 26.4L40.3 26.3L40.2 26.1L40 25.7L39.7 25.3L39.2 25L38.4 24.9L37.2 25.3L35.9 26.1L34.3 27.5L32.8 29.3L31.5 31.3L30.6 33.3L30.2 35.1L30.4 36.4L31.1 37.2L32.3 37.3L33.9 36.7L35.7 35.6L37.7 34L39.6 32.1L41.4 30.1L42.8 28.4L43.8 27L44.4 26.1L44.7 25.6L44.7 25.6L44.5 26L44.1 27L43.6 28.5L43.1 30.4L42.7 32.5L42.5 34.4L42.8 35.9L43.5 36.7L44.7 36.9L46.2 36.3L48 35.2L49.9 33.6L51.9 31.7L53.9 29.8L55.6 28L57.1 26.7L58.2 25.7L59 25.4L59.3 25.5L59.2 26.3L58.9 27.5L58.2 29.2L57.5 31L56.7 32.7L56.1 34L55.7 34.9L55.6 35.2L55.8 34.9L56.2 34.1L57 32.7L58.2 31L59.6 29.1L61.2 27.4L62.8 26.1L64.4 25.1L65.8 24.6L67 24.4L68 24.7L68.8 25.3L69.3 26.3L69.4 27.7L69.3 29.3L69 31L68.6 32.7L68.3 34.1L68.2 35.1L68.4 35.8L68.8 35.9L69.7 35.6L70.9 34.8L72.4 33.6L74.3 32.1L76.4 30.4L78.7 28.9L81 27.5L83.3 26.4L85.4 25.6L87.2 25.2L88.8 25.1L90 25.2L90.9 25.3L91.5 25.5L91.7 25.6L91.8 25.7L91.8 25.7L91.6 25.5L91.3 25.4L90.7 25.2L89.8 25.2L88.8 25.4L87.4 26.1L85.9 27.2L84.3 28.7L82.9 30.5L81.8 32.3L81.1 33.8L81.1 35L81.6 35.7L82.7 35.7L84.1 35.1L85.9 33.8L87.9 32L89.9 29.6L91.9 27L93.8 24.3L95.4 21.6L96.7 19.3L97.8 17.4L98.5 16L98.9 15.2L99 15L98.8 15.4L98.2 16.5L97.4 18.3L96.4 20.8L95.2 23.7L94.3 26.7L93.6 29.4L93.4 31.6L93.6 33.2L94.3 34.1L95.5 34.3L97.2 33.7L99.1 32.4L101.3 30.6L103.5 28.5L105.6 26.4L107.5 24.4L109 22.9L110.1 21.8L110.7 21.3L111 21.3L110.8 22L110.2 23.2L109.3 25L108.2 27.1L107.1 29.3L106.3 31.2L105.9 32.5L105.9 33.3L106.4 33.4L107.4 32.9L108.8 31.7L110.5 30.1L112.4 28.2L114.1 26.5L115.5 25L116.5 24L117.1 23.5L117.3 23.4L117.2 23.7L116.9 24.6L116.5 25.8L116.1 27.3L115.9 28.9L115.8 30.4L116.2 31.4L116.8 32L117.8 32L119 31.6L120.3 30.6L121.6 29.2L122.8 27.7L123.7 26L124.3 24.5L124.6 23L124.6 21.8L124.5 20.9L124.4 20.4L124.3 20.1L124.4 20L124.8 20.1L125.5 20.1L126.7 20L128.3 19.8L130.1 19.5L131.9 19.1L133.6 18.8L134.9 18.6L135.7 18.5L136.2 18.7L136.2 19.2L135.8 20.1L135.2 21.5L134.3 23.3L133.3 25.4L132.4 27.3L131.6 29L131 30.2L130.8 30.9L130.7 31.1L130.9 30.8L131.2 30L131.8 28.7L132.5 26.9L133.4 25L134.5 23.1L135.5 21.5L136.6 20.2L137.5 19.4L138.3 18.9L139.1 18.7L139.9 18.7L140.7 18.8L141.6 19L142.6 19.1L143.8 19.1L145.1 18.8L146.4 18.4L147.6 17.9L148.6 17.5L149.2 17.2L149.5 17L149.6 17.1L149.4 17.4L149 18.1L148.3 19.3L147.3 20.9L146.3 22.8L145.5 24.9L144.9 26.9L144.7 28.6L144.9 30L145.4 31L146.1 31.4L147.2 31.2L148.5 30.4L149.9 29.1L151.6 27.2L153.4 25L155.2 22.4L157.1 19.7L159 16.9L160.9 14.1L162.7 11.5L164.4 9.2L165.8 7.3L166.9 6L167.6 5.2L167.9 4.9L167.9 5.1L167.5 6L166.7 7.5L165.6 9.6L164.2 12.2L162.6 15.1L161 18L159.7 20.7L158.7 23L158 24.8L157.7 26.1L157.6 26.7L157.7 26.8L158 26.4L158.4 25.4L159 24L159.6 22.5L160.1 21.1L160.5 19.9L160.9 19.1L161.1 18.6L161.2 18.3L161.3 18.4L161.3 18.8L161.5 19.3L161.8 20L162.3 20.6L163.3 21L164.7 21L166.5 20.6L168.7 19.9L170.9 18.9L173.1 17.8L175 16.7L176.4 15.9L177.4 15.4L177.8 15.2L177.8 15.3L177.5 16L176.7 17L175.6 18.5L174.5 20.2L173.4 21.9L172.7 23.4L172.4 24.7L172.6 25.5L173.2 25.8L174.4 25.7L175.9 25L177.8 23.8L180 22.2L182.2 20.5L184.3 18.8L186.3 17.3L187.9 16.1L189.1 15.3L189.9 15L190.1 15.2L189.9 15.9L189.3 17.1L188.4 18.7L187.2 20.5L186.1 22.2L185.2 23.6L184.5 24.5L184.2 24.9L184.3 24.8L184.9 24.2L186 23L187.5 21.4L189.4 19.7L191.5 18.1L193.5 16.8L195.4 15.9L197 15.4L198.3 15.3L199.1 15.6L199.6 16.3L199.7 17.3L199.5 18.6L199 20.1L198.5 21.5L197.9 22.8L197.6 23.7L197.5 24.4L197.7 24.6L198.3 24.5L199.2 23.9L200.4 23L201.9 21.8L203.5 20.6L205.2 19.3L206.9 18.2L208.5 17.2L210.1 16.3L211.7 15.7L213.1 15.1L214.4 14.8L215.4 14.5L216.1 14.4L216.5 14.3L216.7 14.3L216.7 14.2L216.5 14.2L216.1 14.2L215.4 14.4L214.3 14.8L212.9 15.5L211.3 16.5L209.7 17.7L208.2 19.1L207.1 20.4L206.4 21.6L206.3 22.6L206.7 23.1L207.6 23.2L208.9 22.9L210.5 22.1L212.4 21L214.2 19.6L215.9 18.1L217.2 16.7L218.1 15.6L218.7 14.8L218.9 14.4L218.9 14.3L218.7 14.7L218.4 15.5L217.8 17L217.1 19L216.2 21.5L215.1 24.4L213.9 27.6L212.5 30.9L211 34.1L209.4 37.1L207.8 39.6L206.1 41.6L204.5 43L202.9 43.6L201.4 43.5L200 42.7L198.9 41.6L198.3 40.8","M209.7 4L209.7 4L209.8 4L209.8 4.1L209.8 4.1L209.8 4.2L209.7 4.2L209.7 4.3L209.6 4.3"]}]}/*END*/;
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const NS = "http://www.w3.org/2000/svg";
+const el = (name, attrs, parent) => { const e = document.createElementNS(NS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.append(e); return e; };
+/** Paths of one written block into svg (an <svg> sets its viewBox; a <g> is scaled to width w). */
+function ink(target, block, cls = "ink", w) {
+  if (target.tagName === "svg") target.setAttribute("viewBox", `0 0 ${block.w + 8} ${block.h}`);
+  const g = target.tagName === "svg" ? target : el("g", { transform: `scale(${w / (block.w + 8)})` }, target);
+  return block.paths.map(d => el("path", { d, class: cls }, g));
+}
 
-<dialog id="mineDlg">
-  <form method="dialog" class="dlg">
-    <header><h3>My handwriting</h3><p>Write one sentence in your normal handwriting. It becomes a handwriting style straight away.</p></header>
-    <div class="body">
-      <div class="row" style="grid-template-columns:1fr auto;margin-top:0">
-        <input type="text" id="sentence" aria-label="Sentence you will write" maxlength="60">
-        <button type="button" class="btn small" id="nextSentence">Other sentence</button>
-      </div>
-      <p class="hint">Write the sentence above in one line, filling about half the box height. Fix the text if you wrote something different. A pen or touchscreen works best.</p>
-      <canvas id="pad" aria-label="Writing area"></canvas>
-      <div class="row" style="grid-template-columns:auto 1fr auto auto auto">
-        <label for="mineName">Name</label><input type="text" id="mineName" maxlength="30">
-        <button type="button" class="btn small" id="undo">Undo</button>
-        <button type="button" class="btn small" id="clear">Clear</button>
-        <button type="button" class="btn small primary" id="saveMine">Save style</button>
-      </div>
-      <p class="hint" id="mineMsg" role="status"></p>
-      <h4 style="margin:18px 0 0">Saved handwriting</h4>
-      <div class="mine-list" id="mineList"></div>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button type="button" class="btn small" id="exportMine">Export file</button>
-        <label class="btn small" for="importMine">Import file</label>
-        <input type="file" id="importMine" accept=".json,application/json" hidden>
-      </div>
-      <p class="hint">Export to move your handwriting to another computer or browser; your styles are stored only in this browser.</p>
-    </div>
-    <footer><button class="btn" value="close">Done</button></footer>
-  </form>
-</dialog>
+if (STROKES) {
+  // hero: the pen writes stroke by stroke at a steady speed, lifts between strokes, then starts over
+  const svg = document.getElementById("heroInk"), paths = ink(svg, STROKES.hero);
+  const pen = el("g", {}, svg);
+  el("path", { d: "M0 0 L6 -16 L13 -13 L3 2 Z", fill: "#3b5bdb" }, pen);
+  el("path", { d: "M6 -16 L11 -30 L18 -27 L13 -13 Z", fill: "#22325e" }, pen);
+  el("circle", { r: 1.6, fill: "#1c2230" }, pen);
+  const lens = paths.map(p => p.getTotalLength()), SPEED = 230, LIFT = 0.09;
+  let start = 0;
+  const plan = lens.map(l => { const s = { at: start, dur: l / SPEED }; start += s.dur + LIFT; return s; }), total = start;
+  paths.forEach((p, i) => { p.style.strokeDasharray = `${lens[i]} ${lens[i]}`; p.style.strokeDashoffset = reduce ? 0 : lens[i]; });
+  if (reduce) pen.style.display = "none";
+  else {
+    let t = 0, last = null, visible = true;
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(svg);
+    const frame = now => {
+      requestAnimationFrame(frame);
+      if (!visible) { last = null; return; }
+      if (last !== null) t += (now - last) / 1000;
+      last = now;
+      if (t > total + 3) t = 0; // hold the finished page for 3 s, then write it again
+      let at = null;
+      plan.forEach((s, i) => {
+        const done = Math.min(1, Math.max(0, (t - s.at) / s.dur));
+        paths[i].style.strokeDashoffset = lens[i] * (1 - done);
+        if (t >= s.at && t < s.at + s.dur) at = paths[i].getPointAtLength(lens[i] * done);
+        else if (t >= s.at + s.dur && t < s.at + s.dur + LIFT && paths[i + 1]) { // pen up, moving to the next stroke
+          const a = paths[i].getPointAtLength(lens[i]), b = paths[i + 1].getPointAtLength(0), k = (t - s.at - s.dur) / LIFT;
+          at = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k - 4 * Math.sin(Math.PI * k) };
+        }
+      });
+      if (!at) { const p = paths[paths.length - 1]; at = p.getPointAtLength(lens[lens.length - 1]); at = { x: at.x + 6, y: at.y - 6 }; }
+      pen.setAttribute("transform", `translate(${at.x} ${at.y})`);
+    };
+    requestAnimationFrame(frame);
+  }
+  for (const s of STROKES.styles) {
+    const box = document.createElement("div"); box.className = "sample";
+    const sv = el("svg", { "aria-hidden": "true" }, box); ink(sv, s);
+    const label = document.createElement("span"); label.textContent = s.label; box.append(label);
+    document.getElementById("styleSamples").append(box);
+  }
+  for (const s of STROKES.neat) {
+    const row = document.createElement("div"), lab = document.createElement("span"); lab.textContent = s.label;
+    const sv = el("svg", { "aria-hidden": "true" }); ink(sv, s); row.append(lab, sv);
+    document.getElementById("neatSamples").append(row);
+  }
+  // a few lines on the paper diagram, and a word in the printing inset that draws stroke by stroke
+  const page = document.getElementById("paperInk");
+  const k = 165 / (STROKES.hero.w + 8), first = ink(el("g", { transform: "translate(96 80)" }, page), STROKES.hero, "ink", 165)[0].getPointAtLength(0);
+  document.getElementById("firstLetter").setAttribute("cx", 96 + first.x * k);
+  document.getElementById("firstLetter").setAttribute("cy", 80 + first.y * k);
+  const inset = ink(document.getElementById("insetInk"), STROKES.neat[2], "ink draw", 124);
+  inset.forEach((p, i) => { p.setAttribute("pathLength", "1"); p.style.transitionDelay = `${0.3 + i * 0.12}s`; });
+}
 
-<dialog id="savedDlg">
-  <form method="dialog" class="dlg">
-    <header><h3>G-code saved</h3><p id="savedWhere"></p></header>
-    <div class="body">
-      <ol class="steps" id="savedSteps"></ol>
-    </div>
-    <footer><button class="btn primary" value="ok">Got it</button></footer>
-  </form>
-</dialog>
-
-<script src="weights.js"></script>
-<script src="styles.js"></script>
-<script src="engine.js"></script>
-<script src="gcode.js"></script>
-<script src="app.js"></script>
+// steppers: click a stage, or let them play through while on screen
+for (const fig of document.querySelectorAll(".stepper")) {
+  const svg = fig.querySelector("svg[data-stage]"), buttons = [...fig.querySelectorAll("[data-go]")], ms = +fig.dataset.ms || 5000;
+  let stage = 1, timer = null, auto = !reduce, visible = false;
+  fig.style.setProperty("--ms", ms + "ms");
+  const show = s => {
+    stage = s; svg.dataset.stage = s;
+    buttons.forEach(b => b.toggleAttribute("aria-current", false));
+    const cur = buttons[s - 1]; cur.setAttribute("aria-current", "step");
+    const bar = cur.querySelector(".bar i"); bar.style.animation = "none"; void bar.offsetWidth; bar.style.animation = "";
+  };
+  const tick = () => { clearTimeout(timer); if (auto && visible) timer = setTimeout(() => { show(stage % buttons.length + 1); tick(); }, ms); };
+  buttons.forEach(b => b.addEventListener("click", () => { auto = false; fig.classList.remove("playing"); clearTimeout(timer); show(+b.dataset.go); }));
+  new IntersectionObserver(([e]) => { visible = e.isIntersecting; fig.classList.toggle("playing", auto && visible); tick(); }, { threshold: 0.35 }).observe(fig);
+  show(1);
+}
+</script>
 </body>
 </html>

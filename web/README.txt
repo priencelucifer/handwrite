@@ -1,7 +1,7 @@
 HANDWRITE - real-looking handwriting with a 3D printer and a pen holder
 =======================================================================
 
-Nothing to install. Unzip the folder, then double-click Handwrite.html.
+Nothing to install. Unzip the folder, then double-click Handwrite.html. Guide.html shows how to use it, with pictures.
 It opens in your web browser (Edge, Chrome, Firefox or Safari) and works offline.
 Keep all the files together in one folder.
 
