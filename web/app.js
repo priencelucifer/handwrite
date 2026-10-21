@@ -394,12 +394,14 @@
   const W_ = () => state.settings.writing, P_ = () => state.settings.paper, PR_ = () => state.settings.printer;
   $("text").value = state.text;
   $("text").addEventListener("input", e => { state.text = e.target.value; scheduleRender(); });
-  for (const [id, key] of [["bias", "bias"], ["wobble", "wobble"]]) {
+  for (const [id, key] of [["bias", "bias"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"]]) {
     const el = $(id), out = el.nextElementSibling;
     el.value = W_()[key]; out.textContent = (+el.value).toFixed(2);
-    el.addEventListener("input", () => { W_()[key] = +el.value; out.textContent = (+el.value).toFixed(2); scheduleRender(key === "wobble" ? 60 : 400); });
+    // only neatness needs new handwriting; the others just re-lay the cached words
+    el.addEventListener("input", () => { W_()[key] = +el.value; out.textContent = (+el.value).toFixed(2); scheduleRender(key === "bias" ? 400 : 60); });
   }
   bindNumber("xh", () => W_(), "x_height", 60);
+  bindNumber("lineSpacing", () => W_(), "line_spacing", 60);
   bindNumber("margin", () => P_(), "margin", 60);
   bindNumber("marginY", () => P_(), "margin_y", 60);
   function bindNumber(id, obj, key, delay) {
@@ -481,8 +483,6 @@
     travel_feed: ["Travel speed", "mm/min", "Speed of pen-up moves between strokes."],
     z_feed: ["Up/down speed", "mm/min", "How fast the pen is lifted and lowered."],
     settle_ms: ["Pen settle time", "ms", "A tiny wait after every pen down and up so the ink starts and stops cleanly. Raise it if strokes start faint."],
-    line_spacing: ["Line spacing", "mm", "Baseline to baseline. Ruled paper is 7 to 8.7."],
-    word_spacing: ["Word spacing", "× letter", "Gap between words, in letter heights."],
     bed_x: ["Bed width", "mm", "Only used when the printer is Custom."],
     bed_y: ["Bed depth", "mm", "Only used when the printer is Custom."],
     bed_z: ["Max height", "mm", "How high the nozzle can go. Only used when the printer is Custom."],
@@ -494,7 +494,6 @@
     ["Pen heights", "printer", ["z_draw", "z_lift"]],
     ["Pen offset", "printer", ["offset_x", "offset_y"]],
     ["Speeds", "printer", ["draw_feed", "travel_feed", "z_feed", "settle_ms"]],
-    ["Lines", "writing", ["line_spacing", "word_spacing"]],
     ["Custom printer", "printer", ["bed_x", "bed_y", "bed_z"]],
     ["Custom paper", "paper", ["width", "height"]],
   ];

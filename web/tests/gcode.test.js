@@ -259,3 +259,26 @@ test("pen offset test: safe on every printer, and measuring it gives the offset 
     }
   }
 });
+
+test("word and line spacing set the average gaps; each gap still varies with wobble", () => {
+  const flat = () => [[[0, 0], [1.5, 1]]]; // one stroke per word, 1.5 letter heights wide
+  const text = Array.from({ length: 6 }, () => Array(30).fill("word").join(" ")).join("\n");
+  const gaps = (ws, ls, wobble) => {
+    const cfg = G.resolve(withSet({ "writing.word_spacing": ws, "writing.line_spacing": ls, "writing.wobble": wobble }));
+    const lines = G.layoutPages(G.words(text, 1), flat, cfg, mulberry(7))[0], words = [], rows = [];
+    for (const l of lines) {
+      for (let i = 1; i < l.length; i++) words.push((l[i][0][0] - l[i - 1][1][0]) / cfg.writing.x_height);
+      rows.push(l[0][0][1]);
+    }
+    const lineGaps = rows.slice(1).map((y, i) => y - rows[i]);
+    const mean = a => a.reduce((s, v) => s + v, 0) / a.length, sd = a => Math.sqrt(mean(a.map(v => (v - mean(a)) ** 2)));
+    return { word: mean(words), wordSd: sd(words), line: mean(lineGaps), lineSd: sd(lineGaps) };
+  };
+  const exact = gaps(1.5, 9, 0);
+  assert.ok(Math.abs(exact.word - 1.5) < 1e-6 && exact.wordSd < 1e-6 && Math.abs(exact.line - 9) < 1e-6, JSON.stringify(exact)); // no wobble: exactly as set
+  for (const [ws, ls] of [[0.6, 7], [1, 8], [2.5, 12]]) {
+    const g = gaps(ws, ls, 1);
+    assert.ok(Math.abs(g.word / ws - 1) < 0.15 && g.wordSd > 0.02 * ws, `word spacing ${ws}: ${JSON.stringify(g)}`);
+    assert.ok(Math.abs(g.line / ls - 1) < 0.1 && g.lineSd > 0.01 * ls, `line spacing ${ls}: ${JSON.stringify(g)}`);
+  }
+});

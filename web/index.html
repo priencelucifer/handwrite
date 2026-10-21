@@ -157,8 +157,13 @@
           <div class="slider"><input type="range" id="bias" min="0" max="2" step="0.05"><output for="bias"></output></div></div>
         <div class="row"><label for="wobble">Line wobble</label>
           <div class="slider"><input type="range" id="wobble" min="0" max="2" step="0.05"><output for="wobble"></output></div></div>
+        <div class="row"><label for="wordSpacing" title="Average gap between words, in letter heights. Each gap still varies a little; more with line wobble.">Word spacing</label>
+          <div class="slider"><input type="range" id="wordSpacing" min="0.4" max="3" step="0.05"><output for="wordSpacing"></output></div></div>
         <div class="row"><label for="xh">Letter size</label>
           <div class="unit" data-unit="mm"><input type="number" id="xh" min="1" max="20" step="0.1"></div></div>
+        <div class="row"><label for="lineSpacing" title="Average distance from one line to the next. Each line still varies a little; more with line wobble.">Line spacing</label>
+          <div class="unit" data-unit="mm"><input type="number" id="lineSpacing" min="1" max="100" step="0.5"></div></div>
+        <p class="hint">Spacing is an average: every gap still varies a little like real handwriting, more with higher line wobble.</p>
       </section>
       <section class="card">
         <h2>Page</h2>
