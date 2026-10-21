@@ -25,7 +25,11 @@ Running the file:
 - Long pages (for example A4 on an A1): writing stops where the pen would leave the plate and the text
   continues on the next page. With "Slide the paper" ticked it pauses instead: the pen stops over the last
   thing it wrote; slide the paper toward the back until that mark is under the pen tip.
-- Do a dry run first, and stay with the printer the first time.
+- Do a dry run first (Printing > Dry run: the pen stays 8 mm above the paper), and stay with the printer the first time.
+- Pen ran out mid-page? Leave the paper taped down, fit a new pen, set Printing > Start at line and save again.
+
+Extras: _underline_ words and *second pen* words in the text (the printer pauses to swap pens), lined paper
+(Page > Lines), a header and page numbers on every sheet, and click a word in the preview to write just it again.
 
 Your own handwriting: "My handwriting" > write a sentence > Save style. Styles are kept in this browser
 only; use Export/Import to move them to another computer.

@@ -32,6 +32,11 @@ and word gaps are never the same twice. You can even teach it your own handwriti
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
 - **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.
+- **Lined paper**: pick the ruling and every line of writing sits on a printed line, right of the margin line.
+- **Underlines and a second pen**: `_like this_` is underlined by hand, `*like this*` is written with a second pen after a pen change.
+- **Header and page numbers** at the top of every sheet, written afresh each time.
+- **Rewrite one word**: click it in the preview; the rest of the page keeps its handwriting.
+- **Dry run** (the pen stays 8 mm above the paper) and **start again from line N** when a pen runs dry mid-page.
 - **Pen offset test**: print two marks, measure them with a ruler, and the app works out where your pen sits.
 - **Safety first**: every move is checked against your printer's bed before the file is saved (see [Safety](#safety)).
 - **Printer sounds** (A1, A1 mini, P2S): Bambu's own start and finish tunes, plus a tune when it's time to place the paper or attach the pen.
@@ -86,7 +91,9 @@ A wrong move can crash the print head, so the G-code is checked in layers before
   or borders too big for the page are refused with a plain message.
 - **Every pen-down point** must be on the paper and where the pen can reach without leaving the plate, taking the pen offset into account.
 - **Every coordinate written to the file** is checked once more against the bed and the P1/X1 filament-cutter corner.
-- **Tests** run the output through an independent G-code simulator, including 4,000 random settings, papers and offsets.
+- **The nozzle heater is switched off** right after homing, so the hotend stays cold next to the pen holder.
+- **Tests** run the output through an independent G-code simulator, including 4,000 random settings, papers, offsets,
+  lined paper, dry runs and pen changes.
 
 If something is unsafe, the app refuses to save and says why. Each file starts with a comment naming the printer it is for.
 

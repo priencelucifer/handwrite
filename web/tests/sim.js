@@ -6,7 +6,7 @@ const FACTS = {
   "Bambu Lab P1P / P1S": [256, 256, 250, [0, 0, 18, 28]], "Bambu Lab P2S": [256, 256, 256, null],
   "Bambu Lab X1 Carbon / X1E": [256, 256, 250, [0, 0, 18, 28]],
 };
-const LINE_OK = /^(;[^\n]*|G90|G21|G28|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
+const LINE_OK = /^(;[^\n]*|G90|G21|G28|M104 S0|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
 
 /** Simulate a G-code file; throws on any violation. s: the settings it was made from (for z, paper, offsets). */
 function simulate(gcode, s) {
@@ -14,8 +14,9 @@ function simulate(gcode, s) {
   const [bx, by, bz, ko] = FACTS[model] || [s.printer.bed_x, s.printer.bed_y, s.printer.bed_z, null];
   const { offset_x: ox, offset_y: oy } = s.printer;
   const zd = +s.printer.z_draw.toFixed(2), zl = +s.printer.z_lift.toFixed(2); // as written in the file
+  const dry = s.printer.dry_run === true ? 8 : 0; // a dry run draws 8 mm above the writing height: the pen never touches
   const pw = s.paper.width, ph = s.paper.height; // already oriented by the caller
-  let homed = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
+  let homed = false, heaterOff = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
   const lines = gcode.split("\n");
   assert.strictEqual(lines.pop(), "", "file ends with a newline");
   for (const [n, line] of lines.entries()) {
@@ -25,6 +26,7 @@ function simulate(gcode, s) {
     if (pass) shift = +pass[1];
     if (line.startsWith(";")) continue;
     if (line === "G28") { homed = true; continue; }
+    if (line === "M104 S0") { heaterOff = true; continue; } // the only temperature command allowed: nozzle heater off
     if (line.startsWith("M1006 A")) { // motor music: never while the pen may be on the paper; notes in a sane range
       assert.ok(z === null || z > zd + 1e-9 || draws === 0, `sound with the pen on the paper ${where}`);
       const ch = [...line.matchAll(/[ACE](\d+) [BDF](\d+) [LMN](\d+)/g)].map(m => m.slice(1).map(Number));
@@ -38,6 +40,7 @@ function simulate(gcode, s) {
     if (line.startsWith("G4")) { assert.ok(+line.slice(4) >= 0, where); continue; }
     if (!line.startsWith("G0") && !line.startsWith("G1")) continue;
     assert.ok(homed, `motion before homing: ${where}`);
+    assert.ok(heaterOff, `motion before the nozzle heater is switched off: ${where}`);
     if (firstMotionAfterHome === null) firstMotionAfterHome = m;
     if ("F" in m) assert.ok(m.F > 0 && m.F <= 12000, `feed ${where}`);
     if ("Z" in m) {
@@ -50,9 +53,10 @@ function simulate(gcode, s) {
       assert.ok(z !== null, `XY move before any Z move ${where}`);
       assert.ok(x >= 0 && x <= bx && y >= 0 && y <= by, `nozzle off the bed ${where}`);
       if (ko) assert.ok(!(x >= ko[0] && x <= ko[2] && y >= ko[1] && y <= ko[3]), `nozzle in keep-out ${where}`);
-      if (line.startsWith("G0")) assert.ok(z >= zl - 1e-9 || draws === 0, `travel with the pen down ${where}`);
+      if (dry) assert.ok(z >= zd + dry - 1e-9, `dry run: a move with the pen near the paper ${where}`);
+      if (line.startsWith("G0")) assert.ok(z >= zl + dry - 1e-9 || draws === 0, `travel with the pen down ${where}`);
       else {
-        assert.ok(Math.abs(z - zd) < 1e-9, `drawing move not at writing height ${where}`);
+        assert.ok(Math.abs(z - (zd + dry)) < 1e-9, `drawing move not at writing height ${where}`);
         draws++;
       }
       if (z <= zd + 1e-9) { // pen touches: must be over the plate AND on the paper (for this pass)

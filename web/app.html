@@ -102,6 +102,7 @@
   .pager { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px; box-shadow: var(--shadow); font-weight: 600; }
   .pager[hidden] { display: none; }
+  .row[hidden] { display: none; }
   .progress { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); }
 
   dialog { border: 0; border-radius: 16px; padding: 0; width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
@@ -151,6 +152,7 @@
         <textarea id="text" spellcheck="true" aria-label="Text to write"></textarea>
         <p class="hint" id="capacity" role="status"></p>
         <p class="hint warn" id="skipped" hidden></p>
+        <p class="hint">Marks: <code>_underline these words_</code> · <code>*second pen*</code> (the printer pauses to swap pens).</p>
       </section>
       <section class="card">
         <h2>Handwriting</h2>
@@ -178,12 +180,30 @@
             <label class="unit" data-unit="mm" title="Left and right border"><span aria-hidden="true">↔</span><input type="number" id="margin" min="0" max="50" step="1" aria-label="Left and right border in mm"></label>
             <label class="unit" data-unit="mm" title="Top and bottom border"><span aria-hidden="true">↕</span><input type="number" id="marginY" min="0" max="80" step="1" aria-label="Top and bottom border in mm"></label>
           </div></div>
+        <div class="row"><label for="ruling">Lines</label><select id="ruling"></select></div>
+        <div class="row" id="ruledRow" hidden><label title="Measure your paper with a ruler">Measured</label>
+          <div class="borders">
+            <label class="unit" data-unit="mm" title="From the paper's top edge down to the first printed line"><span aria-hidden="true">↓</span><input type="number" id="firstLine" min="0" max="600" step="0.5" aria-label="First printed line: mm from the paper's top edge"></label>
+            <label class="unit" data-unit="mm" title="From the paper's left edge to the margin line (0 if there is none)"><span aria-hidden="true">→</span><input type="number" id="marginLine" min="0" max="300" step="0.5" aria-label="Margin line: mm from the paper's left edge, 0 if none"></label>
+          </div></div>
+        <div class="row"><label for="header">Header</label><input type="text" id="header" maxlength="60" placeholder="e.g. your name and the date"></div>
+        <div class="row"><label for="pageNumbers">Page numbers</label>
+          <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="pageNumbers"> <span>“Page 1”, “Page 2”… at the top right</span></label></div>
         <div class="row"><label for="sounds">Printer sounds</label>
           <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="sounds"> <span id="soundsNote">Bambu's own start and finish tunes, plus a tune at each pause</span></label></div>
         <div class="row"><label for="slide">Long pages</label>
           <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="slide"> <span>Slide the paper back mid-page to write the part the pen can't reach. Off: the text continues on the next page.</span></label></div>
         <p class="hint">Drag the paper on the build plate to where it will sit. Scroll to zoom.
           <button type="button" class="btn small" id="placePaper" title="Put the paper where the pen reaches, so writing starts at the top border">Place paper automatically</button></p>
+      </section>
+
+      <section class="card">
+        <h2>Printing</h2>
+        <div class="row" style="margin-top:0"><label for="dryRun">Dry run</label>
+          <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="dryRun"> <span>The pen stays 8 mm above the paper: test a run without ink</span></label></div>
+        <div class="row"><label for="startLine">Start at line</label><input type="number" id="startLine" min="1" step="1" value="1"></div>
+        <p class="hint">Pen ran out, or the run stopped? Leave the paper where it is and save this page again from the line it stopped on.
+          To write one word again, click it on the page.</p>
       </section>
     </div>
     <div class="actions">
@@ -205,7 +225,7 @@
       <button class="btn small" id="zoomFit">Fit</button>
     </div>
     <div class="info">
-      <div class="chip legend"><span><i style="color:#e08a00"></i>plate edge</span><span><i style="color:#7aa2d6"></i>writing area</span><span><i style="color:#c92a2a"></i>paper slide</span></div>
+      <div class="chip legend"><span><i style="color:#e08a00"></i>plate edge</span><span><i style="color:#7aa2d6"></i>writing area</span><span><i style="color:#c92a2a"></i>paper slide</span><span>click a word: write it again</span></div>
       <div class="chip" id="summary" hidden></div>
       <div class="chip err" id="error" hidden></div>
     </div>

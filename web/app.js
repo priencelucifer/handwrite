@@ -31,6 +31,9 @@
     view: null,      // {cfg, lines, passes} of the last good layout
     error: "",
     busy: false,
+    dryRun: false,      // this session only: save files that write 8 mm above the paper
+    startLine: 1,       // save the page from this line on (the pen ran out or the run stopped mid-page)
+    rerolls: new Map(), // a word's original seed -> how often it was clicked to be written again
   };
   { // older saves named the 13 originals "9" or "p:9"
     const st = String(state.settings.writing.style), old = /^(?:p:)?(d+)$/.exec(st);
@@ -152,6 +155,21 @@
   // ---------- rendering pipeline ----------
   const inkCache = new Map(); // `${style}|${bias}|${seed}|${word}` -> strokes in x-height units
   const inkKey = (style, bias, w) => `${style}|${bias}|${w.seed}|${w.word}`;
+  const MARKS = "_*"; // _underline_ and *second pen*: kept through cleanText, read by G.words
+  const seedOrigin = new Map(); // seed of a rewritten word -> its original seed (state.rerolls is keyed by that)
+  /** Words clicked to be written again get a fresh seed per click; the layout reports the new seed. */
+  function rerolled(list) {
+    for (const w of list) {
+      const n = state.rerolls.get(w.seed);
+      if (!n) continue;
+      const orig = w.seed, next = v => (v + Math.imul(n, 0x9e3779b9)) >>> 0;
+      w.seed = next(w.seed);
+      if (w.parts) for (const part of w.parts) part.seed = next(part.seed);
+      seedOrigin.set(w.seed, orig);
+    }
+    return list;
+  }
+  const startLine = v => Math.min(Math.max(1, state.startLine), v.lines.length);
   let renderToken = 0, renderTimer = 0;
   const scheduleRender = (delay = 350) => { updateCapacity(); clearTimeout(renderTimer); renderTimer = setTimeout(render, delay); };
 
@@ -159,7 +177,7 @@
   function updateCapacity() {
     let cfg;
     try { cfg = G.resolve(state.settings); } catch { $("capacity").textContent = ""; return null; }
-    const paras = G.words(E.cleanText(state.text).clean, state.seed), n = paras.flat().length;
+    const paras = G.words(E.cleanText(state.text, MARKS).clean, state.seed), n = paras.flat().length;
     const cap = G.capacity(cfg, charWidth(cfg.writing.style), paras);
     cap.pages = Math.max(1, Math.ceil(cap.needed / Math.max(1, cap.lines)));
     const over = n > 0 && cap.pages > G.MAX_PAGES;
@@ -192,10 +210,11 @@
     try { cfg = G.resolve(state.settings); } catch (e) { return fail(e, "Printer settings problem: "); }
     const style = styleOf(cfg.writing.style);
     if (!style) return fail(new Error("That handwriting style is gone. Pick another one."));
-    const { clean, dropped } = E.cleanText(state.text);
+    const { clean, dropped } = E.cleanText(state.text, MARKS), head = E.cleanText(cfg.writing.header, MARKS);
+    for (const c of head.dropped) dropped.add(c);
     $("skipped").hidden = !dropped.size;
     $("skipped").textContent = dropped.size ? `Skipped characters the handwriting can't write: ${[...dropped].join(" ")}` : "";
-    const paras = G.words(clean, state.seed), all = paras.flat();
+    const paras = G.words(clean, state.seed), all = rerolled(paras.flat());
     const cap = updateCapacity();
     // Clearly too long: say so now instead of writing every word first (borderline cases are decided by the real layout).
     if (cap && cap.pages > G.MAX_PAGES * 1.2)
@@ -205,32 +224,56 @@
     if (long) return fail(new Error(`The word "${long.word.slice(0, 20)}…" is too long (${G.MAX_WORD} letters at most).`));
 
     const bias = cfg.writing.bias;
-    const need = [...new Map(all.flatMap(w => w.parts || [w]).filter(w => !inkCache.has(inkKey(style.key, bias, w))).map(w => [inkKey(style.key, bias, w), w])).values()];
-    if (need.length) {
+    const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !inkCache.has(inkKey(style.key, bias, w))).map(w => [inkKey(style.key, bias, w), w])).values()];
+    /** Have the workers write these words into inkCache. False if this render was replaced or failed (fail() shown). */
+    const generate = async list => {
+      if (!list.length) return true;
       let done = 0;
-      setBusy(true, `Writing 0 / ${need.length} words`);
+      setBusy(true, `Writing 0 / ${list.length} words`);
       try {
-        await Promise.all(need.map(w => pool.word(style, w.word, w.seed, bias, false, "page").then(ink => {
+        await Promise.all(list.map(w => pool.word(style, w.word, w.seed, bias, false, "page").then(ink => {
           inkCache.set(inkKey(style.key, bias, w), ink);
-          if (token === renderToken) setBusy(true, `Writing ${++done} / ${need.length} words`);
+          if (token === renderToken) setBusy(true, `Writing ${++done} / ${list.length} words`);
         })));
+        return token === renderToken;
       } catch (e) {
-        if (token !== renderToken || e.message === "cancelled") return;
-        return fail(e, "The handwriting model failed: ");
+        if (token !== renderToken || e.message === "cancelled") return false;
+        fail(e, "The handwriting model failed: ");
+        return false;
+      }
+    };
+    // Header line: every sheet's is written afresh, so its words exist per sheet. Those for the estimated pages are
+    // written with the text; a sheet beyond that asks for its own (layoutPages stops, they're written, it runs again).
+    const withHeader = head.clean.trim() !== "" || cfg.writing.page_numbers;
+    const headerFor = k => G.headerWords(head.clean, cfg.writing.page_numbers, state.seed, k).map(rerolled);
+    const headerAhead = k => Array.from({ length: 3 }, (_, j) => headerFor(k + j).flat()).flat();
+    if (!(await generate(missing([...all, ...(withHeader ? headerAhead(0) : [])])))) return;
+    let pages;
+    for (let attempt = 0; ; attempt++) {
+      if (token !== renderToken) return;
+      if (attempt > G.MAX_PAGES) return fail(new Error("The header words couldn't be written."));
+      try {
+        const rng = E.makeRng((state.seed ^ 0x5bd1e995) >>> 0); // layout randomness, separate from the words'
+        const opts = !withHeader ? {} : { header: k => {
+          const hw = headerFor(k);
+          if (missing(hw.flat()).length) throw Object.assign(new Error("header words needed"), { needPage: k });
+          return hw;
+        } };
+        pages = G.layoutPages(paras, w => inkCache.get(inkKey(style.key, bias, w)), cfg, rng, G.MAX_PAGES, opts).map((lines, k, all) => {
+          try { return { lines, passes: G.planPasses(lines, cfg) }; }
+          catch (e) { if (all.length > 1) e.message = `Page ${k + 1}: ${e.message}`; throw e; }
+        });
+        break;
+      } catch (e) {
+        if (e.needPage === undefined) return fail(e);
+        if (!(await generate(missing(headerAhead(e.needPage))))) return;
       }
     }
-    if (token !== renderToken) return;
-    try {
-      const rng = E.makeRng((state.seed ^ 0x5bd1e995) >>> 0); // layout randomness, separate from the words'
-      const pages = G.layoutPages(paras, w => inkCache.get(inkKey(style.key, bias, w)), cfg, rng).map((lines, k, all) => {
-        try { return { lines, passes: G.planPasses(lines, cfg) }; }
-        catch (e) { if (all.length > 1) e.message = `Page ${k + 1}: ${e.message}`; throw e; }
-      });
-      state.view = { cfg, pages };
-      state.page = Math.min(state.page || 0, pages.length - 1);
-      state.error = "";
-      setBusy(false, "Ready");
-    } catch (e) { return fail(e); }
+    state.view = { cfg, pages };
+    hover = null; // the word boxes are new
+    state.page = Math.min(state.page || 0, pages.length - 1);
+    state.error = "";
+    setBusy(false, "Ready");
     draw(); updateSummary();
   }
 
@@ -256,8 +299,10 @@
     $("error").textContent = state.error;
     const v = cur(), n = state.view ? state.view.pages.length : 0;
     $("pager").hidden = n < 2; $("saveAll").hidden = n < 2;
-    $("save").textContent = n > 1 ? `Save page ${state.page + 1}` : "Save G-code";
-    if (n > 1) { $("pageLabel").textContent = `Page ${state.page + 1} of ${n}`; $("saveAll").textContent = `Save all ${n} pages`; }
+    const tags = [state.dryRun && "dry run", v && startLine(v) > 1 && `from line ${startLine(v)}`].filter(Boolean).join(", ");
+    $("save").textContent = (n > 1 ? `Save page ${state.page + 1}` : "Save G-code") + (tags ? ` (${tags})` : "");
+    if (n > 1) { $("pageLabel").textContent = `Page ${state.page + 1} of ${n}`; $("saveAll").textContent = `Save all ${n} pages` + (state.dryRun ? " (dry run)" : ""); }
+    if (v) $("startLine").max = v.lines.length;
     $("prevPage").disabled = state.page <= 0; $("nextPage").disabled = state.page >= n - 1;
     $("summary").hidden = !v || !!state.error;
     if (!v || state.error) return;
@@ -269,6 +314,8 @@
   }
   const escapeHtml = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  /** True if the file swaps pens: pen 1 and pen 2 (*marked*) strokes in it (only ever in one pass). */
+  const penChange = passes => passes.length === 1 && passes[0].strokes.some(s => s.pen === G.PEN2) && passes[0].strokes.some(s => s.pen !== G.PEN2);
   /** Rough print time: drawing + travel + pen up/down + pauses. */
   function estimate({ cfg, passes }) {
     const pr = cfg.printer, d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -279,11 +326,12 @@
       last = s[s.length - 1]; lifts++;
     }
     const zTime = 2 * Math.abs(pr.z_lift - pr.z_draw) / pr.z_feed * 60 + 2 * pr.settle_ms / 1000;
+    const change = penChange(passes) ? 1 : 0;
     const sec = draw / pr.draw_feed * 60 * 1.3 + travel / pr.travel_feed * 60 * 1.5 + lifts * zTime +
-      pr.paper_pause_s + pr.pen_pause_s + (passes.length - 1) * pr.shift_pause_s + 40; // +40 s homing
+      pr.paper_pause_s + pr.pen_pause_s * (1 + 2 * change) + (passes.length - 1) * pr.shift_pause_s + 40; // +40 s homing
     if (pr.sounds && G.SOUND_PRINTERS.has(pr.model)) { // each tune: a 1 s wait, then its lines (10 ms units, the longest channel)
       const t = name => 1 + G.tuneOf(pr.model, name).reduce((a, s) => a + Math.max(s[1], s[4], s[7]), 0) / 100;
-      return sec + t("start") + t("finish") + (2 + (passes.length - 1)) * (t("pause") + t("resume"));
+      return sec + t("start") + t("finish") + (2 + (passes.length - 1) + change) * (t("pause") + t("resume"));
     }
     return sec;
   }
@@ -343,6 +391,11 @@
     const pX = px => X(p.x + px), pY = py => Y(p.y + p.height - py);
     ctx.fillStyle = "#ffffff"; ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 8;
     ctx.fillRect(pX(0), pY(0), p.width * s, p.height * s); ctx.shadowBlur = 0;
+    if (p.ruling > 0) { // ruled paper: its printed lines and margin line, to check the writing sits on them
+      ctx.setLineDash([]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(90,140,220,.45)";
+      for (let yy = p.first_line; yy < p.height; yy += p.ruling) line(pX(0), pY(yy), pX(p.width), pY(yy));
+      if (p.margin_line > 0) { ctx.strokeStyle = "rgba(220,80,80,.55)"; line(pX(p.margin_line), pY(0), pX(p.margin_line), pY(p.height)); }
+    }
     // shade the part inside the borders that can't be written on (past the pen's reach), page coords [x0, y0, x1, y1]
     const [l, t, r, b] = G.writingArea(cfg), m = p.margin, my = p.margin_y, w = p.width, h = p.height;
     const lost = [[m, my, w - m, t], [m, b, w - m, h - my], [m, t, l, b], [r, t, w - m, b]]
@@ -353,15 +406,20 @@
     // handwriting
     const v = cur();
     if (v) {
-      ctx.setLineDash([]); ctx.strokeStyle = "#1b2a6b"; ctx.fillStyle = "#1b2a6b";
-      ctx.lineWidth = Math.max(0.8, 0.5 * s); ctx.lineCap = ctx.lineJoin = "round";
-      ctx.beginPath();
-      for (const ln of v.lines) for (const st of ln) {
-        ctx.moveTo(pX(st[0][0]), pY(st[0][1]));
-        if (st.length === 1) ctx.lineTo(pX(st[0][0]) + 0.01, pY(st[0][1]));
-        for (let i = 1; i < st.length; i++) ctx.lineTo(pX(st[i][0]), pY(st[i][1]));
-      }
-      ctx.stroke();
+      ctx.setLineDash([]); ctx.lineWidth = Math.max(0.8, 0.5 * s); ctx.lineCap = ctx.lineJoin = "round";
+      const from = startLine(v), paths = [new Path2D(), new Path2D(), new Path2D()]; // already written, pen 1, pen 2
+      v.lines.forEach((ln, k) => {
+        for (const st of ln) {
+          const path = paths[k < from - 1 ? 0 : st.pen === G.PEN2 ? 2 : 1];
+          path.moveTo(pX(st[0][0]), pY(st[0][1]));
+          if (st.length === 1) path.lineTo(pX(st[0][0]) + 0.01, pY(st[0][1]));
+          for (let i = 1; i < st.length; i++) path.lineTo(pX(st[i][0]), pY(st[i][1]));
+        }
+      });
+      ["#c3c8d2", "#1b2a6b", "#c0392b"].forEach((c, j) => { ctx.strokeStyle = c; ctx.stroke(paths[j]); });
+      if (hover) { const [a, b2, c, d] = hover.box; ctx.fillStyle = "rgba(59,91,219,.14)"; ctx.fillRect(pX(a) - 3, pY(b2) - 3, (c - a) * s + 6, (d - b2) * s + 6); }
+      if (from > 1 || document.activeElement === $("startLine")) // line numbers, to pick where to start again
+        v.lines.forEach((ln, k) => label(String(k + 1), pX(G.extent(ln)[0]) - 10, pY(ln.baseline), k < from - 1 ? css("--muted") : "#3b5bdb", "right"));
       // where the paper gets slid between passes
       for (let k = 1; k < v.passes.length; k++) {
         const prevB = G.extent(v.passes[k - 1].strokes)[3], nextT = G.extent(v.passes[k].strokes)[1], yy = (prevB + nextT) / 2;
@@ -393,15 +451,32 @@
     const [x, y] = toBed(e), p = cfg.paper;
     return x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height;
   }
+  /** The word under the pointer on the page shown: {seed, box} from the layout, or null. */
+  function wordAt(e) {
+    const v = cur(), cfg = plateCfg();
+    if (!v || !cfg || state.busy) return null;
+    const [bx, by] = toBed(e), p = cfg.paper, x = bx - p.x, y = p.y + p.height - by, pad = 0.6;
+    for (const ln of v.lines) for (const w of ln.words || []) if (x >= w.box[0] - pad && x <= w.box[2] + pad && y >= w.box[1] - pad && y <= w.box[3] + pad) return w;
+    return null;
+  }
+  let hover = null; // word under the pointer: clicking it writes just that word again
   canvas.addEventListener("pointerdown", e => {
     canvas.setPointerCapture(e.pointerId);
     const p = state.settings.paper;
-    drag = e.button === 0 && onPaper(e) ? { kind: "paper", start: toBed(e), x: p.x, y: p.y } : { kind: "pan", sx: e.clientX, sy: e.clientY, px: view.panX, py: view.panY };
+    drag = e.button === 0 && onPaper(e) ? { kind: "paper", start: toBed(e), x: p.x, y: p.y, sx: e.clientX, sy: e.clientY, moved: false }
+      : { kind: "pan", sx: e.clientX, sy: e.clientY, px: view.panX, py: view.panY };
   });
   canvas.addEventListener("pointermove", e => {
-    canvas.style.cursor = drag ? "grabbing" : onPaper(e) ? "grab" : "default";
-    if (!drag) return;
+    if (!drag) {
+      const w = wordAt(e);
+      if ((w && w.seed) !== (hover && hover.seed)) { hover = w; draw(); }
+      canvas.style.cursor = w ? "pointer" : onPaper(e) ? "grab" : "default";
+      return;
+    }
+    canvas.style.cursor = "grabbing";
     if (drag.kind === "pan") { view.panX = drag.px + e.clientX - drag.sx; view.panY = drag.py + e.clientY - drag.sy; return draw(); }
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return; // still a click, not a drag
+    drag.moved = true; hover = null;
     const cfg = plateCfg(); if (!cfg) return;
     const [x, y] = toBed(e), p = state.settings.paper, pr = cfg.printer;
     // keep at least 20 mm of paper over the plate so it can't be lost
@@ -409,7 +484,21 @@
     p.y = Math.round(Math.min(Math.max(drag.y + y - drag.start[1], 20 - cfg.paper.height), pr.bed_y - 20));
     relayout();
   });
-  canvas.addEventListener("pointerup", () => { if (drag && drag.kind === "paper") scheduleRender(0); drag = null; });
+  canvas.addEventListener("pointerup", e => {
+    if (drag && drag.kind === "paper") {
+      if (drag.moved) scheduleRender(0);
+      else { const w = wordAt(e); if (w) rewriteWord(w.seed); }
+    }
+    drag = null;
+  });
+  canvas.addEventListener("pointerleave", () => { if (hover && !drag) { hover = null; draw(); } });
+  /** Write one word again: it gets the next fresh seed, the rest of the page keeps its handwriting. */
+  function rewriteWord(seed) {
+    const orig = seedOrigin.get(seed) ?? seed;
+    state.rerolls.set(orig, (state.rerolls.get(orig) || 0) + 1);
+    hover = null;
+    scheduleRender(0);
+  }
   canvas.addEventListener("wheel", e => { e.preventDefault(); zoomAt(Math.pow(1.0015, -e.deltaY), e); }, { passive: false });
   function zoomAt(f, e) {
     const r = canvas.getBoundingClientRect(), mx = e ? e.clientX - r.left : r.width / 2, my = e ? e.clientY - r.top : r.height / 2;
@@ -472,7 +561,32 @@
   $("slide").onchange = () => { P_().slide = $("slide").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncSounds);
   syncSounds();
-  $("reroll").onclick = () => { state.seed = (Math.random() * 2 ** 31) | 0; scheduleRender(0); };
+  $("reroll").onclick = () => { state.seed = (Math.random() * 2 ** 31) | 0; state.rerolls.clear(); seedOrigin.clear(); scheduleRender(0); };
+  // ruled paper: how far apart its printed lines are, where the first one is, and its margin line
+  const RULINGS = [[0, "Plain paper"], [6, "Ruled 6 mm"], [7, "Ruled 7 mm"], [7.1, "Ruled 7.1 mm (US college)"], [8, "Ruled 8 mm"],
+    [8.7, "Ruled 8.7 mm (US wide)"], [9, "Ruled 9 mm"], [10, "Ruled 10 mm"]];
+  for (const [mm, text] of RULINGS) $("ruling").add(new Option(text, mm));
+  if (!RULINGS.some(([mm]) => mm === P_().ruling)) $("ruling").add(new Option(`Ruled ${P_().ruling} mm`, P_().ruling));
+  const syncRuling = () => { $("ruling").value = String(P_().ruling); $("ruledRow").hidden = !(P_().ruling > 0); };
+  $("ruling").onchange = () => {
+    P_().ruling = +$("ruling").value;
+    const fit = G.rulingLetters(P_().ruling); // as people write on lined paper, so a tail seldom meets the next line's tall letters
+    if (P_().ruling > 0 && W_().x_height > fit) { W_().x_height = fit; $("xh").value = fit; }
+    syncRuling(); scheduleRender(0);
+  };
+  syncRuling();
+  bindNumber("firstLine", () => P_(), "first_line", 60);
+  bindNumber("marginLine", () => P_(), "margin_line", 60);
+  // header line and page numbers, written at the top of every sheet
+  $("header").value = W_().header;
+  $("header").addEventListener("input", () => { W_().header = $("header").value; scheduleRender(); });
+  $("pageNumbers").checked = W_().page_numbers === true;
+  $("pageNumbers").onchange = () => { W_().page_numbers = $("pageNumbers").checked; scheduleRender(0); };
+  // printing: dry run, and starting again partway down the page (both for this session only)
+  $("dryRun").checked = state.dryRun; $("startLine").value = state.startLine; // a reload may restore the old form state: this session's is off / 1
+  $("dryRun").onchange = () => { state.dryRun = $("dryRun").checked; updateSummary(); };
+  $("startLine").addEventListener("input", () => { state.startLine = Math.max(1, Math.floor(+$("startLine").value) || 1); draw(); updateSummary(); });
+  for (const ev of ["focus", "blur"]) $("startLine").addEventListener(ev, () => draw()); // line numbers show while it's in use
 
   // ---------- handwriting style picker with live previews ----------
   const thumbs = new Map();
@@ -698,28 +812,42 @@
   function f32ToB64(f) { const b = new Uint8Array(f.buffer, f.byteOffset, f.byteLength); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
 
   // ---------- save G-code ----------
+  /** The settings a file is saved with: those shown, plus the dry run when it's ticked (checked like any other). */
+  const outCfg = cfg => state.dryRun ? G.resolve({ ...state.settings, printer: { ...state.settings.printer, dry_run: true } }) : cfg;
+  const tagged = (name, from) => name.replace(/\.gcode$/, `${from > 1 ? `-from-line-${from}` : ""}${state.dryRun ? "-dry-run" : ""}.gcode`);
   $("save").onclick = async () => {
     const v = cur(), n = state.view ? state.view.pages.length : 0;
     if (!v || state.error || state.busy) return;
-    let gcode;
+    let gcode, passes, from = 1;
     try {
       const cfg = G.resolve(state.settings); // the exact settings shown now, checked again
       if (JSON.stringify(cfg) !== JSON.stringify(v.cfg)) { await render(); return $("save").click(); }
-      gcode = G.toGcode(G.planPasses(v.lines, cfg), cfg, [...G.describe(cfg, state.seed), ...(n > 1 ? [`page ${state.page + 1} of ${n}`] : []),
-        `estimated time: about ${eta(v).dur} (including pauses)`]);
-    } catch (e) { return fail(e); }
-    const name = n > 1 ? pageFile(state.page, n) : `handwriting-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.gcode`;
+      const out = outCfg(cfg);
+      from = startLine(v);
+      try { passes = G.planPasses(from > 1 ? v.lines.slice(from - 1) : v.lines, out); }
+      catch (e) { if (from > 1) e.message = `Can't start at line ${from}: ${e.message}`; throw e; }
+      gcode = G.toGcode(passes, out, [...G.describe(out, state.seed), ...(n > 1 ? [`page ${state.page + 1} of ${n}`] : []),
+        ...(from > 1 ? [`starts at line ${from} of the page: lines 1 to ${from - 1} were written before`] : []),
+        `estimated time: about ${eta({ cfg: out, passes }).dur} (including pauses)`]);
+    } catch (e) {
+      if (from > 1) { $("error").hidden = false; $("error").textContent = e.message; return; } // keep the page on screen
+      return fail(e);
+    }
+    const name = tagged(n > 1 ? pageFile(state.page, n) : `handwriting-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.gcode`, from);
     const where = await download(gcode, name, "text/plain");
     if (!where) return;
-    const t = eta(v);
+    const t = eta({ cfg: v.cfg, passes });
     $("savedWhere").textContent = `${where} Only run it on the ${v.cfg.printer.model}. Writing takes about ${t.dur} including the pauses (done around ${t.at} if you start now).`;
-    showSteps(v, []);
+    showSteps({ cfg: v.cfg, passes }, from > 1 ? [`Leave the paper taped where it is. In the first pause the head stops over the first letter of line ${from}: check that it lines up.`] : []);
   };
   function showSteps(v, extra) {
-    const steps = [...extra, "Take the pen out of the holder. The printer homes first, and homing touches the nozzle to the plate.",
-      `Start the file. The head moves over the first letter and waits ${v.cfg.printer.paper_pause_s} s: put the paper where the preview shows and tape it down.`,
-      `The head lowers and waits ${v.cfg.printer.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`];
-    if (v.passes.length > 1) steps.push(G.passNote(v.passes) + ` You have ${v.cfg.printer.shift_pause_s} s each time.`);
+    const pr = v.cfg.printer, steps = [...extra];
+    if (state.dryRun) steps.unshift(`Dry run: the pen is clamped as usual, then every stroke is drawn ${G.DRY_RUN_LIFT} mm above the paper, so nothing gets written.`);
+    steps.push("Take the pen out of the holder. The printer homes first, and homing touches the nozzle to the plate.",
+      `Start the file. The head moves over the first letter and waits ${pr.paper_pause_s} s: put the paper where the preview shows and tape it down.`,
+      `The head lowers and waits ${pr.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`);
+    if (penChange(v.passes)) steps.push(`When the first pen is done, the head rises and waits ${pr.pen_pause_s} s: take that pen out. Then it lowers and waits ${pr.pen_pause_s} s: slide the second pen in until it touches the paper, and clamp it.`);
+    if (v.passes.length > 1) steps.push(G.passNote(v.passes) + ` You have ${pr.shift_pause_s} s each time.`);
     steps.push("Stay with the printer for the first run.");
     $("savedSteps").textContent = "";
     for (const s of steps) { const li = document.createElement("li"); li.textContent = s; $("savedSteps").append(li); }
@@ -735,15 +863,18 @@
     try {
       const cfg = G.resolve(state.settings);
       if (JSON.stringify(cfg) !== JSON.stringify(view.cfg)) { await render(); return $("saveAll").click(); }
-      files = view.pages.map((p, k) => ({ name: pageFile(k, n), text: G.toGcode(G.planPasses(p.lines, cfg), cfg,
-        [...G.describe(cfg, state.seed), `page ${k + 1} of ${n}`, `estimated time: about ${eta({ cfg, passes: p.passes }).dur} (including pauses)`]) }));
+      const out = outCfg(cfg);
+      files = view.pages.map((p, k) => ({ name: tagged(pageFile(k, n), 1), text: G.toGcode(G.planPasses(p.lines, out), out,
+        [...G.describe(out, state.seed), `page ${k + 1} of ${n}`, `estimated time: about ${eta({ cfg: out, passes: p.passes }).dur} (including pauses)`]) }));
     } catch (e) { return fail(e); }
     // A plain download, not the folder picker: Edge/Chrome refuse to let a page pick Downloads itself ("contains system files").
-    saveBlob(makeZip(files), "handwriting-pages.zip");
-    const where = `Saved handwriting-pages.zip (${files[0].name} to ${files[n - 1].name}) to your Downloads folder. Open it and copy the files onto the SD card.`;
+    const zip = `handwriting-pages${state.dryRun ? "-dry-run" : ""}.zip`;
+    saveBlob(makeZip(files), zip);
+    const where = `Saved ${zip} (${files[0].name} to ${files[n - 1].name}) to your Downloads folder. Open it and copy the files onto the SD card.`;
     const all = eta(view.pages.reduce((sum, p) => sum + estimate({ cfg: view.cfg, passes: p.passes }), 0));
     $("savedWhere").textContent = `${where} Only run them on the ${view.cfg.printer.model}. All pages together take about ${all.dur}, plus changing the paper.`;
-    showSteps({ cfg: view.cfg, passes: [] }, [`Print the files in order, ${files[0].name} first. Each page is a complete job: put a fresh sheet in for each one.`]);
+    const changing = view.pages.find(p => penChange(p.passes)); // its passes only tell showSteps to explain the pen change
+    showSteps({ cfg: view.cfg, passes: changing ? changing.passes : [] }, [`Print the files in order, ${files[0].name} first. Each page is a complete job: put a fresh sheet in for each one.`]);
   };
   function saveBlob(blob, name) {
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
@@ -771,7 +902,12 @@
     return new Blob([...parts, ...central, end], { type: "application/zip" });
   }
   // page navigation
-  const goPage = d => { if (!state.view) return; state.page = Math.min(Math.max(state.page + d, 0), state.view.pages.length - 1); draw(); updateSummary(); };
+  const goPage = d => {
+    if (!state.view) return;
+    state.page = Math.min(Math.max(state.page + d, 0), state.view.pages.length - 1);
+    state.startLine = 1; $("startLine").value = 1; // a start line belongs to one page
+    draw(); updateSummary();
+  };
   $("prevPage").onclick = () => goPage(-1);
   $("nextPage").onclick = () => goPage(1);
   /** Save a file: the system Save dialog where supported, otherwise a normal download. Returns a message or "". */

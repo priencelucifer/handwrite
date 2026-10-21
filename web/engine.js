@@ -39,13 +39,14 @@
   for (const [plain, accented] of Object.entries({ a: "áàâäãå", e: "éèêë", i: "íìîï", o: "óòôöõ", u: "úùûü", n: "ñ", c: "ç" }))
     for (const ch of accented) SUBST.set(ch, plain);
 
-  /** Map text into the model alphabet. Returns {clean, dropped: Set of characters that were removed}. */
-  function cleanText(text) {
+  /** Map text into the model alphabet. keep: extra characters to let through, such as layout marks the caller strips
+   *  before writing ("_*"). Returns {clean, dropped: Set of characters that were removed}. */
+  function cleanText(text, keep = "") {
     let clean = "";
     const dropped = new Set();
     for (const ch of text) {
       const c = /\s/.test(ch) && ch !== "\n" ? " " : SUBST.get(ch) ?? ch; // tabs etc. still separate words
-      if (c === "\n" || Array.from(c).every(x => IDX.has(x) && x !== "\x00")) clean += c;
+      if (c === "\n" || (c.length === 1 && keep.includes(c)) || Array.from(c).every(x => IDX.has(x) && x !== "\x00")) clean += c;
       else dropped.add(c);
     }
     return { clean, dropped };

@@ -135,7 +135,7 @@ test("text edge cases", () => {
 test("fuzz: thousands of random setups -> every produced file passes the independent simulator", () => {
   const rng = mulberry(12345), pick = a => a[Math.floor(rng.random() * a.length)], U = (a, b) => a + rng.random() * (b - a);
   const models = Object.keys(G.PRINTERS), papers = Object.keys(G.PAPERS);
-  const vocab = "the quick brown fox jumps over a lazy dog and writes letters home to friends each day HELLO, NASA OK I".split(" ");
+  const vocab = "the quick brown fox jumps over a lazy dog and writes letters home to friends each day HELLO, NASA OK I _the fox_ *dog day* _*both*_".split(" ");
   const tally = { ok: 0, refused: 0 };
   for (let c = 0; c < 4000; c++) {
     const s = structuredClone(G.DEFAULT_SETTINGS);
@@ -145,7 +145,8 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     if (s.paper.size === "Custom") Object.assign(s.paper, { width: U(40, 400), height: U(40, 500) });
     s.paper.orientation = pick(["portrait", "landscape"]);
     Object.assign(s.paper, { x: Math.round(U(-120, 220)), y: Math.round(U(-250, 220)), margin: U(0, 40), slide: rng.random() < 0.5 });
-    Object.assign(s.printer, { offset_x: U(-40, 40), offset_y: U(-40, 40), z_draw: U(2, 40) });
+    Object.assign(s.printer, { offset_x: U(-40, 40), offset_y: U(-40, 40), z_draw: U(2, 40), dry_run: rng.random() < 0.3 });
+    if (rng.random() < 0.4) Object.assign(s.paper, { ruling: U(3, 14), first_line: U(0, 80), margin_line: rng.random() < 0.5 ? U(0, 60) : 0 });
     s.printer.z_lift = s.printer.z_draw + U(0.9, 12);
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
@@ -359,4 +360,148 @@ test("a blank line between paragraphs stays blank when crowded lines get pushed 
   assert.ok(steps.length >= 3 && normal > cfg.writing.line_spacing, `lines pushed apart: ${steps.map(s => s.toFixed(1))}`);
   // the bug this guards against left only ~0.2 of a line between paragraphs
   assert.ok(blank - normal >= cfg.writing.line_spacing * 0.6, `blank line kept: ${steps.map(s => s.toFixed(1))}`);
+});
+
+const zLines = g => g.split("\n").filter(l => /^G1 Z/.test(l)).map(l => +l.match(/Z([\d.]+)/)[1]);
+
+test("the nozzle heater is switched off right after homing, and nothing ever heats", () => {
+  for (const model of Object.keys(G.PRINTERS).filter(m => m !== "Custom")) {
+    const { gcode } = run(withSet({ "printer.model": model }), "Hello there", 1);
+    assert.match(gcode, /^G28\nM104 S0$/m, model);
+    assert.ok(!/^M(104 S[^0]|104 S0\d|109|140|190)/m.test(gcode), `${model}: no heating command`);
+  }
+  assert.match(G.offsetTest(G.DEFAULT_SETTINGS), /^G28\nM104 S0$/m);
+});
+
+test("dry run: the same moves 8 mm higher, with the pen still clamped at the writing height", () => {
+  const text = "Dear friend, this is a dry run of the whole page.\nSecond line here.";
+  const real = run(G.DEFAULT_SETTINGS, text, 3), dry = run(withSet({ "printer.dry_run": true }), text, 3);
+  simulate(dry.gcode, dry.cfg); // the simulator also checks no move comes within 8 mm of the writing height
+  const xy = g => g.split("\n").filter(l => /^G[01] X/.test(l)).map(l => l.replace(/ F\d+$/, ""));
+  assert.deepEqual(xy(dry.gcode), xy(real.gcode), "same path");
+  const zd = dry.cfg.printer.z_draw, zs = zLines(dry.gcode);
+  assert.strictEqual(zs.filter(v => Math.abs(v - zd) < 1e-9).length, 1, "lowered to the writing height once, to clamp the pen");
+  assert.ok(zs.includes(+(zd + G.DRY_RUN_LIFT).toFixed(2)), "writes 8 mm higher");
+  assert.match(dry.gcode, /^; DRY RUN/m);
+  assert.ok(!/DRY RUN/.test(real.gcode));
+  assert.ok(!/DRY RUN/.test(G.offsetTest(withSet({ "printer.dry_run": true }))), "the offset test always draws");
+  // the higher writing must still fit under the printer's ceiling (A1 mini: 180 mm)
+  const tall = { "printer.model": "Bambu Lab A1 mini", "printer.z_draw": 150, "printer.z_lift": 165 };
+  G.resolve(withSet(tall));
+  assert.throws(() => G.resolve(withSet({ ...tall, "printer.dry_run": true })), G.WriteError);
+});
+
+test("each line records where its words landed, for clicking a word in the preview", () => {
+  const cfg = G.resolve(G.DEFAULT_SETTINGS), rng = mulberry(4);
+  const paras = G.words("one two three four five six seven eight nine ten eleven twelve thirteen fourteen", 4);
+  const lines = G.layout(paras, fakeInk(rng), cfg, rng);
+  assert.ok(lines.length > 1);
+  assert.deepEqual(lines.flatMap(l => l.words.map(w => w.seed)), paras.flat().map(w => w.seed));
+  for (const l of lines) {
+    const all = G.extent(l);
+    for (const { box } of l.words) assert.ok(box[0] >= all[0] - 1e-9 && box[2] <= all[2] + 1e-9 && box[1] >= all[1] - 1e-9 && box[3] <= all[3] + 1e-9);
+    for (let j = 1; j < l.words.length; j++) assert.ok(l.words[j].box[0] > l.words[j - 1].box[2], "left to right, not overlapping");
+  }
+});
+
+test("ruled paper: every line sits on a printed line, right of the margin line, even at full wobble", () => {
+  const text = Array.from({ length: 7 }, (_, p) => "the quick brown fox jumps over a lazy dog ".repeat(1 + p % 3).trim()).join("\n");
+  const steps = [];
+  for (const [ruling, first, marginLine, wobble, seed] of [[8, 20, 25, 1, 1], [7.1, 30.5, 0, 2, 2], [10, 12, 30, 2, 3], [7, 40, 20, 0, 4]]) {
+    const cfg = G.resolve(withSet({ "paper.ruling": ruling, "paper.first_line": first, "paper.margin_line": marginLine,
+      "writing.wobble": wobble, "writing.x_height": 2.5, "paper.margin": 8 }));
+    const rng = mulberry(seed), pages = G.layoutPages(G.words(text, seed), fakeInk(rng), cfg, rng);
+    const grid = G.lineGrid(cfg);
+    assert.ok(grid.ruled && grid.first >= G.writingArea(cfg)[1] + 2 * 2.5 - 1e-9 && grid.first - ruling < Math.max(first, G.writingArea(cfg)[1] + 5) + 1e-9,
+      `first printed line with room above: ${grid.first}`);
+    for (const lines of pages) {
+      assert.ok(lines[0].baseline >= grid.first - 1e-9);
+      for (const l of lines) {
+        const k = (l.baseline - first) / ruling;
+        assert.ok(Math.abs(k - Math.round(k)) < 1e-6, `baseline ${l.baseline} on a printed line (${ruling} mm from ${first})`);
+        if (marginLine) assert.ok(G.extent(l)[0] >= marginLine + G.MARGIN_LINE_GAP - 1e-9, "right of the margin line");
+      }
+      simulate(G.toGcode(G.planPasses(lines, cfg), cfg, []), cfg);
+      steps.push(...lines.slice(1).map((l, j) => l.baseline - lines[j].baseline));
+    }
+  }
+  // lines go one printed line apart: tails may touch the next line, so a line seldom has to skip one
+  const one = steps.filter(d => [8, 7.1, 10, 7].some(r => Math.abs(d - r) < 1e-6)).length;
+  assert.ok(one >= 0.9 * steps.length, `${one} of ${steps.length} lines one printed line below the last`);
+  assert.throws(() => G.resolve(withSet({ "paper.ruling": 6, "writing.x_height": 4.5 })), /too big for lines 6 mm apart: use 1.7 mm letters/);
+  assert.throws(() => G.resolve(withSet({ "paper.ruling": 8, "paper.first_line": 300 })), G.WriteError);
+  // the capacity estimate counts printed lines
+  const cap = G.capacity(G.resolve(withSet({ "paper.ruling": 8, "paper.first_line": 20, "writing.x_height": 2.5 })), 0.75);
+  assert.ok(cap.lines >= 18 && cap.lines <= 23, `A5 with 8 mm lines: ${cap.lines}`);
+});
+
+test("_underline_ and *second pen* marks: parsed per word, underlined under the words, pen 2 after a pen change", () => {
+  const ws = G.words("_Answer 1:_ the *red words* here_ and_ plain", 1)[0];
+  assert.deepEqual(ws.map(w => [w.word, !!w.underline, w.pen || 1]), [["Answer", true, 1], ["1:", true, 1], ["the", false, 1],
+    ["red", false, 2], ["words", false, 2], ["here", false, 1], ["and", true, 1], ["plain", false, 1]]);
+  assert.strictEqual(ws[0].seed, G.words("Answer", 1)[0][0].seed, "marks don't change a word's handwriting");
+  assert.deepEqual(G.words("*open to the end\nnext", 1).map(p => p.map(w => w.pen || 1)), [[2, 2, 2, 2], [1]], "marks end with the line");
+
+  // underline: one stroke per run, under the words (wobble 0: exactly 0.3 letter heights below the baseline)
+  const cfg = G.resolve(withSet({ "writing.wobble": 0 })), rng = mulberry(2), xh = cfg.writing.x_height;
+  const l = G.layout(G.words("_Heading here_ then plain words", 2), fakeInk(rng), cfg, rng)[0];
+  assert.strictEqual(l.words.length, 5);
+  const extra = l.filter(s => s.every(p => Math.abs(p[1] - (l.baseline + 0.3 * xh)) < 1e-9));
+  assert.strictEqual(extra.length, 1, "one underline");
+  const [x0, , x1] = G.extent([extra[0]]);
+  assert.ok(x0 <= l.words[0].box[0] && x1 >= l.words[1].box[2] && x1 < l.words[2].box[0], "under the two heading words only");
+
+  // pen 2: all of pen 1 first, then a pen change (head up, pen 1 out; head down, pen 2 in), then pen 2
+  const out = run(G.DEFAULT_SETTINGS, "Plain words first, *then the red part* and plain again.\nMore plain text.", 6);
+  simulate(out.gcode, out.cfg);
+  const g = out.gcode.split("\n"), change = g.indexOf("; PEN CHANGE: take pen 1 out of the holder");
+  assert.ok(change > 0, "a pen change");
+  const pr = out.cfg.printer, touch = `G1 Z${pr.z_draw.toFixed(2)} F${pr.z_feed}`;
+  const pen2 = out.passes[0].strokes.filter(s => s.pen === G.PEN2).length, pen1 = out.passes[0].strokes.length - pen2;
+  assert.ok(pen1 > 0 && pen2 > 0);
+  assert.strictEqual(g.slice(0, change).filter(x => x === touch).length, 1 + pen1, "clamp + every pen-1 stroke before the change");
+  assert.strictEqual(g.slice(change).filter(x => x === touch).length, 1 + pen2, "clamp pen 2 + every pen-2 stroke after");
+  assert.match(g[change - 2], new RegExp(`^G1 Z${Math.max(pr.z_draw + G.CLEARANCE, pr.z_lift).toFixed(2)}`), "head up before moving to pen 2's first letter");
+  assert.match(g[change - 1], /^G0 X/);
+  // only pen 2 on the page: nothing to change; a second pen and a paper slide can't be combined
+  assert.ok(!/PEN CHANGE/.test(run(G.DEFAULT_SETTINGS, "*all of it in red*", 6).gcode));
+  const a4 = withSet({ "paper.size": "A4", "paper.x": 23, "paper.y": -40, "paper.slide": true });
+  let n = 20;
+  while (run(a4, Array(n).fill("line of red words").join("\n"), 4).passes.length < 2) n++; // marks don't change the layout
+  assert.throws(() => run(a4, Array(n).fill("line of *red* words").join("\n"), 4), /second pen/);
+});
+
+test("header and page numbers: the first line of every sheet, header from the left, page number ending at the right", () => {
+  const cfg = G.resolve(withSet({ "writing.header": "Sam Smith 21 Oct", "writing.page_numbers": true })), xh = cfg.writing.x_height;
+  const rng = mulberry(9), ink = fakeInk(rng), header = k => G.headerWords("Sam Smith 21 Oct", true, 9, k);
+  const text = Array.from({ length: 40 }, () => "the quick brown fox jumps over the lazy dog").join("\n");
+  const pages = G.layoutPages(G.words(text, 9), ink, cfg, rng, G.MAX_PAGES, { header });
+  assert.ok(pages.length >= 2);
+  const [left, , right] = G.writingArea(cfg);
+  pages.forEach((lines, k) => {
+    const h = lines[0], [hl, hr] = header(k);
+    assert.deepEqual(h.words.map(w => w.seed), [...hl, ...hr].map(w => w.seed), `sheet ${k + 1}: header words`);
+    assert.ok(h.words[0].box[0] >= left - 1e-9 && h.words[0].box[0] < left + 3 * xh, "header starts at the left");
+    const last = h.words[h.words.length - 1].box[2];
+    assert.ok(last <= right + 1e-9 && last > right - 4 * xh, `page number ends at the right: ${last} vs ${right}`);
+    assert.ok(lines[1].baseline >= h.baseline + cfg.writing.line_spacing - 1e-9, "the text starts a line below");
+    simulate(G.toGcode(G.planPasses(lines, cfg), cfg, []), cfg);
+  });
+  assert.deepEqual(G.headerWords("", true, 9, 1).flat().map(w => w.word), ["Page", "2"]);
+  assert.notStrictEqual(G.headerWords("Sam", false, 9, 0)[0][0].seed, G.headerWords("Sam", false, 9, 1)[0][0].seed, "written afresh on each sheet");
+  assert.strictEqual(G.capacity(cfg, 0.75).lines, G.capacity(G.resolve(G.DEFAULT_SETTINGS), 0.75).lines - 1, "a line kept for it");
+  assert.throws(() => G.layoutPages(G.words("hi", 1), ink, cfg, mulberry(1), 50, { header: k => G.headerWords("ab ".repeat(30), true, 1, k) }), /header doesn't fit/);
+  assert.throws(() => G.resolve(withSet({ "writing.header": "x".repeat(81) })), G.WriteError);
+});
+
+test("starting at line N: only lines N onward, and pause 1 stops over line N's first letter", () => {
+  const cfg = G.resolve(G.DEFAULT_SETTINGS), rng = mulberry(5);
+  const lines = G.layout(G.words(Array(6).fill("some words on a line").join("\n"), 5), fakeInk(rng), cfg, rng);
+  const from = 3, gcode = G.toGcode(G.planPasses(lines.slice(from - 1), cfg), cfg, [`resumes at line ${from}`]);
+  simulate(gcode, cfg);
+  const first = lines[from - 1][0][0], p = cfg.paper, pr = cfg.printer;
+  const at = `X${(p.x + first[0] - pr.offset_x).toFixed(2)} Y${(p.y + p.height - first[1] - pr.offset_y).toFixed(2)}`;
+  assert.ok(gcode.split("\n").find(l => l.startsWith("G0 X")).includes(at), "head waits over line 3's first letter");
+  const strokes = lines.slice(from - 1).reduce((n, l) => n + l.length, 0), touch = `G1 Z${pr.z_draw.toFixed(2)} F${pr.z_feed}`;
+  assert.strictEqual(gcode.split("\n").filter(x => x === touch).length, 1 + strokes, "lines 1 and 2 not written again");
 });

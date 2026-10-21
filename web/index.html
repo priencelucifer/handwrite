@@ -188,6 +188,11 @@
   table.ref tr.group th { background: var(--panel-2); font-size: 13.5px; color: var(--text); }
   .table-scroll { overflow-x: auto; }
 
+  .extras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .extras svg { display: block; width: 100%; height: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; margin: 0 0 14px; }
+  .extras p { margin: 0; color: var(--muted); font-size: 15px; }
+  @media (max-width: 960px) { .extras { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .extras { grid-template-columns: 1fr; } }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
   @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
   ol.plain { margin: 0; padding-left: 22px; } ol.plain li { margin: 6px 0; }
@@ -215,7 +220,7 @@
       Handwrite
     </a>
     <nav aria-label="Guide">
-      <a href="#how">How it works</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#faq">FAQ</a>
+      <a href="#how">How it works</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#more">Extras</a><a href="#faq">FAQ</a>
     </nav>
     <a class="btn primary small" href="app.html">Open the app</a>
   </div>
@@ -253,16 +258,16 @@
 
       <h3 style="margin-top:44px">A quick tour of the app</h3>
       <div class="tour">
-        <img src="guide-app.png" alt="The Handwrite app: text box, handwriting styles and sliders on the left, the build-plate preview with the written page on the right" width="1500" height="860" loading="lazy">
-        <span class="pin" style="left:20%;top:14%">1</span><span class="pin" style="left:21.5%;top:47%">2</span><span class="pin" style="left:21%;top:90%">3</span>
-        <span class="pin" style="left:42.8%;top:18.6%">4</span><span class="pin" style="left:25%;top:96%">5</span><span class="pin" style="left:90.4%;top:5%">6</span>
-        <span class="pin" style="left:73%;top:93%">7</span>
+        <img src="guide-app.png" alt="The Handwrite app: text box, handwriting styles and sliders on the left, the build-plate preview with the written page on the right" width="1500" height="1000" loading="lazy">
+        <span class="pin" style="left:20%;top:12%">1</span><span class="pin" style="left:21.5%;top:46%">2</span><span class="pin" style="left:23%;top:80.6%">3</span>
+        <span class="pin" style="left:39.3%;top:17.8%">4</span><span class="pin" style="left:24.5%;top:97%">5</span><span class="pin" style="left:90.4%;top:4%">6</span>
+        <span class="pin" style="left:83%;top:94.5%">7</span>
       </div>
       <ul class="legend">
         <li><b class="n">1</b><span><b>Text.</b> Type or paste what you want written. Characters the model can't write are listed under it.</span></li>
         <li><b class="n">2</b><span><b>Handwriting.</b> Click a style to use it.</span></li>
         <li><b class="n">3</b><span><b>Sliders and sizes.</b> Neatness, line wobble, word spacing, letter size and line spacing. <a href="#settings">What each one does</a>.</span></li>
-        <li><b class="n">4</b><span><b>Build-plate preview.</b> The page as it will be written. Drag the paper, scroll to zoom.</span></li>
+        <li><b class="n">4</b><span><b>Build-plate preview.</b> The page as it will be written. Drag the paper, scroll to zoom, click a word to write it again.</span></li>
         <li><b class="n">5</b><span><b>New version / Save G-code.</b> New version rewrites the same text with fresh handwriting. Save G-code makes the file.</span></li>
         <li><b class="n">6</b><span><b>Printer settings.</b> The pen offset, pen heights, pauses and speeds.</span></li>
         <li><b class="n">7</b><span><b>Time estimate.</b> How long the page takes, including the pauses.</span></li>
@@ -394,7 +399,7 @@
       </figure>
       <p class="note">Change the pause lengths in <span class="ui">Printer settings → Pauses during printing</span>. For long pages with <span class="ui">Long pages</span> ticked,
         there's a third pause: the pen stops over the last mark it wrote; slide the paper toward the back until that mark is right under the pen tip.</p>
-      <p class="note warn"><b>Do a dry run first.</b> Raise <span class="ui">Writing height</span> by 5–10 mm so the pen stays above the paper, and watch the whole run with a hand near the stop button.</p>
+      <p class="note warn"><b>Do a dry run first.</b> Tick <span class="ui">Printing → Dry run</span> and save: the pen is clamped as usual, then stays 8 mm above the paper the whole way. Watch it with a hand near the stop button.</p>
     </div>
   </section>
 
@@ -456,6 +461,11 @@
           <tr><td>Border ↔ / ↕</td><td>Blank margin left and right (↔) and top and bottom (↕) of the page.</td><td>15 mm · 15 mm</td></tr>
           <tr><td>Printer sounds</td><td>Bambu's own start and finish tunes, plus a tune at each pause. A1, A1 mini and P2S only.</td><td>On</td></tr>
           <tr><td>Long pages</td><td>For pages longer than the pen reaches (A4 on an A1). Off: the text continues on the next page. On: the printer pauses mid-page so you can slide the paper back.</td><td>Off</td></tr>
+          <tr><td>Lines</td><td>Plain paper, or the ruling of lined paper (6 to 10 mm). With lined paper, measure where its first printed line (↓ from the top edge) and margin line (→ from the left edge) are: every line of writing then sits on a printed line. Picking one also sets letters that suit it (2.3 mm for 8 mm lines).</td><td>Plain paper</td></tr>
+          <tr><td>Header · Page numbers</td><td>A line at the top of every sheet: your header text on the left, “Page 1”, “Page 2”… on the right. Each sheet's is written afresh.</td><td>Off</td></tr>
+          <tr class="group"><th colspan="3">Printing (left panel)</th></tr>
+          <tr><td>Dry run</td><td>Saves files that do everything except write: the pen is clamped as usual, then stays 8 mm above the paper.</td><td>Off</td></tr>
+          <tr><td>Start at line</td><td>Saves this page from that line on, after the pen ran out or the run stopped. Lines above it turn grey in the preview and aren't written again.</td><td>1</td></tr>
           <tr><td>New version</td><td>Writes the same text again with fresh handwriting and layout. Use it if a word comes out garbled.</td><td></td></tr>
           <tr><td>Save G-code · Save all pages</td><td>Saves the page on screen, or every page as a zip (1_page.gcode, 2_page.gcode, …). Print them in order with a fresh sheet each time.</td><td></td></tr>
           <tr class="group"><th colspan="3">Printer settings → Pauses during printing</th></tr>
@@ -476,15 +486,82 @@
     </div>
   </section>
 
+  <section class="block" id="more">
+    <div class="wrap">
+      <p class="kicker">More you can do</p>
+      <h2>Lined paper, two pens and other extras</h2>
+      <p class="intro">Small things that save a page, or make it look more like your own notebook.</p>
+      <div class="extras">
+        <div class="card">
+          <svg viewBox="0 0 220 110" aria-hidden="true">
+            <path d="M0 34H220M0 56H220M0 78H220M0 100H220" stroke="rgba(90,140,220,.5)"/><path d="M36 0V110" stroke="rgba(220,80,80,.65)"/>
+            <g fill="var(--ink)" opacity=".8"><rect x="44" y="26" width="38" height="8" rx="3"/><rect x="88" y="26" width="24" height="8" rx="3"/><rect x="118" y="26" width="52" height="8" rx="3"/>
+              <rect x="44" y="48" width="30" height="8" rx="3"/><rect x="80" y="48" width="48" height="8" rx="3"/><rect x="134" y="48" width="34" height="8" rx="3"/><rect x="174" y="48" width="22" height="8" rx="3"/>
+              <rect x="44" y="70" width="44" height="8" rx="3"/><rect x="94" y="70" width="28" height="8" rx="3"/></g>
+          </svg>
+          <h3>Lined paper</h3>
+          <p>Under <span class="ui">Page → Lines</span>, pick your paper's ruling, then measure two things with a ruler: how far its first printed line is below the top edge, and where its margin line is. Every line of writing then sits on a printed line, right of the margin, and the letter size drops to suit the lines if it was bigger.</p>
+        </div>
+        <div class="card">
+          <svg id="marksDemo" viewBox="0 0 220 110" aria-hidden="true"></svg>
+          <h3>Underline, and a second pen</h3>
+          <p>Type <code>_like this_</code> to underline words with a hand-drawn line, and <code>*like this*</code> to write them with a second pen, a red one say. The printer writes everything in the first pen, then lifts so you can swap pens, and writes the rest.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 220 110" aria-hidden="true">
+            <g fill="var(--ink)" opacity=".85"><rect x="16" y="14" width="34" height="8" rx="3"/><rect x="55" y="14" width="40" height="8" rx="3"/><rect x="160" y="14" width="28" height="8" rx="3"/><rect x="193" y="14" width="10" height="8" rx="3"/></g>
+            <g fill="#c5cde0"><rect x="16" y="40" width="44" height="7" rx="3"/><rect x="66" y="40" width="30" height="7" rx="3"/><rect x="102" y="40" width="56" height="7" rx="3"/><rect x="164" y="40" width="38" height="7" rx="3"/>
+              <rect x="16" y="60" width="36" height="7" rx="3"/><rect x="58" y="60" width="50" height="7" rx="3"/><rect x="114" y="60" width="40" height="7" rx="3"/>
+              <rect x="16" y="80" width="52" height="7" rx="3"/><rect x="74" y="80" width="34" height="7" rx="3"/><rect x="114" y="80" width="46" height="7" rx="3"/><rect x="166" y="80" width="30" height="7" rx="3"/></g>
+            <text x="16" y="34" class="lbl-dark" style="font-size:8px">your header</text><text x="203" y="34" class="lbl-dark" style="font-size:8px" text-anchor="end">Page 2</text>
+          </svg>
+          <h3>Header and page numbers</h3>
+          <p>Fill in <span class="ui">Page → Header</span> (your name and the date, say) and tick <span class="ui">Page numbers</span>. Every sheet starts with that line, written afresh each time, with “Page 1”, “Page 2” and so on at the right.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 220 110" aria-hidden="true">
+            <g fill="#c5cde0"><rect x="16" y="30" width="40" height="9" rx="3"/><rect x="62" y="30" width="30" height="9" rx="3"/><rect x="146" y="30" width="44" height="9" rx="3"/>
+              <rect x="16" y="62" width="52" height="9" rx="3"/><rect x="74" y="62" width="34" height="9" rx="3"/><rect x="114" y="62" width="40" height="9" rx="3"/></g>
+            <rect x="94" y="24" width="48" height="21" rx="4" fill="rgba(59,91,219,.16)" stroke="var(--accent)"/><rect x="98" y="30" width="40" height="9" rx="3" fill="var(--ink)"/>
+            <path d="M126 40l0 22 5-5 4 9 4-2-4-9 7 0z" fill="#fff" stroke="#1c2230" stroke-width="1.4" stroke-linejoin="round"/>
+          </svg>
+          <h3>Write one word again</h3>
+          <p>Point at a word in the preview and click it: just that word is written again, and the rest of the page keeps its handwriting. Click again for another version, or use <span class="ui">New version</span> for the whole page.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 220 110" aria-hidden="true">
+            <g fill="#d3d8e0"><rect x="34" y="12" width="60" height="7" rx="3"/><rect x="100" y="12" width="70" height="7" rx="3"/><rect x="34" y="28" width="80" height="7" rx="3"/><rect x="120" y="28" width="40" height="7" rx="3"/><rect x="34" y="44" width="50" height="7" rx="3"/><rect x="90" y="44" width="38" height="7" rx="3"/></g>
+            <g fill="var(--ink)" opacity=".85"><rect x="34" y="60" width="44" height="7" rx="3"/><rect x="84" y="60" width="64" height="7" rx="3"/><rect x="34" y="76" width="70" height="7" rx="3"/><rect x="110" y="76" width="44" height="7" rx="3"/><rect x="34" y="92" width="52" height="7" rx="3"/></g>
+            <text x="26" y="67" class="dim-text" style="font-size:10px" text-anchor="end">4 →</text>
+          </svg>
+          <h3>Start again from a line</h3>
+          <p>If the pen runs dry or the run stops, leave the paper taped down, fit a new pen and set <span class="ui">Printing → Start at line</span> to the line it stopped on. The lines above it turn grey and aren't written again.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 220 110" aria-hidden="true">
+            <rect x="10" y="92" width="200" height="8" rx="2" class="plate"/><rect x="40" y="88" width="140" height="4" fill="var(--paper)" stroke="#c9ced6"/>
+            <rect x="96" y="18" width="34" height="30" rx="5" class="head-body"/><path d="M108 48h10l-5 8z" fill="#9aa3b2"/>
+            <rect x="82" y="16" width="10" height="44" rx="2" class="pen-body"/><path d="M83 60h8l-4 6z" class="pen-tip"/>
+            <path class="dim" d="M70 66V88 M66 66H74 M66 88H74"/><text x="62" y="81" class="dim-text" style="font-size:10px" text-anchor="end">8 mm</text>
+          </svg>
+          <h3>Dry run</h3>
+          <p>Tick <span class="ui">Printing → Dry run</span> to save a file that does everything except write: the pen is clamped as usual, then stays 8 mm above the paper. Check where it goes before you use any ink.</p>
+        </div>
+      </div>
+      <p class="note">Every file also switches the nozzle heater off right after homing, so the hotend stays cold next to your pen holder.</p>
+    </div>
+  </section>
+
   <section class="block" id="faq">
     <div class="wrap">
       <p class="kicker">Troubleshooting</p>
       <h2>Questions</h2>
       <details><summary>The pen goes off the front of the plate on the last lines</summary><p>The pen offset is missing or wrong. Run the <a href="#calibrate">offset test</a>, save the offset, then save your G-code again: files saved before still use the old offset.</p></details>
       <details><summary>Not all of my text is on the page</summary><p>It continues on the next page. Use the arrows above the preview to see each page and <span class="ui">Save all pages</span> to get them all. For one long A4 page instead, tick <span class="ui">Long pages</span> and slide the paper when asked.</p></details>
-      <details><summary>A word looks garbled or has a stray mark</summary><p>The model occasionally slips. Click <span class="ui">New version</span> to write the page again, or raise <span class="ui">Neatness</span> a little.</p></details>
+      <details><summary>A word looks garbled or has a stray mark</summary><p>The model occasionally slips. Click that word in the preview to write just it again, or <span class="ui">New version</span> for the whole page. Raising <span class="ui">Neatness</span> a little also helps.</p></details>
+      <details><summary>The pen ran out halfway down the page</summary><p>Leave the paper taped where it is. Fit a new pen, set <span class="ui">Printing → Start at line</span> to the line it stopped on and save again: the new file writes from that line on, starting over its first letter.</p></details>
       <details><summary>Some characters are missing</summary><p>The model knows letters, digits and <code>! " # ' ( ) , - . : ; ?</code>. Accents are dropped (é becomes e), capital Q, X and Z are written lowercase, and anything else is skipped. The app lists what it skipped under the text box.</p></details>
-      <details><summary>The nozzle shows a temperature</summary><p>The G-code never heats anything: it only moves, waits and plays sounds. Heat on the screen is the printer's own (left over from a print, or its homing routine). If your pen holder is printed in PLA, keep it away from the hotend.</p></details>
+      <details><summary>The nozzle shows a temperature</summary><p>The G-code never heats anything, and it switches the nozzle heater off right after homing. Any heat you still see is left over from a print and cools down by itself. If your pen holder is printed in PLA, keep it away from the hotend.</p></details>
       <details><summary>Is the G-code safe for my printer?</summary><p>Every setting is range-checked, and every move in the file is checked against the chosen printer's bed (and the P1/X1 filament-cutter corner) before it is saved. If anything is unsafe, the app refuses to save and says why. Only run a file on the printer named at the top of it, and do a dry run first.</p></details>
     </div>
   </section>
@@ -567,6 +644,11 @@ if (STROKES) {
   const k = 165 / (STROKES.hero.w + 8), first = ink(el("g", { transform: "translate(96 80)" }, page), STROKES.hero, "ink", 165)[0].getPointAtLength(0);
   document.getElementById("firstLetter").setAttribute("cx", 96 + first.x * k);
   document.getElementById("firstLetter").setAttribute("cy", 80 + first.y * k);
+  const marks = document.getElementById("marksDemo"), word = STROKES.neat[2], km = 150 / (word.w + 8);
+  ink(el("g", { transform: "translate(35 10)" }, marks), word, "ink", 150);
+  el("path", { d: `M33 ${14 + word.h * km} q40 2 76 0 t78 -1`, class: "ink" }, marks); // the hand-drawn underline
+  const red = ink(el("g", { transform: `translate(35 ${24 + word.h * km})` }, marks), word, "ink", 150);
+  red.forEach(p => { p.style.stroke = "#c0392b"; });
   const inset = ink(document.getElementById("insetInk"), STROKES.neat[2], "ink draw", 124);
   inset.forEach((p, i) => { p.setAttribute("pathLength", "1"); p.style.transitionDelay = `${0.3 + i * 0.12}s`; });
 }
