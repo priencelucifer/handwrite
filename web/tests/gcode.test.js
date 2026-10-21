@@ -85,7 +85,7 @@ test("strokes made for the A1 are refused on the smaller A1 mini", () => {
 test("A4 on the A1 is split into passes with a safe slide sequence", () => {
   let out; // the fewest lines that no longer fit over the plate in one go
   for (let n = 20; n < 40 && !(out && out.passes.length === 2); n++)
-    out = run(withSet({ "paper.size": "A4", "paper.x": 23, "paper.y": -40 }), Array(n).fill("line of words").join("\n"), 4);
+    out = run(withSet({ "paper.size": "A4", "paper.x": 23, "paper.y": -40, "paper.slide": true }), Array(n).fill("line of words").join("\n"), 4);
   const { gcode, cfg, passes } = out;
   assert.strictEqual(passes.length, 2);
   simulate(gcode, cfg);
@@ -135,7 +135,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     s.paper.size = pick(papers);
     if (s.paper.size === "Custom") Object.assign(s.paper, { width: U(40, 400), height: U(40, 500) });
     s.paper.orientation = pick(["portrait", "landscape"]);
-    Object.assign(s.paper, { x: Math.round(U(-120, 220)), y: Math.round(U(-250, 220)), margin: U(0, 40) });
+    Object.assign(s.paper, { x: Math.round(U(-120, 220)), y: Math.round(U(-250, 220)), margin: U(0, 40), slide: rng.random() < 0.5 });
     Object.assign(s.printer, { offset_x: U(-40, 40), offset_y: U(-40, 40), z_draw: U(2, 40) });
     s.printer.z_lift = s.printer.z_draw + U(0.9, 12);
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3) });
@@ -306,4 +306,48 @@ test("automatic paper placement: writing starts at the top border where the pen 
         checked++;
       }
   assert.ok(checked > 100 && refused <= 4, `${checked} setups checked, ${refused} refused for the cutter corner`);
+});
+
+test("without sliding, the pen stops where it would leave the plate and the text goes on the next page", () => {
+  const oneStroke = () => [[[0, 0], [0.5, 1], [2.4, 0.2]]];
+  const text = Array.from({ length: 60 }, () => "some words on a line here").join("\n");
+  for (const oy of [0, -27, -38]) {
+    const s = withSet({ "paper.size": "A4", "printer.offset_y": oy, "writing.wobble": 1 });
+    Object.assign(s.paper, G.placePaper(G.resolve(s)));
+    const cfg = G.resolve(s), pages = G.layoutPages(G.words(text, 1), oneStroke, cfg, mulberry(2));
+    for (const lines of pages) {
+      const passes = G.planPasses(lines, cfg), gcode = G.toGcode(passes, cfg, ["t"]);
+      assert.strictEqual(passes.length, 1, `offset ${oy}: one pass, no slide pause`);
+      assert.ok(!/slide the paper/.test(gcode), "no slide instruction in the file");
+      simulate(gcode, cfg);
+      // every pen-down point (nozzle + offset) stays on the plate, at least the edge inset from the front edge
+      let z = 99, low = Infinity;
+      for (const l of gcode.split("\n")) {
+        const zm = /Z(\S+)/.exec(l); if (zm) z = +zm[1];
+        const ym = /^G1 X\S+ Y(\S+)/.exec(l); if (ym && z <= cfg.printer.z_draw + 1e-9) low = Math.min(low, +ym[1] + oy);
+      }
+      assert.ok(low >= G.BED_INSET - 1e-6, `offset ${oy}: pen goes down to Y${low.toFixed(2)}`);
+    }
+    // with sliding on, a sheet holds more lines
+    const slid = G.layoutPages(G.words(text, 1), oneStroke, G.resolve({ ...s, paper: { ...s.paper, slide: true } }), mulberry(2));
+    assert.ok(slid[0].length > pages[0].length, `offset ${oy}: ${slid[0].length} lines sliding vs ${pages[0].length} without`);
+  }
+  assert.throws(() => G.resolve(withSet({ "paper.slide": "yes" })), G.WriteError);
+  // lines that would need a slide are refused rather than written with a pause nobody asked for
+  const noSlide = G.resolve(withSet({ "paper.size": "A4", "paper.x": 23, "paper.y": -40, "writing.wobble": 0 }));
+  const lines = G.layout(G.words(Array(32).fill("line of words").join("\n"), 4), oneStroke, { ...noSlide, paper: { ...noSlide.paper, slide: true } }, mulberry(4));
+  assert.ok(G.planPasses(lines, { ...noSlide, paper: { ...noSlide.paper, slide: true } }).length > 1, "this text needs a slide");
+  assert.throws(() => G.planPasses(lines, noSlide), /sliding the paper/);
+});
+
+test("a blank line between paragraphs stays blank when crowded lines get pushed apart", () => {
+  const tall = ({ word }) => Array.from({ length: word.length }, (_, j) => [[0.6 * j, -1.1], [0.6 * j + 0.2, 2.2]]); // every line collides at 8 mm
+  const para = Array(40).fill("lglg").join(" ");
+  const cfg = G.resolve(withSet({ "writing.wobble": 0 }));
+  const lines = G.layout(G.words(`${para}\n\n${para}`, 1), tall, cfg, mulberry(1));
+  const tops = lines.map(l => G.extent(l)[1]), steps = tops.slice(1).map((t, i) => t - tops[i]);
+  const blank = steps.reduce((a, b) => Math.max(a, b)), normal = Math.min(...steps);
+  assert.ok(steps.length >= 3 && normal > cfg.writing.line_spacing, `lines pushed apart: ${steps.map(s => s.toFixed(1))}`);
+  // the bug this guards against left only ~0.2 of a line between paragraphs
+  assert.ok(blank - normal >= cfg.writing.line_spacing * 0.6, `blank line kept: ${steps.map(s => s.toFixed(1))}`);
 });

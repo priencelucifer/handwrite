@@ -50,7 +50,7 @@
     printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 0, offset_y: 0,
       paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12,
       z_feed: 600, draw_feed: 1500, travel_feed: 6000, settle_ms: 60, sounds: true },
-    paper: { size: "A5", orientation: "portrait", x: 54, y: 23, width: 148, height: 210, margin: 15, margin_y: 15 },
+    paper: { size: "A5", orientation: "portrait", x: 54, y: 23, width: 148, height: 210, margin: 15, margin_y: 15, slide: false },
     writing: { style: "s:neat-1", bias: 1.8, wobble: 1, x_height: 2.8, line_spacing: 8, word_spacing: 1 },
   };
   // Every number that reaches the G-code: [min, max]. Values must be real, finite numbers.
@@ -71,7 +71,7 @@
           throw new WriteError(`Setting ${key.replace(/_/g, " ")} = ${JSON.stringify(v)} must be a number from ${lo} to ${hi}.`);
       }
     const pr = cfg.printer, w = cfg.writing;
-    if (typeof pr.sounds !== "boolean") throw new WriteError("Setting sounds must be on or off.");
+    if (typeof pr.sounds !== "boolean" || typeof cfg.paper.slide !== "boolean") throw new WriteError("Settings sounds and slide must be on or off.");
     if (!["portrait", "landscape"].includes(cfg.paper.orientation) || typeof w.style !== "string")
       throw new WriteError("Paper orientation must be portrait or landscape, and style a name.");
     if (round2(pr.z_lift) - round2(pr.z_draw) < MIN_PEN_LIFT)
@@ -128,12 +128,12 @@
     return { x: Math.round((x0 + x1 - p.width) / 2), y: Math.floor(top - p.height) };
   }
 
-  /** Where text goes: inside the borders (margin: left/right, margin_y: top/bottom), across the part the pen
-   *  reaches, from the plate's back edge down to the bottom border. Lines below the plate's front edge go in later
-   *  passes (planPasses). */
+  /** Where text goes: inside the borders (margin: left/right, margin_y: top/bottom) and the part the pen reaches.
+   *  The bottom stops where the pen would leave the plate; with paper.slide, lines further down are written in
+   *  later passes after the paper is slid back (planPasses). */
   function writingArea(cfg) {
-    const p = cfg.paper, m = p.margin, my = p.margin_y, [l, t, r] = reach(cfg, BED_INSET);
-    return [Math.max(l, m), Math.max(t, my), Math.min(r, p.width - m), p.height - my];
+    const p = cfg.paper, m = p.margin, my = p.margin_y, [l, t, r, b] = reach(cfg, BED_INSET);
+    return [Math.max(l, m), Math.max(t, my), Math.min(r, p.width - m), p.slide ? p.height - my : Math.min(b, p.height - my)];
   }
 
   /** Rough page capacity before any handwriting is generated. charWidth: the style's average letter width in
@@ -142,7 +142,8 @@
   function capacity(cfg, charWidth, paragraphs = []) {
     const w = cfg.writing, xh = w.x_height, ls = w.line_spacing;
     const [l, t, r, b] = writingArea(cfg);
-    const lines = Math.max(0, Math.floor((b - t - 3.3 * xh) / ls) + 1); // first baseline 2 xh down, descenders below the last
+    // Lines closer than ~3.1 letter heights (tall letters over long tails, plus the gap) get pushed apart in layout.
+    const lines = Math.max(0, Math.floor((b - t - 3.3 * xh) / Math.max(ls, 3.1 * xh)) + 1); // first baseline 2 xh down, descenders below the last
     const all = paragraphs.flat(), letters = all.reduce((n, x) => n + x.word.length * (x.parts ? 1.45 : 1), 0) /* block capitals are wider */;
     const avgLetters = all.length >= 5 ? letters / all.length : 4.7; // typical English word length
     const usable = Math.max(0, r - l - 1.2 * xh * w.wobble); // wobble: ragged starts and early line breaks
@@ -280,7 +281,10 @@
           columns(strokes, (c, py) => {
             for (let d = -near; d <= near; d++) { const f = floor.get(c + d); if (f !== undefined) clash = Math.max(clash, f + gap - py); }
           });
-          if (clash > 0) strokes = strokes.map(s => s.map(([a, b]) => [a, b + clash]));
+          if (clash > 0) { // later lines follow it down, so blank lines between paragraphs stay blank
+            strokes = strokes.map(s => s.map(([a, b]) => [a, b + clash]));
+            y += clash;
+          }
           if (extent(strokes)[3] > bottom) {
             if (maxPages === 1) throw tooMuch();
             i = lineStart; // write this line again at the top of the next sheet
@@ -342,6 +346,8 @@
       if (!(bottom <= b0 + cur.shift)) {
         if (!cur.strokes.length)
           throw new WriteError("The writing starts below the front edge of the plate, or a line is taller than the plate: drag the paper toward the back or use smaller letters.");
+        if (!cfg.paper.slide) // never a slide pause the user didn't ask for
+          throw new WriteError("The writing goes past where the pen can reach: turn on sliding the paper, or use less text.");
         const last = cur.strokes[cur.strokes.length - 1], hover = last[last.length - 1];
         // Slide only as far as the rest needs, but never so far that this line or the hover mark leaves reach.
         const shift = Math.min(Math.ceil(lastBottom - b0), Math.floor(Math.min(hover[1] - xh, top) - t0));
@@ -438,5 +444,5 @@
 
   return { WriteError, SOUND_PRINTERS, TUNES, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
-    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper };
+    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper, penRange };
 });

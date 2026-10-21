@@ -22,8 +22,9 @@ Running the file:
   nozzle to the plate.
 - Pause 1: the head stops over the first letter. Put the paper where the preview showed it and tape it down.
 - Pause 2: the head lowers. Slide the pen down until it touches the paper, then clamp it.
-- Long pages (for example A4 on an A1): the pen stops over the last thing it wrote. Slide the paper
-  toward the back until that mark is under the pen tip.
+- Long pages (for example A4 on an A1): writing stops where the pen would leave the plate and the text
+  continues on the next page. With "Slide the paper" ticked it pauses instead: the pen stops over the last
+  thing it wrote; slide the paper toward the back until that mark is under the pen tip.
 - Do a dry run first, and stay with the printer the first time.
 
 Your own handwriting: "My handwriting" > write a sentence > Save style. Styles are kept in this browser

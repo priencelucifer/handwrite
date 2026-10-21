@@ -314,6 +314,11 @@
     const pX = px => X(p.x + px), pY = py => Y(p.y + p.height - py);
     ctx.fillStyle = "#ffffff"; ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 8;
     ctx.fillRect(pX(0), pY(0), p.width * s, p.height * s); ctx.shadowBlur = 0;
+    // the pen sits offset from the nozzle, so it can't reach the plate's far side: shade that strip
+    const [rx0, ry0, rx1, ry1] = G.penRange(cfg);
+    ctx.fillStyle = "rgba(120,126,140,.45)";
+    for (const [a, b2, c, d] of [[0, ry1, bx, by], [0, 0, bx, ry0], [0, ry0, rx0, ry1], [rx1, ry0, bx, ry1]])
+      if (c - a > 0.5 && d - b2 > 0.5) ctx.fillRect(X(a), Y(d), (c - a) * s, (d - b2) * s);
     const [l, t, r, b] = G.writingArea(cfg);
     if (r > l && b > t) { ctx.setLineDash([5, 4]); ctx.strokeStyle = "#7aa2d6"; ctx.strokeRect(pX(l), pY(t), (r - l) * s, (b - t) * s); }
     // handwriting
@@ -338,6 +343,8 @@
     }
     ctx.setLineDash([7, 5]); ctx.strokeStyle = "#e08a00"; ctx.lineWidth = 2; ctx.strokeRect(X(0), Y(by), bx * s, by * s);
     ctx.setLineDash([]);
+    if ((by - ry1) * s > 18) label("pen can't reach (pen offset)", X(bx / 2), Y((by + ry1) / 2) + 5, css("--muted"), "center");
+    if (ry0 * s > 18) label("pen can't reach (pen offset)", X(bx / 2), Y(ry0 / 2) + 5, css("--muted"), "center");
     label(`${pr.model} · plate ${bx} × ${by} mm`, 14, 22, css("--muted"), "left");
     label("FRONT OF PRINTER", W / 2, H - 58, css("--muted"), "center");
   }
@@ -431,6 +438,8 @@
     $("soundsNote").textContent = ok ? "Tunes at start, pauses, resume and finish" : "Not supported by this printer";
   };
   $("sounds").onchange = () => { PR_().sounds = $("sounds").checked; scheduleRender(0); };
+  $("slide").checked = P_().slide === true;
+  $("slide").onchange = () => { P_().slide = $("slide").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncSounds);
   syncSounds();
   $("reroll").onclick = () => { state.seed = (Math.random() * 2 ** 31) | 0; scheduleRender(0); };
@@ -473,7 +482,7 @@
   const HELP = {
     paper_pause_s: ["Pause 1: place the paper", "s", "After homing, the head rises and stops right above where the first letter will be written, then waits this long. Put the paper where the preview shows it and tape it down. The pen is not in the holder yet."],
     pen_pause_s: ["Pause 2: attach the pen", "s", "The head lowers to the writing height over the first letter and waits this long. Slide the pen down through the holder until the tip just touches the paper, then clamp it. Writing starts when the pause ends."],
-    shift_pause_s: ["Pause 3: slide the paper", "s", "Only for pages longer than the plate, like A4 on an A1. The pen stops just above where the last written mark must end up; slide the paper toward the back until that mark is right under the pen tip. Once per extra pass."],
+    shift_pause_s: ["Pause 3: slide the paper", "s", "Only with \"Slide the paper\" on, for pages longer than the pen reaches, like A4 on an A1. The pen stops just above where the last written mark must end up; slide the paper toward the back until that mark is right under the pen tip. Once per extra pass."],
     z_draw: ["Writing height", "mm", "Nozzle height while the pen is down. The pen is clamped touching the paper at this height in pause 2, so any height that clears the holder works. At least 2 mm."],
     z_lift: ["Pen-up height", "mm", "Nozzle height when moving between strokes. About 2 mm above the writing height: handwriting lifts the pen thousands of times."],
     offset_x: ["Pen offset X", "mm", "Pen tip position minus nozzle position, left/right: negative when the pen is left of the nozzle. BambuPlot calls this the tool offset."],
@@ -750,6 +759,10 @@
   }
 
   // ---------- start ----------
+  { // settings saved before the slide option: place the paper once by where the pen reaches (pen offset)
+    const saved = load(STORE.settings, null);
+    if (saved && saved.paper && saved.paper.slide === undefined) try { Object.assign(P_(), G.placePaper(G.resolve(state.settings))); } catch { /* render explains */ }
+  }
   buildStyles();
   render();
 })();
