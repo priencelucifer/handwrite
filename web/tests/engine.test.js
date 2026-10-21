@@ -1,4 +1,4 @@
-// Engine tests: parity with ../model.py (fixtures.json from tools/make-fixtures.py), kernels, determinism, sanity, speed.
+// Engine tests: parity with ../python/model.py (fixtures.json from tools/make-fixtures.py), kernels, determinism, sanity, speed.
 // Run from the project folder: node --test web/tests
 "use strict";
 const test = require("node:test");

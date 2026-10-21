@@ -13,7 +13,7 @@ import numpy as np
 
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
+ROOT = HERE.parents[2] / "python"
 sys.path.insert(0, str(ROOT))
 import model as M  # noqa: E402
 

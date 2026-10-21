@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parents[2]))
+sys.path.insert(0, str(HERE.parents[2] / "python"))
 import model as M  # noqa: E402
 
 M32 = 0xFFFFFFFF

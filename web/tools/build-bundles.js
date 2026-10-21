@@ -1,4 +1,4 @@
-// Regenerates web/weights.js and web/styles.js from ../model.f16.bin and ../styles/*.npy.
+// Regenerates web/weights.js and web/styles.js from ../python/model.f16.bin and ../python/styles/*.npy.
 // Usage: node web/tools/build-bundles.js
 // The bundles are plain scripts because file:// pages cannot fetch() local files.
 "use strict";
@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 
 const WEB = path.join(__dirname, "..");
-const ROOT = path.join(WEB, "..");
+const ROOT = path.join(WEB, "..", "python");
 
 /** Minimal .npy reader: C-order arrays only. Returns {descr, shape, data: Buffer}. */
 function readNpy(file) {

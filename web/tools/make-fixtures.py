@@ -1,4 +1,4 @@
-"""Writes web/tests/fixtures.json: reference outputs of ../model.py that engine.test.js checks the JS port against.
+"""Writes web/tests/fixtures.json: reference outputs of ../python/model.py that engine.test.js checks the JS port against.
 
 Usage (dev only): python web/tools/make-fixtures.py
 """
@@ -11,7 +11,7 @@ import numpy as np
 
 sys.dont_write_bytecode = True  # importing model.py must not drop a __pycache__ into the app folder
 WEB = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(WEB.parent))
+sys.path.insert(0, str(WEB.parent / "python"))
 import model as M  # noqa: E402
 
 WEIGHT_NAMES = ("k1", "b1", "aw", "ab", "k2", "b2", "k3", "b3", "gw", "gb")
