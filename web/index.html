@@ -80,6 +80,11 @@
   h2 { font-size: clamp(26px, 3.4vw, 34px); line-height: 1.15; letter-spacing: -.02em; margin: 0 0 12px; }
   h3 { font-size: 18px; margin: 0 0 6px; letter-spacing: -.01em; }
   .intro { color: var(--muted); max-width: 46em; margin: 0 0 30px; }
+  .holder { display: flex; align-items: center; gap: 24px; }
+  .holder p { margin: 0 0 8px; }
+  .holder p.small { margin: 0; color: var(--muted); font-size: 14px; }
+  .holder .btn { flex: none; }
+  @media (max-width: 700px) { .holder { flex-direction: column; align-items: stretch; } }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
   .muted { color: var(--muted); }
   .note { border-left: 3px solid var(--amber); background: var(--panel); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 22px 0 0; }
@@ -236,7 +241,7 @@
       Handwrite
     </a>
     <nav aria-label="Guide">
-      <a href="#how">How it works</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#more">Extras</a><a href="#faq">FAQ</a>
+      <a href="#how">How it works</a><a href="#holder">Pen holder</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#more">Extras</a><a href="#faq">FAQ</a>
     </nav>
     <a class="btn primary small" href="app.html">Open the app</a>
   </div>
@@ -288,6 +293,21 @@
         <li><b class="n">6</b><span><b>Printer settings.</b> The pen offset, pen heights, pauses and speeds.</span></li>
         <li><b class="n">7</b><span><b>Time estimate.</b> How long the page takes, including the pauses.</span></li>
       </ul>
+    </div>
+  </section>
+
+  <section class="block" id="holder">
+    <div class="wrap">
+      <p class="kicker">What you need</p>
+      <h2>Print the pen holder</h2>
+      <div class="card holder">
+        <div>
+          <p>Handwrite is set up for <b>Plotter</b> by Elli: a pen holder that clips onto the print head of the A1 and A1 mini, no screws.
+            It's made for Stabilo pens and fits similar-sized markers. To fit it, take the front cover off the print head.</p>
+          <p class="small">Designed by Elli and shared free on MakerWorld, so it's downloaded from there.</p>
+        </div>
+        <a class="btn primary" href="https://makerworld.com/en/models/1247876-plotter#profileId-1269790" target="_blank" rel="noopener">Download the pen holder</a>
+      </div>
     </div>
   </section>
 

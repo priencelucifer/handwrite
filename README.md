@@ -52,6 +52,9 @@ and word gaps are never the same twice.
 3. Type your text, pick a handwriting, choose your printer and paper.
 4. Click **Save G-code** and send the file to the printer like any other plain `.gcode` file.
 
+You need a pen holder on the print head. Handwrite is set up for [**Plotter** by Elli](https://makerworld.com/en/models/1247876-plotter#profileId-1269790) (A1 and A1 mini, Stabilo pens),
+free on MakerWorld.
+
 The first time, open **Printer settings** and set your pen heights and [pen offset](#calibrate-the-pen-offset).
 
 ## Printing a page
