@@ -118,6 +118,8 @@
   .field { display: grid; grid-template-columns: 200px 120px 1fr; gap: 12px; align-items: start; padding-top: 10px; }
   .field label { padding-top: 7px; font-weight: 550; }
   .field p { margin: 0; padding-top: 6px; color: var(--muted); font-size: 12.5px; }
+  .offset-test { border-top: 1px dashed var(--line); margin-top: 12px; padding-top: 2px; }
+  .offset-test > .btn { margin-top: 10px; }
   #pad { width: 100%; height: 200px; border: 1px dashed var(--line); border-radius: 12px; background: #fff; touch-action: none; display: block; }
   .mine-list { display: grid; gap: 8px; margin-top: 10px; }
   .mine-item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line);
@@ -202,7 +204,7 @@
 
 <dialog id="settingsDlg">
   <form method="dialog" class="dlg">
-    <header><h3>Printer settings</h3><p>Copy the pen offset that already works for you in BambuPlot. Pauses are timed: the printer carries on by itself when the time is up.</p></header>
+    <header><h3>Printer settings</h3><p>Copy the pen offset that already works for you in BambuPlot, or measure it with the offset test. Pauses are timed: the printer carries on by itself when the time is up.</p></header>
     <div class="body" id="settingsBody"></div>
     <footer><span class="msg" id="settingsMsg"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="settingsSave" value="save">Save</button></footer>
   </form>

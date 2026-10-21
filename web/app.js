@@ -475,8 +475,8 @@
     shift_pause_s: ["Pause 3: slide the paper", "s", "Only for pages longer than the plate, like A4 on an A1. The pen stops just above where the last written mark must end up; slide the paper toward the back until that mark is right under the pen tip. Once per extra pass."],
     z_draw: ["Writing height", "mm", "Nozzle height while the pen is down. The pen is clamped touching the paper at this height in pause 2, so any height that clears the holder works. At least 2 mm."],
     z_lift: ["Pen-up height", "mm", "Nozzle height when moving between strokes. About 2 mm above the writing height: handwriting lifts the pen thousands of times."],
-    offset_x: ["Pen offset X", "mm", "Pen tip position minus nozzle position, left/right. BambuPlot calls this the tool offset."],
-    offset_y: ["Pen offset Y", "mm", "Same, front/back."],
+    offset_x: ["Pen offset X", "mm", "Pen tip position minus nozzle position, left/right: negative when the pen is left of the nozzle. BambuPlot calls this the tool offset."],
+    offset_y: ["Pen offset Y", "mm", "Same, front/back: negative when the pen is in front of the nozzle. If it's wrong, the last lines can run off the front of the plate."],
     draw_feed: ["Writing speed", "mm/min", "1500 is about the speed of real handwriting."],
     travel_feed: ["Travel speed", "mm/min", "Speed of pen-up moves between strokes."],
     z_feed: ["Up/down speed", "mm/min", "How fast the pen is lifted and lowered."],
@@ -514,13 +514,46 @@
         row.querySelector("p").textContent = help;
         fs.append(row);
       }
+      if (title === "Pen offset") fs.append(offsetTestBlock());
       body.append(fs);
     }
     $("settingsDlg").showModal();
   };
-  $("settingsSave").onclick = e => {
+  /** Settings with the dialog's (maybe unsaved) values. */
+  function dialogSettings() {
     const next = structuredClone(state.settings);
-    for (const inp of $("settingsBody").querySelectorAll("input")) next[inp.dataset.sec][inp.dataset.key] = inp.value === "" ? NaN : +inp.value;
+    for (const inp of $("settingsBody").querySelectorAll("input[data-key]")) next[inp.dataset.sec][inp.dataset.key] = inp.value === "" ? NaN : +inp.value;
+    return next;
+  }
+  /** Pen offset test: print two lines on A4 in the plate's back-left corner, measure them, get the offset. */
+  function offsetTestBlock() {
+    const t = document.createElement("div"); t.className = "offset-test";
+    t.innerHTML = `<p class="hint">Don't know the offset? Print the offset test. Push A4 paper into the back-left corner of the plate, with its
+      top and left edges lined up with the plate's back and left edges. Run the file like any other, then measure to the middle of each line the pen drew.</p>
+      <button type="button" class="btn small" id="otSave">Save offset test G-code</button>
+      <div class="field"><label for="otTop">Long line</label><div class="unit" data-unit="mm"><input type="number" id="otTop" step="any" min="0" max="297"></div><p>Distance from the paper's top edge down to the long line.</p></div>
+      <div class="field"><label for="otLeft">Short mark</label><div class="unit" data-unit="mm"><input type="number" id="otLeft" step="any" min="0" max="210"></div><p>Distance from the paper's left edge to the short mark. Leave empty to keep offset X.</p></div>
+      <button type="button" class="btn small" id="otUse">Work out the offset</button> <span class="hint" id="otMsg" role="status"></span>`;
+    t.querySelector("#otSave").onclick = async () => {
+      let gcode;
+      try { gcode = G.offsetTest(dialogSettings()); } catch (err) { return void (t.querySelector("#otMsg").textContent = err.message); }
+      const where = await download(gcode, "pen-offset-test.gcode", "text/plain");
+      if (where) t.querySelector("#otMsg").textContent = `${where} Take the pen out, start it, put the paper in the corner in pause 1 and clamp the pen in pause 2.`;
+    };
+    t.querySelector("#otUse").onclick = () => {
+      const top = t.querySelector("#otTop").value, left = t.querySelector("#otLeft").value, msg = t.querySelector("#otMsg");
+      if (!(+top > 0) || (left !== "" && !(+left > 0))) return void (msg.textContent = "Enter the distances in mm.");
+      try {
+        const o = G.offsetFromTest(dialogSettings(), left === "" ? NaN : +left, +top);
+        if (left !== "") $("set_offset_x").value = o.offset_x;
+        $("set_offset_y").value = o.offset_y;
+        msg.textContent = `Offset ${left !== "" ? `X ${o.offset_x}, ` : ""}Y ${o.offset_y} mm filled in above. Click Save to keep it.`;
+      } catch (err) { msg.textContent = err.message; }
+    };
+    return t;
+  }
+  $("settingsSave").onclick = e => {
+    const next = dialogSettings();
     try { G.resolve(next); } catch (err) { e.preventDefault(); $("settingsMsg").textContent = err.message; return; }
     state.settings = next; scheduleRender(0);
   };

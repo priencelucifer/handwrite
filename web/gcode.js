@@ -393,7 +393,28 @@
       `paper ${p.size} ${p.orientation}, front-left corner at X${p.x} Y${p.y}`];
   }
 
+  const OFFSET_TEST_Y = 60; // mm below the paper's top edge where the test line lands if the pen offset is 0
+
+  /** Pen-offset test: A4 portrait pushed into the plate's back-left corner. The nozzle draws a long line
+   *  OFFSET_TEST_Y mm in front of the plate's back edge and a short mark across it at the plate's middle; where the
+   *  pen really draws them gives the offset (offsetFromTest). Same heights, speeds, pauses and checks as writing.
+   *  shortcut: assumes the plate's back and left edges are at Y = bed_y and X = 0; re-measure if writing lands off. */
+  function offsetTest(settings) {
+    const pr = resolve(settings).printer, [width, height] = PAPERS.A4;
+    const cfg = resolve({ ...settings, printer: { ...settings.printer, offset_x: 0, offset_y: 0 },
+      paper: { ...settings.paper, size: "A4", orientation: "portrait", x: 0, y: pr.bed_y - height } });
+    const mid = Math.min(pr.bed_x, width) / 2, half = Math.min(50, mid - BED_INSET), Y = OFFSET_TEST_Y;
+    const marks = [[[mid - half, Y], [mid + half, Y]], [[mid, Y - 10], [mid, Y + 10]]];
+    return toGcode(planPasses([marks], cfg), cfg, ["handwrite: pen offset test", ...describe(cfg, 0).slice(1),
+      "push A4 paper into the back-left corner of the plate, top and left edges against the plate's edges"]);
+  }
+  /** Offset from the test: mm from the paper's left edge to the short mark, and from its top edge to the long line. */
+  function offsetFromTest(settings, fromLeft, fromTop) {
+    const pr = resolve(settings).printer;
+    return { offset_x: round2(fromLeft - Math.min(pr.bed_x, PAPERS.A4[0]) / 2), offset_y: round2(OFFSET_TEST_Y - fromTop) };
+  }
+
   return { WriteError, SOUND_PRINTERS, TUNES, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
-    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES };
+    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest };
 });

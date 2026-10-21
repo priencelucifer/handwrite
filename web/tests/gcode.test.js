@@ -239,3 +239,22 @@ test("lines never write into the line above, even at full wobble", () => {
     assert.ok(closest >= 0.8 - 1e-9, `wobble ${wobble}, spacing ${spacing}: lines ${closest.toFixed(2)} mm apart`);
   }
 });
+
+test("pen offset test: safe on every printer, and measuring it gives the offset back", () => {
+  for (const model of Object.keys(G.PRINTERS).filter(m => G.PRINTERS[m])) {
+    const s = withSet({ "printer.model": model, "printer.offset_x": 7, "printer.offset_y": -33 }); // the old offset must not matter
+    const gcode = G.offsetTest(s), bedY = G.resolve(s).printer.bed_y;
+    const cfg = G.resolve({ ...s, printer: { ...s.printer, offset_x: 0, offset_y: 0 }, paper: { ...s.paper, size: "A4", orientation: "portrait", x: 0, y: bedY - 297 } });
+    simulate(gcode, cfg); // A4 in the back-left corner, nozzle = pen
+    // XY moves: the pause position, then for each mark a travel to its start and one drawn move to its end
+    const xy = gcode.split("\n").filter(l => /^G[01] X/.test(l)).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number));
+    assert.strictEqual(xy.length, 5, model);
+    const [, [x0, lineY], [x1, lineY2], [tickX, t0], [tickX2, t1]] = xy;
+    assert.ok(lineY === lineY2 && x1 - x0 > 50 && tickX === tickX2 && t0 - t1 === 20, `${model}: a horizontal line and a vertical mark`);
+    assert.ok(x0 > 0 && x1 < 210, `${model}: on the paper`);
+    for (const [ox, oy] of [[0, 0], [-4.5, -38], [12, 25.5]]) { // a pen this far from the nozzle draws the marks here:
+      const fromTop = bedY - (lineY + oy), fromLeft = tickX + ox;
+      assert.deepStrictEqual(G.offsetFromTest(s, fromLeft, fromTop), { offset_x: ox, offset_y: oy }, model);
+    }
+  }
+});
