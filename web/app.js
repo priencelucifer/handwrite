@@ -413,14 +413,13 @@
   $("printer").value = PR_().model; $("paper").value = P_().size;
   $("printer").onchange = () => { PR_().model = $("printer").value; centrePaper(); };
   $("paper").onchange = () => { P_().size = $("paper").value; centrePaper(); };
+  $("placePaper").onclick = centrePaper;
   for (const o of ["portrait", "landscape"]) $(o).onclick = () => { P_().orientation = o; syncOrientation(); centrePaper(); };
   function syncOrientation() { for (const o of ["portrait", "landscape"]) $(o).setAttribute("aria-pressed", P_().orientation === o); }
   syncOrientation();
   function centrePaper() {
     try {
-      const cfg = G.resolve(state.settings);
-      P_().x = Math.round((cfg.printer.bed_x - cfg.paper.width) / 2);
-      P_().y = Math.round((cfg.printer.bed_y - cfg.paper.height) / 2);
+      Object.assign(P_(), G.placePaper(G.resolve(state.settings))); // where the pen reaches, not just mid-plate
     } catch { /* invalid settings: render() explains */ }
     Object.assign(view, { zoom: 1, panX: 0, panY: 0 });
     scheduleRender(0);
@@ -566,7 +565,9 @@
   $("settingsSave").onclick = e => {
     const next = dialogSettings();
     try { G.resolve(next); } catch (err) { e.preventDefault(); $("settingsMsg").textContent = err.message; return; }
-    state.settings = next; scheduleRender(0);
+    const moved = ["offset_x", "offset_y"].some(k => next.printer[k] !== state.settings.printer[k]);
+    state.settings = next;
+    if (moved) centrePaper(); else scheduleRender(0); // a new pen offset changes where the pen reaches
   };
 
   // ---------- my handwriting: capture, save, import/export ----------

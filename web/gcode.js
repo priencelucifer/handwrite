@@ -106,11 +106,26 @@
   /** Page rectangle [left, top, right, bottom] where the pen tip is over the plate and the nozzle inside
    *  its travel limits. */
   function reach(cfg, inset = 0) {
-    const pr = cfg.printer, p = cfg.paper;
-    const x0 = Math.max(0, pr.offset_x) + inset, x1 = Math.min(pr.bed_x, pr.bed_x + pr.offset_x) - inset;
-    const y0 = Math.max(0, pr.offset_y) + inset, y1 = Math.min(pr.bed_y, pr.bed_y + pr.offset_y) - inset;
+    const p = cfg.paper, [x0, y0, x1, y1] = penRange(cfg, inset);
     const top = p.y + p.height; // paper's back edge in bed Y
     return [x0 - p.x, top - y1, x1 - p.x, top - y0];
+  }
+  /** Bed rectangle [x0, y0, x1, y1] the pen tip can reach over the plate: a pen in front of the nozzle can't
+   *  reach the back of the plate, one to the left can't reach the right side. */
+  function penRange(cfg, inset = 0) {
+    const pr = cfg.printer;
+    return [Math.max(0, pr.offset_x) + inset, Math.max(0, pr.offset_y) + inset,
+      Math.min(pr.bed_x, pr.bed_x + pr.offset_x) - inset, Math.min(pr.bed_y, pr.bed_y + pr.offset_y) - inset];
+  }
+  /** Default paper position {x, y}: centred on the part of the plate the pen reaches. Paper taller than that goes
+   *  just far enough back for writing to start at the top border (the rest is written in later passes), but
+   *  hangs over the back of the plate no more than centring it on the plate would. Paper that fits hangs over by at
+   *  most its (blank) top border. */
+  function placePaper(cfg) {
+    const p = cfg.paper, [x0, y0, x1, y1] = penRange(cfg, BED_INSET);
+    const top = p.height - 2 * p.margin_y <= y1 - y0 ? (y0 + y1 + p.height) / 2
+      : Math.min(y1 + p.margin_y, (cfg.printer.bed_y + p.height) / 2);
+    return { x: Math.round((x0 + x1 - p.width) / 2), y: Math.floor(top - p.height) };
   }
 
   /** Where text goes: inside the borders (margin: left/right, margin_y: top/bottom), across the part the pen
@@ -423,5 +438,5 @@
 
   return { WriteError, SOUND_PRINTERS, TUNES, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
-    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks };
+    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper };
 });

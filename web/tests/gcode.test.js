@@ -282,3 +282,28 @@ test("word and line spacing set the average gaps; each gap still varies with wob
     assert.ok(Math.abs(g.line / ls - 1) < 0.1 && g.lineSd > 0.01 * ls, `line spacing ${ls}: ${JSON.stringify(g)}`);
   }
 });
+
+test("automatic paper placement: writing starts at the top border where the pen reaches, with any pen offset", () => {
+  const oneStroke = () => [[[0, 0], [0.5, 1], [2.4, 0.2]]];
+  const text = Array.from({ length: 30 }, () => "some words on a line here").join("\n");
+  let checked = 0, refused = 0;
+  for (const model of Object.keys(G.PRINTERS).filter(m => G.PRINTERS[m]))
+    for (const size of ["A4", "A5", "A6", "US Letter", "Card 4x6 in"]) for (const orientation of ["portrait", "landscape"])
+      for (const [ox, oy] of [[0, 0], [-4.5, -38], [12, 30], [-20, 15]]) {
+        const s = withSet({ "printer.model": model, "paper.size": size, "paper.orientation": orientation, "printer.offset_x": ox, "printer.offset_y": oy });
+        Object.assign(s.paper, G.placePaper(G.resolve(s)));
+        const cfg = G.resolve(s), [, t] = G.writingArea(cfg), where = `${model} ${size} ${orientation} offset ${ox},${oy}`;
+        const bedY = cfg.printer.bed_y, top = cfg.paper.y + cfg.paper.height;
+        assert.ok(t <= cfg.paper.margin_y + 1 || top >= (bedY + cfg.paper.height) / 2 - 1, `${where}: writing starts ${t} mm down`);
+        // over the back of the plate: at most the blank top border, or half the extra length of paper longer than the plate
+        assert.ok(top - bedY <= Math.max(cfg.paper.margin_y, (cfg.paper.height - bedY) / 2) + 1e-9, `${where}: hangs over the back too far`);
+        let pages;
+        try { pages = G.layoutPages(G.words(text, 1), oneStroke, cfg, mulberry(1)); } catch (e) {
+          if (/Too much text/.test(e.message)) continue; throw new Error(`${where}: ${e.message}`); }
+        try { for (const lines of pages) simulate(G.toGcode(G.planPasses(lines, cfg), cfg, ["t"]), cfg); } catch (e) {
+          // shortcut: layout doesn't steer around the P1/X1 cutter corner; the final guard refuses instead (never unsafe)
+          if (cfg.printer.keepout && /Refusing a move/.test(e.message)) { refused++; continue; } throw new Error(`${where}: ${e.message}`); }
+        checked++;
+      }
+  assert.ok(checked > 100 && refused <= 4, `${checked} setups checked, ${refused} refused for the cutter corner`);
+});
