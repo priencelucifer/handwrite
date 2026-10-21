@@ -427,19 +427,23 @@
     const pr = resolve(settings).printer, [width, height] = PAPERS.A4;
     const cfg = resolve({ ...settings, printer: { ...settings.printer, offset_x: 0, offset_y: 0 },
       paper: { ...settings.paper, size: "A4", orientation: "portrait", x: 0, y: pr.bed_y - height } });
-    const { left: mid, top: Y } = offsetTestMarks(settings), half = Math.min(50, mid - BED_INSET);
+    // the long line is kept short so it stays on the paper whichever back corner the paper is pushed into
+    const { left: mid, top: Y } = offsetTestMarks(settings), half = Math.min(30, mid - BED_INSET);
     const marks = [[[mid - half, Y], [mid + half, Y]], [[mid, Y - 10], [mid, Y + 10]]];
     return toGcode(planPasses([marks], cfg), cfg, ["handwrite: pen offset test", ...describe(cfg, 0).slice(1),
-      "push A4 paper into the back-left corner of the plate, top and left edges against the plate's edges"]);
+      "push A4 paper into a back corner of the plate (left or right): top edge and side edge against the plate's edges"]);
   }
-  /** Where the test marks land if the pen offset is 0: mm from the paper's left edge (short mark) and top edge (long line). */
+  /** Where the test marks land if the pen offset is 0: mm to the short mark from the paper's left edge (paper in the
+   *  back-left corner) or right edge (back-right corner), and from its top edge to the long line. */
   function offsetTestMarks(settings) {
-    return { left: Math.min(resolve(settings).printer.bed_x, PAPERS.A4[0]) / 2, top: OFFSET_TEST_Y };
+    const bx = resolve(settings).printer.bed_x, left = Math.min(bx, PAPERS.A4[0]) / 2;
+    return { left, right: bx - left, top: OFFSET_TEST_Y };
   }
-  /** Offset from the test: mm from the paper's left edge to the short mark, and from its top edge to the long line. */
-  function offsetFromTest(settings, fromLeft, fromTop) {
+  /** Offset from the test: mm from the paper's side edge to the short mark (side: the back corner the paper was in,
+   *  "left" or "right"), and from its top edge to the long line. */
+  function offsetFromTest(settings, fromSide, fromTop, side = "left") {
     const m = offsetTestMarks(settings);
-    return { offset_x: round2(fromLeft - m.left), offset_y: round2(m.top - fromTop) };
+    return { offset_x: round2(side === "right" ? m.right - fromSide : fromSide - m.left), offset_y: round2(m.top - fromTop) };
   }
 
   return { WriteError, SOUND_PRINTERS, TUNES, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
