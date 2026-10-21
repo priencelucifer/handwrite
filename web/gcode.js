@@ -430,7 +430,7 @@
     const { left: mid, top: Y } = offsetTestMarks(settings), half = Math.min(50, mid - BED_INSET);
     const marks = [[[mid - half, Y], [mid + half, Y]], [[mid, Y - 10], [mid, Y + 10]]];
     return toGcode(planPasses([marks], cfg), cfg, ["handwrite: pen offset test", ...describe(cfg, 0).slice(1),
-      "push A4 paper into the back-left corner of the plate, top and left edges against the plate's edges"]);
+      "push A4 paper into the top-left (far-left) corner of the plate, top and left edges against the plate's edges"]);
   }
   /** Where the test marks land if the pen offset is 0: mm from the paper's left edge (short mark) and top edge (long line). */
   function offsetTestMarks(settings) {

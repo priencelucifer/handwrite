@@ -163,6 +163,10 @@
   async function render() {
     const token = ++renderToken;
     pool.cancelQueued("page");
+    try { // the paper can't sit so far back that the pen can't reach its top border: what's lost is then at the bottom
+      const c = G.resolve(state.settings), top = G.penRange(c, G.BED_INSET)[3] + c.paper.margin_y;
+      if (c.paper.y + c.paper.height > top) P_().y = Math.floor(top - c.paper.height);
+    } catch { /* resolve below reports it */ }
     keep(STORE.settings, state.settings); keep(STORE.text, state.text); keep(STORE.seed, state.seed);
     let cfg;
     try { cfg = G.resolve(state.settings); } catch (e) { return fail(e, "Printer settings problem: "); }
@@ -314,15 +318,12 @@
     const pX = px => X(p.x + px), pY = py => Y(p.y + p.height - py);
     ctx.fillStyle = "#ffffff"; ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 8;
     ctx.fillRect(pX(0), pY(0), p.width * s, p.height * s); ctx.shadowBlur = 0;
-    // shade the part of the page the pen can't write on: past the plate's edges, or out of reach because the pen
-    // sits off the nozzle. With sliding on, the part below the plate is written after the slide, so it isn't shaded.
-    const [rx0, ry0, rx1, ry1] = G.penRange(cfg), qx0 = p.x, qy0 = p.y, qx1 = p.x + p.width, qy1 = p.y + p.height;
-    const lost = [[qx0, Math.max(qy0, ry1), qx1, qy1], ...(p.slide ? [] : [[qx0, qy0, qx1, Math.min(qy1, ry0)]]),
-      [qx0, Math.max(qy0, ry0), Math.min(qx1, rx0), Math.min(qy1, ry1)], [Math.max(qx0, rx1), Math.max(qy0, ry0), qx1, Math.min(qy1, ry1)]]
+    // shade the part inside the borders that can't be written on (past the pen's reach), page coords [x0, y0, x1, y1]
+    const [l, t, r, b] = G.writingArea(cfg), m = p.margin, my = p.margin_y, w = p.width, h = p.height;
+    const lost = [[m, my, w - m, t], [m, b, w - m, h - my], [m, t, l, b], [r, t, w - m, b]]
       .filter(([a, b2, c, d]) => c - a > 0.5 && d - b2 > 0.5);
     ctx.fillStyle = "rgba(120,126,140,.45)";
-    for (const [a, b2, c, d] of lost) ctx.fillRect(X(a), Y(d), (c - a) * s, (d - b2) * s);
-    const [l, t, r, b] = G.writingArea(cfg);
+    for (const [a, b2, c, d] of lost) ctx.fillRect(pX(a), pY(b2), (c - a) * s, (d - b2) * s);
     if (r > l && b > t) { ctx.setLineDash([5, 4]); ctx.strokeStyle = "#7aa2d6"; ctx.strokeRect(pX(l), pY(t), (r - l) * s, (b - t) * s); }
     // handwriting
     const v = cur();
@@ -348,7 +349,7 @@
     ctx.setLineDash([]);
     const area = q => (q[2] - q[0]) * (q[3] - q[1]), big = lost.reduce((m, q) => (!m || area(q) > area(m) ? q : m), null);
     if (big && (big[3] - big[1]) * s > 24 && (big[2] - big[0]) * s > 120) // at its top edge, clear of the chips at the bottom
-      label("pen can't reach", X((big[0] + big[2]) / 2), Y(big[3]) + 19, css("--muted"), "center");
+      label("pen can't reach", pX((big[0] + big[2]) / 2), pY(big[1]) + 19, css("--muted"), "center");
     label(`${pr.model} · plate ${bx} × ${by} mm`, 14, 22, css("--muted"), "left");
     label("FRONT OF PRINTER", W / 2, H - 58, css("--muted"), "center");
   }
@@ -539,7 +540,7 @@
   /** Pen offset test: print two lines on A4 in the plate's back-left corner, measure them, get the offset. */
   function offsetTestBlock() {
     const t = document.createElement("div"); t.className = "offset-test";
-    t.innerHTML = `<p class="hint">Don't know the offset? Print the offset test. Push A4 paper into the back-left corner of the plate, with its
+    t.innerHTML = `<p class="hint">Don't know the offset? Print the offset test. Push A4 paper into the top-left corner of the plate (the far-left corner, top left in the preview), with its
       top and left edges lined up with the plate's back and left edges. Run the file like any other, then measure to the
       middle of each line the pen drew and type the distances in: the offset above follows. Click Save to keep it.</p>
       <button type="button" class="btn small" id="otSave">Save offset test G-code</button>

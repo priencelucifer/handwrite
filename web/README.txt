@@ -8,7 +8,7 @@ Keep all the files together in one folder.
 1. Type your text and pick a handwriting style.
 2. Choose your printer and paper. Drag the paper on the build plate to where it will sit.
 3. Open "Printer settings" once and enter your pen offset (the BambuPlot "tool offset"), or measure it:
-   "Save offset test G-code", push A4 paper into the back-left corner of the plate, run the file, then type in how far
+   "Save offset test G-code", push A4 paper into the top-left (far-left) corner of the plate, run the file, then type in how far
    the long line is below the paper's top edge and the short mark from its left edge (the offset fills in), and click Save.
    A wrong offset makes the last lines run off the front of the plate.
 4. Click "Save G-code" and send the file to the printer the same way as other plain .gcode files.
