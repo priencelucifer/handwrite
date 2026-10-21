@@ -102,8 +102,9 @@ flowchart LR
   E --> F[G-code]
 ```
 
-- [`engine.js`](web/engine.js) is a JavaScript port of the handwriting model. It runs in Web Workers, one word at a time,
-  and is tested against the NumPy reference in [`python/model.py`](python/model.py).
+- [`engine.js`](web/engine.js) is a JavaScript port of the handwriting model. It runs in Web Workers, each writing four
+  words at once so the model's weights are read from memory once for all four, and is tested against the NumPy
+  reference in [`python/model.py`](python/model.py).
 - Your style works by *priming*: the model first reads strokes of a sentence written in that style, then continues in it.
 - [`gcode.js`](web/gcode.js) lays words into lines and pages, keeps lines from touching, applies the pen offset, and writes the G-code.
 

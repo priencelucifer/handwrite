@@ -131,6 +131,23 @@ test("SIMD and pure-JS kernels give identical results", { skip: !model.simd && "
   assert.deepEqual(slow.word("quick", 3), hand(9).word("quick", 3));
 });
 
+test("words written together (batched steps, mixed styles, joining mid-run) come out exactly as written alone", () => {
+  const W = ["hello", "quick", "", "minimum", "Tuesday,", "the", "plotter", "a", "handwriting."];
+  const h = i => hand(i % 2 ? 0 : 9), alone = W.map((w, i) => h(i).word(w, 100 + i, 0.75));
+  assert.deepEqual(E.runWords(model, W.map((w, i) => h(i).wordSteps(w, 100 + i, 0.75))), alone);
+  const runner = E.wordRunner(model), got = [], add = i => runner.add(h(i).wordSteps(W[i], 100 + i, 0.75), ink => { got[i] = ink; });
+  for (let i = 0; i < 4; i++) add(i);
+  for (let k = 0; k < 30; k++) runner.step(); // like a worker that gets its next words while writing
+  for (let i = 4; i < W.length; i++) add(i);
+  while (runner.step());
+  assert.deepEqual(got, alone);
+  const failed = [];
+  runner.add((function* () { yield* h(0).wordSteps("ok", 1); throw new Error("boom"); })(), () => {}, e => failed.push(e.message));
+  runner.add(h(0).wordSteps("fine", 2), ink => failed.push(ink.length > 0));
+  while (runner.step());
+  assert.deepEqual(failed.sort(), ["boom", true].sort(), "one word failing doesn't stop the others");
+});
+
 test("word() is deterministic per (word, seed, bias)", () => {
   const h = hand(9);
   assert.deepEqual(h.word("hello", 42), h.word("hello", 42));

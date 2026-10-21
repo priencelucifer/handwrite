@@ -51,18 +51,29 @@
   // ---------- word generation: a pool of Web Workers, each with its own copy of the model ----------
   const pool = (() => {
     const weights = E.b64ToBytes(HW_WEIGHTS_B64);
-    const queue = [], jobs = new Map();
-    let nextId = 1, workers = [], local = null;
+    const queue = [], later = []; // later: style previews, written once the page's words are done
+    let nextId = 1, workers = [], local = null, pumpSoon = false;
     const workerSrc = `"use strict"; const HWEngine = (${E.source})();
-      let model = null; const styles = new Map(), hands = new Map();
+      let model = null, runner = null, busy = false; const styles = new Map(), hands = new Map();
+      // Words are written together (wordRunner) in slices of steps; between slices new jobs come in and join the batch.
+      const tick = new MessageChannel();
+      tick.port1.onmessage = () => {
+        const end = performance.now() + 50;
+        while (performance.now() < end && runner.step());
+        if (runner.size) tick.port2.postMessage(0); else busy = false;
+      };
       onmessage = e => { const m = e.data;
-        if (m.type === "init") { model = HWEngine.loadModel(m.weights); return; }
+        if (m.type === "init") { model = HWEngine.loadModel(m.weights); runner = HWEngine.wordRunner(model); return; }
         if (m.type === "style") { styles.set(m.key, m.style); return; }
-        try {
-          let h = hands.get(m.key);
-          if (!h) { h = new HWEngine.Hand(model, styles.get(m.key)); hands.set(m.key, h); }
-          postMessage({ id: m.id, ink: h.word(m.word, m.seed, m.bias) });
-        } catch (err) { postMessage({ id: m.id, error: String((err && err.message) || err) }); }
+        for (const j of m.jobs) {
+          const fail = err => postMessage({ id: j.id, error: String((err && err.message) || err) });
+          try {
+            let h = hands.get(j.key);
+            if (!h) { h = new HWEngine.Hand(model, styles.get(j.key)); hands.set(j.key, h); }
+            runner.add(h.wordSteps(j.word, j.seed, j.bias), ink => postMessage({ id: j.id, ink }), fail);
+          } catch (err) { fail(err); }
+        }
+        if (!busy && runner.size) { busy = true; tick.port2.postMessage(0); }
       };`;
     try {
       const url = URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" }));
@@ -70,7 +81,7 @@
       for (let i = 0; i < n; i++) {
         const w = new Worker(url);
         w.postMessage({ type: "init", weights });
-        Object.assign(w, { job: null, styles: new Set() });
+        Object.assign(w, { jobs: new Map(), styles: new Set() });
         w.onmessage = e => finish(w, e.data);
         w.onerror = e => { e.preventDefault(); fallBack(); };
         workers.push(w);
@@ -78,22 +89,24 @@
     } catch { fallBack(); }
 
     function fallBack() { // no workers (very old browser or blocked): run on the page, slower but works
-      for (const w of workers) { if (w.job) queue.unshift(w.job); w.terminate(); }
+      for (const w of workers) { queue.unshift(...w.jobs.values()); w.terminate(); }
       workers = [];
       if (!local) local = { model: E.loadModel(weights), hands: new Map() };
       pump();
     }
     function finish(w, msg) {
-      const job = w.job; w.job = null;
+      const job = w.jobs.get(msg.id);
+      w.jobs.delete(msg.id);
       if (job) (msg.error ? job.reject(new Error(msg.error)) : job.resolve(msg.ink));
       pump();
     }
     function pump() {
+      const q = queue.length ? queue : later;
       if (local) {
-        if (local.running || !queue.length) return;
+        if (local.running || !q.length) return;
         local.running = true;
         setTimeout(() => { // one word per tick keeps the page responsive
-          const job = queue.shift();
+          const job = q.shift();
           try {
             let h = local.hands.get(job.key);
             if (!h) { h = new E.Hand(local.model, job.style); local.hands.set(job.key, h); }
@@ -104,27 +117,34 @@
         }, 0);
         return;
       }
+      // Each worker writes several words at once (the model's weights are then read from memory once for all of them)
+      // and is kept one batch ahead, so its batches stay full.
       for (const w of workers) {
-        if (w.job || !queue.length) continue;
-        // prefer a job whose style this worker has already primed (priming costs ~0.3 s per style)
-        let i = queue.findIndex(j => w.styles.has(j.key));
-        if (i < 0) i = 0;
-        const job = queue.splice(i, 1)[0];
-        if (!w.styles.has(job.key)) { w.postMessage({ type: "style", key: job.key, style: job.style }); w.styles.add(job.key); }
-        w.job = job;
-        w.postMessage({ id: job.id, key: job.key, word: job.word, seed: job.seed, bias: job.bias });
+        for (let q = queue.length ? queue : later; w.jobs.size <= E.MAX_BATCH && q.length; q = queue.length ? queue : later) {
+          if (q === later && w.jobs.size) break; // a preview primes a new style first: only on an idle worker, never holding up the page
+          // prefer a style this worker has already primed (priming costs ~0.3 s per style); no more than its share
+          // of that style's words, so all workers stay busy to the end
+          let i = q.findIndex(j => w.styles.has(j.key));
+          if (i < 0) i = 0;
+          const key = q[i].key, share = Math.ceil(q.filter(j => j.key === key).length / workers.length), batch = [];
+          for (let k = i; k < q.length && batch.length < Math.min(E.MAX_BATCH, share); ) if (q[k].key === key) batch.push(q.splice(k, 1)[0]); else k++;
+          if (!w.styles.has(key)) { w.postMessage({ type: "style", key, style: batch[0].style }); w.styles.add(key); }
+          for (const job of batch) w.jobs.set(job.id, job);
+          w.postMessage({ jobs: batch.map(j => ({ id: j.id, key, word: j.word, seed: j.seed, bias: j.bias })) });
+        }
       }
     }
     return {
-      word(style, word, seed, bias, front = false, tag = "") {
+      /** preview: a style-picker preview, written after the page's words. */
+      word(style, word, seed, bias, preview = false, tag = "") {
         return new Promise((resolve, reject) => {
-          const job = { id: nextId++, key: style.key, style: style.data, word, seed, bias, tag, resolve, reject };
-          front ? queue.unshift(job) : queue.push(job);
-          pump();
+          (preview ? later : queue).push({ id: nextId++, key: style.key, style: style.data, word, seed, bias, tag, resolve, reject });
+          if (!pumpSoon) { pumpSoon = true; queueMicrotask(() => { pumpSoon = false; pump(); }); } // once a whole page is queued
         });
       },
       cancelQueued(tag) {
-        for (let i = queue.length - 1; i >= 0; i--) if (queue[i].tag === tag) queue.splice(i, 1)[0].reject(new Error("cancelled"));
+        for (const q of [queue, later])
+          for (let i = q.length - 1; i >= 0; i--) if (q[i].tag === tag) q.splice(i, 1)[0].reject(new Error("cancelled"));
       },
     };
   })();
@@ -773,6 +793,6 @@
     const saved = load(STORE.settings, null);
     if (saved && saved.paper && saved.paper.slide === undefined) try { Object.assign(P_(), G.placePaper(G.resolve(state.settings))); } catch { /* render explains */ }
   }
+  render(); // first, so the page's words are queued before the style previews
   buildStyles();
-  render();
 })();

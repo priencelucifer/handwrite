@@ -15,6 +15,8 @@
   const ALPHABET = "\x00 !\"#'(),-.0123456789:;?ABCDEFGHIJKLMNOPRSTUVWYabcdefghijklmnopqrstuvwxyz";
   const IDX = new Map(Array.from(ALPHABET, (c, i) => [c, i]));
   const MAX_STROKE_LEN = 1200;
+  const MAX_BATCH = 4;   // words written at once (stepMany): 4 already gets most of the gain with 6 workers
+  const BLOCK_ROWS = 32; // weight rows per block in stepMany: 32 x 1600 floats = 200 KB, stays in cache while every word uses it
   const POINTS_PER_CHAR = 28; // median density of the 13 bundled IAM styles; captures are resampled to it
 
   // Word-sampling knobs from kurvengefahr model.rs, in model units of style 9 (its calibration style),
@@ -243,9 +245,11 @@
       const [A, H, K, M] = [8, 12, 16, 20].map(o => head.getUint32(o, true));
       if (A !== ALPHABET.length) throw new Error("weight file alphabet does not match");
       const I1 = A + 3 + H, I2 = 3 + H + A + H, G = 4 * H, U = 6 * M + 1;
-      // Blob order first (k1 .. gb), then scratch: x = matvec input, z = LSTM gates, att = attention head, g = MDN head.
+      // Blob order first (k1 .. gb), then scratch: x = matvec input, att = attention head, g = MDN head, and per batch
+      // slot (stepMany): xs = LSTM input, zs = LSTM gates, gs = MDN head. I2 and G are multiples of 4, so slots stay aligned.
+      const UP = Math.ceil(U / 4) * 4;
       const sizes = { k1: I1 * G, b1: G, aw: I1 * 3 * K, ab: 3 * K, k2: I2 * G, b2: G, k3: I2 * G, b3: G, gw: H * U, gb: U,
-        x: I2, z: G, att: 3 * K, g: U };
+        x: I2, att: 3 * K, g: U, xs: MAX_BATCH * I2, zs: MAX_BATCH * G, gs: MAX_BATCH * UP };
       const o = {};
       let total = 0;
       for (const [name, n] of Object.entries(sizes)) { o[name] = total; total += Math.ceil(n / 4) * 4; } // 16-byte aligned for v128
@@ -270,6 +274,7 @@
 
       Object.assign(this, { A, H, K, M, o, I1, I2 });
       this.gView = this.F.subarray(o.g, o.g + U);
+      this.gViews = Array.from({ length: MAX_BATCH }, (_, b) => this.F.subarray(o.gs + b * UP, o.gs + b * UP + U));
       this.alpha = new Float64Array(K);
       this.beta = new Float64Array(K);
       this.pis = new Float64Array(M);
@@ -280,57 +285,77 @@
       return { h1: z(H), c1: z(H), h2: z(H), c2: z(H), h3: z(H), c3: z(H), kappa: z(K), w: z(A) };
     }
 
-    lstm(rows, k, b, h, c) {
-      const { F, H } = this, z = this.o.z;
-      F.fill(0, z, z + 4 * H);
-      this.matvec(this.o.x, k, rows, z);
-      for (let j = 0; j < H; j++) {
-        const zi = F[z + j] + F[b + j], zg = F[z + H + j] + F[b + H + j];
-        const zf = F[z + 2 * H + j] + F[b + 2 * H + j], zo = F[z + 3 * H + j] + F[b + 3 * H + j];
-        c[j] = sigmoid(zf + 1) * c[j] + sigmoid(zi) * Math.tanh(zg); // forget_bias 1.0
-        h[j] = sigmoid(zo) * Math.tanh(c[j]);
+    /** One LSTM layer for every item in the batch; input b sits at slot xs[b]. Each block of weight rows is read once
+     *  for all items. Rows still add up in order, so each item gets bit for bit what it would get alone. */
+    lstm(rows, k, b, items, hKey, cKey) {
+      const { F, H, I2 } = this, o = this.o, G = 4 * H, n = items.length;
+      F.fill(0, o.zs, o.zs + n * G);
+      for (let r = 0; r < rows; r += BLOCK_ROWS)
+        for (let i = 0; i < n; i++) this.matvec(o.xs + i * I2 + r, k + r * G, Math.min(BLOCK_ROWS, rows - r), o.zs + i * G);
+      for (let i = 0; i < n; i++) {
+        const h = items[i][1][hKey], c = items[i][1][cKey], z = o.zs + i * G;
+        for (let j = 0; j < H; j++) {
+          const zi = F[z + j] + F[b + j], zg = F[z + H + j] + F[b + H + j];
+          const zf = F[z + 2 * H + j] + F[b + 2 * H + j], zo = F[z + 3 * H + j] + F[b + 3 * H + j];
+          c[j] = sigmoid(zf + 1) * c[j] + sigmoid(zi) * Math.tanh(zg); // forget_bias 1.0
+          h[j] = sigmoid(zo) * Math.tanh(c[j]);
+        }
       }
     }
 
-    /** MDN parameters for top-layer output h3. Returns a view that the next mdn()/step() overwrites. */
-    mdn(h3) {
-      const { F, H } = this, o = this.o, n = this.gView.length;
+    /** MDN parameters for top-layer output h3. Returns a view that the next mdn()/step() overwrites
+     *  (slot = a stepMany batch slot: its own view, overwritten only by the next stepMany). */
+    mdn(h3, slot = -1) {
+      const { F, H } = this, o = this.o, out = slot < 0 ? this.gView : this.gViews[slot], g = out.byteOffset / 4, n = out.length;
       F.set(h3, o.x);
-      F.fill(0, o.g, o.g + n);
-      matvecJS(F, o.x, o.gw, H, n, o.g);
-      for (let j = 0; j < n; j++) F[o.g + j] += F[o.gb + j];
-      return this.gView;
+      F.fill(0, g, g + n);
+      matvecJS(F, o.x, o.gw, H, n, g);
+      for (let j = 0; j < n; j++) F[g + j] += F[o.gb + j];
+      return out;
     }
 
     /** One timestep. x = [dx, dy, eos]; st is updated in place; idx = encode(text).
-     *  Returns {g: MDN params (view, see mdn), phi: attention weights over idx (Float32Array)}. */
-    step(x, st, idx) {
-      const { F, A, H, K, alpha, beta } = this, o = this.o, X = o.x, U = idx.length;
-      F.set(st.w, X); F[X + A] = x[0]; F[X + A + 1] = x[1]; F[X + A + 2] = x[2]; F.set(st.h1, X + A + 3);
-      this.lstm(this.I1, o.k1, o.b1, st.h1, st.c1);
+     *  Returns {g: MDN params (view, overwritten by the next step), phi: attention weights over idx (Float32Array)}. */
+    step(x, st, idx) { return this.stepMany([[x, st, idx]])[0]; }
 
-      F.set(st.h1, X + A + 3); // attention reads [w, x, new h1]
-      F.fill(0, o.att, o.att + 3 * K);
-      matvecJS(F, X, o.aw, this.I1, 3 * K, o.att);
-      for (let k = 0; k < K; k++) {
-        alpha[k] = softplus(F[o.att + k] + F[o.ab + k]);
-        beta[k] = Math.max(softplus(F[o.att + K + k] + F[o.ab + K + k]), 0.01);
-        st.kappa[k] += softplus(F[o.att + 2 * K + k] + F[o.ab + 2 * K + k]) / 25;
+    /** One timestep for each of up to MAX_BATCH items [x, st, idx] (different texts and states, even different
+     *  styles): bit for bit what step() gives each one, but the LSTM weights stream from memory once for all of them.
+     *  Several workers each streaming their own 14 MB of weights make memory, not arithmetic, the bottleneck. */
+    stepMany(items) {
+      const { F, A, H, K, I2, alpha, beta } = this, o = this.o, n = items.length, out = [];
+      if (!(n >= 1 && n <= MAX_BATCH)) throw new Error(`batch of ${n} steps`);
+      for (let i = 0; i < n; i++) {
+        const [x, st] = items[i], X = o.xs + i * I2;
+        F.set(st.w, X); F[X + A] = x[0]; F[X + A + 1] = x[1]; F[X + A + 2] = x[2]; F.set(st.h1, X + A + 3);
       }
-      const phi = new Float32Array(U);
-      for (let u = 0; u < U; u++) {
-        let s = 0;
-        for (let k = 0; k < K; k++) { const d = st.kappa[k] - u; s += alpha[k] * Math.exp(-(d * d) / beta[k]); }
-        phi[u] = s;
-      }
-      st.w.fill(0);
-      for (let u = 0; u < U; u++) st.w[idx[u]] += phi[u];
+      this.lstm(this.I1, o.k1, o.b1, items, "h1", "c1");
 
-      F[X] = x[0]; F[X + 1] = x[1]; F[X + 2] = x[2]; F.set(st.h1, X + 3); F.set(st.w, X + 3 + H); F.set(st.h2, X + 3 + H + A);
-      this.lstm(this.I2, o.k2, o.b2, st.h2, st.c2);
-      F.set(st.h2, X + 3); F.set(st.h3, X + 3 + H + A);
-      this.lstm(this.I2, o.k3, o.b3, st.h3, st.c3);
-      return { g: this.mdn(st.h3), phi };
+      for (let i = 0; i < n; i++) {
+        const [x, st, idx] = items[i], X = o.xs + i * I2, U = idx.length;
+        F.set(st.h1, X + A + 3); // attention reads [w, x, new h1]
+        F.fill(0, o.att, o.att + 3 * K);
+        matvecJS(F, X, o.aw, this.I1, 3 * K, o.att);
+        for (let k = 0; k < K; k++) {
+          alpha[k] = softplus(F[o.att + k] + F[o.ab + k]);
+          beta[k] = Math.max(softplus(F[o.att + K + k] + F[o.ab + K + k]), 0.01);
+          st.kappa[k] += softplus(F[o.att + 2 * K + k] + F[o.ab + 2 * K + k]) / 25;
+        }
+        const phi = new Float32Array(U);
+        for (let u = 0; u < U; u++) {
+          let s = 0;
+          for (let k = 0; k < K; k++) { const d = st.kappa[k] - u; s += alpha[k] * Math.exp(-(d * d) / beta[k]); }
+          phi[u] = s;
+        }
+        st.w.fill(0);
+        for (let u = 0; u < U; u++) st.w[idx[u]] += phi[u];
+        F[X] = x[0]; F[X + 1] = x[1]; F[X + 2] = x[2]; F.set(st.h1, X + 3); F.set(st.w, X + 3 + H); F.set(st.h2, X + 3 + H + A);
+        out.push({ g: null, phi });
+      }
+      this.lstm(I2, o.k2, o.b2, items, "h2", "c2");
+      for (let i = 0; i < n; i++) { const st = items[i][1], X = o.xs + i * I2; F.set(st.h2, X + 3); F.set(st.h3, X + 3 + H + A); }
+      this.lstm(I2, o.k3, o.b3, items, "h3", "c3");
+      for (let i = 0; i < n; i++) out[i].g = this.mdn(items[i][1].h3, i);
+      return out;
     }
 
     /** Sample one [dx, dy, pen_up] like sjvasquez rnn_cell, incl. its <1% mixture cut-off. */
@@ -425,7 +450,11 @@
 
     /** Write one word (no spaces, cleaned text). Deterministic for (word, seed, bias).
      *  Returns strokes, each an array of [x, y] in x-height units: baseline y=0, x-height y=1, y up, x starting at 0. */
-    word(word, seed, bias = 0.75) {
+    word(word, seed, bias = 0.75) { return runWords(this.m, [this.wordSteps(word, seed, bias)])[0]; }
+
+    /** word() as a generator that yields each model step it needs ([x, st, idx]) and takes back its result, so
+     *  runWords can step several words at once. */
+    *wordSteps(word, seed, bias = 0.75) {
       const n = word.length;
       if (!n) return [];
       const next = this.followOn !== false;
@@ -433,8 +462,8 @@
       const rng = makeRng(seed);
       let best = null;
       for (let a = 0; a < (next ? FOLLOW_ATTEMPTS : WORD_ATTEMPTS); a++) {
-        const { traj, dwell, finished } = next ? this._sampleNext(idx, start, n, rng, bias)
-          : this._sample(idx, start, n, rng, bias, ".,;:".includes(word[n - 1]));
+        const { traj, dwell, finished } = next ? yield* this._sampleNext(idx, start, n, rng, bias)
+          : yield* this._sample(idx, start, n, rng, bias, ".,;:".includes(word[n - 1]));
         const d = Float64Array.from(dwell).sort();
         let score = d[0] / Math.max(d[n >> 1], 1e-6);
         if (traj.length) { const b = bbox(traj, 0, traj.length / 3); if (b[1] - b[0] < 0.3 * n * this.xh) score = 0; } // far too narrow: letters were dropped
@@ -448,7 +477,7 @@
     /** Sample a word followed by a filler word. Having somewhere to go next, the model finishes the word the way
      *  people do, crossing t's and completing x's and digits before moving on; we keep everything up to the first
      *  stroke of the filler (a pen-down that starts clearly right of the word while attention has moved past it). */
-    _sampleNext(idx, start, n, rng, bias) {
+    *_sampleNext(idx, start, n, rng, bias) {
       const m = this.m, xh = this.xh, U = idx.length;
       const st = {};
       for (const key in this.state) st[key] = this.state[key].slice();
@@ -466,7 +495,7 @@
         len++;
         if (cx > right) right = cx;
         penUp = x[2] === 1;
-        const r = m.step(x, st, idx);
+        const r = yield [x, st, idx];
         phi = r.phi;
         x = m.sample(r.g, bias, rng);
         for (let i = 0; i < n; i++) dwell[i] += phi[start + i];
@@ -475,7 +504,7 @@
       return { traj: traj.subarray(0, 3 * len), dwell, finished: cut !== null };
     }
 
-    _sample(idx, start, n, rng, bias, endsWithPunct) {
+    *_sample(idx, start, n, rng, bias, endsWithPunct) {
       const m = this.m, k = this.k, xh = this.xh, U = idx.length;
       const st = {};
       for (const key in this.state) st[key] = this.state[key].slice();
@@ -509,7 +538,7 @@
           }
           if (trail >= TRAIL_MAX_STEPS) break;
         }
-        const r = m.step(x, st, idx);
+        const r = yield [x, st, idx];
         phi = r.phi;
         x = m.sample(r.g, bias, rng);
         for (let i = 0; i < n; i++) dwell[i] += phi[start + i];
@@ -550,11 +579,42 @@
     return out;
   }
 
+  /** Writes Hand.wordSteps generators together (any mix of styles on one model), up to MAX_BATCH at a time: each
+   *  step() advances every running word by one model step, in one stepMany. More words can be added between steps.
+   *  Each word comes out exactly as word() writes it alone. done(strokes) or fail(error) fires as each one ends. */
+  function wordRunner(model) {
+    const waiting = [], running = [];
+    const resume = (w, value) => {
+      let r;
+      try { r = w.gen.next(value); } catch (err) { return w.fail(err); }
+      if (r.done) w.done(r.value); else { w.req = r.value; running.push(w); }
+    };
+    return {
+      add(gen, done, fail = err => { throw err; }) { waiting.push({ gen, done, fail, req: null }); },
+      get size() { return waiting.length + running.length; },
+      /** One step of every running word; false once none are left. */
+      step() {
+        while (running.length < MAX_BATCH && waiting.length) resume(waiting.shift());
+        if (!running.length) return false;
+        const batch = running.splice(0), out = model.stepMany(batch.map(w => w.req));
+        batch.forEach((w, k) => resume(w, out[k]));
+        return running.length + waiting.length > 0;
+      },
+    };
+  }
+  /** Runs wordSteps generators to the end (wordRunner); returns their strokes in order. */
+  function runWords(model, gens, onDone = () => {}) {
+    const res = [], runner = wordRunner(model);
+    gens.forEach((gen, i) => runner.add(gen, ink => onDone(i, res[i] = ink)));
+    while (runner.step());
+    return res;
+  }
+
   /** {name, chars, strokesB64} from HW_PRESETS -> {name, chars, strokes: Float32Array}, ready for new Hand(). */
   function decodePreset(p) {
     return { name: p.name, chars: p.chars, strokes: new Float32Array(b64ToBytes(p.strokesB64).buffer) };
   }
 
   return { ALPHABET, MAX_STROKE_LEN, cleanText, encode, align, denoise, coordsToOffsets, preparePrimer,
-    simdSupported, loadModel, Model, makeRng, Hand, b64ToBytes, decodePreset, transformPrimer };
+    simdSupported, loadModel, Model, makeRng, Hand, wordRunner, runWords, MAX_BATCH, b64ToBytes, decodePreset, transformPrimer };
 });
