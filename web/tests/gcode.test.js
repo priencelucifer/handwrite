@@ -223,3 +223,19 @@ test("separate side and top/bottom borders", () => {
   const old = withSet({}); delete old.paper.margin_y;
   assert.strictEqual(G.resolve(old).paper.margin_y, 15);
 });
+
+test("lines never write into the line above, even at full wobble", () => {
+  // every word has tall letters and long tails (like "lg"), the worst case for touching lines
+  const tall = ({ word }) => Array.from({ length: word.length }, (_, j) => [[0.6 * j, -1.1], [0.6 * j + 0.2, 2.2]]);
+  const text = Array.from({ length: 8 }, () => Array.from({ length: 40 }, (_, i) => "lgylgy".slice(0, 2 + i % 5)).join(" ")).join("\n");
+  for (const [wobble, spacing, seed] of [[2, 8, 1], [2, 8, 2], [1, 8, 3], [2, 6, 4], [0, 4.2, 5]]) {
+    const cfg = G.resolve(withSet({ "writing.wobble": wobble, "writing.line_spacing": spacing }));
+    const pages = G.layoutPages(G.words(text, seed), tall, cfg, mulberry(seed));
+    let closest = Infinity;
+    for (const lines of pages)
+      for (let i = 1; i < lines.length; i++) for (let j = 0; j < i; j++)
+        for (const s of lines[i]) for (const [px, py] of s) for (const u of lines[j]) for (const [qx, qy] of u)
+          if (Math.abs(px - qx) <= 0.5) closest = Math.min(closest, py - qy);
+    assert.ok(closest >= 0.8 - 1e-9, `wobble ${wobble}, spacing ${spacing}: lines ${closest.toFixed(2)} mm apart`);
+  }
+});

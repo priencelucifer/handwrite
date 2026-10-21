@@ -195,6 +195,9 @@
     const room = xh * k;
     let pageTilt = N() * 0.008 * k, marginCreep = N() * 0.008 * k; // each sheet leans its own way
     let walk = 0, scale = 1, y = top + 2 * xh; // first baseline, leaving room for capitals and ascenders
+    // Lowest ink so far on this sheet per COL-wide column; new lines keep `gap` mm (pen centre to centre) below it.
+    let floor = new Map();
+    const gap = Math.max(0.8, 0.3 * xh), near = Math.ceil(gap / COL);
     const pages = [];
     let lines = [];
     const tooMuch = () => new WriteError(maxPages > 1
@@ -205,7 +208,7 @@
       if (pages.length + 1 >= maxPages) throw tooMuch();
       pages.push(lines);
       lines = [];
-      y = top + 2 * xh; walk = 0;
+      y = top + 2 * xh; walk = 0; floor = new Map();
       pageTilt = N() * 0.008 * k; marginCreep = N() * 0.008 * k;
     };
     for (const para of paragraphs) {
@@ -248,18 +251,25 @@
           x += width + Math.max(0.4, w.word_spacing * (1 + N() * 0.15 * k)) * lxh;
         }
         if (strokes.length) {
-          const [, ymin, , ymax] = extent(strokes);
-          if (ymax > bottom) {
+          const rise = top - extent(strokes)[1];
+          if (rise > 0) { // a line sloping up must not climb out of the writing area
+            strokes = strokes.map(s => s.map(([a, b]) => [a, b + rise]));
+            y += rise;
+          }
+          // A line that tilts, bows or drifts into the ink above (or a tall letter under a hanging g) moves down
+          // just enough to keep clear, like a person leaving room, instead of writing over it.
+          let clash = 0;
+          columns(strokes, (c, py) => {
+            for (let d = -near; d <= near; d++) { const f = floor.get(c + d); if (f !== undefined) clash = Math.max(clash, f + gap - py); }
+          });
+          if (clash > 0) strokes = strokes.map(s => s.map(([a, b]) => [a, b + clash]));
+          if (extent(strokes)[3] > bottom) {
             if (maxPages === 1) throw tooMuch();
             i = lineStart; // write this line again at the top of the next sheet
             nextPage();
             continue;
           }
-          const rise = top - ymin;
-          if (rise > 0) { // a line sloping up must not climb out of the writing area
-            strokes = strokes.map(s => s.map(([a, b]) => [a, b + rise]));
-            y += rise;
-          }
+          columns(strokes, (c, py) => floor.set(c, Math.max(floor.get(c) ?? py, py)));
           lines.push(strokes);
         }
         y += ls * clip(1 + N() * 0.06 * k, 0.85, 1.2);
@@ -268,6 +278,16 @@
     }
     if (lines.length) pages.push(lines);
     return pages;
+  }
+
+  const COL = 0.5; // mm
+  /** Call f(column, y) for points along every stroke, at most COL/2 apart, so long segments are covered too. */
+  function columns(strokes, f) {
+    for (const s of strokes) for (let j = 0; j < s.length; j++) {
+      const [x1, y1] = s[j], [x0, y0] = s[j && j - 1];
+      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (COL / 2)));
+      for (let t = 1; t <= n; t++) f(Math.floor((x0 + (x1 - x0) * t / n) / COL), y0 + (y1 - y0) * t / n);
+    }
   }
 
   /** [xmin, ymin, xmax, ymax] over strokes; NaN if any coordinate is not finite. */
