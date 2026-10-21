@@ -6,7 +6,7 @@ const FACTS = {
   "Bambu Lab P1P / P1S": [256, 256, 250, [0, 0, 18, 28]], "Bambu Lab P2S": [256, 256, 256, null],
   "Bambu Lab X1 Carbon / X1E": [256, 256, 250, [0, 0, 18, 28]],
 };
-const LINE_OK = /^(;[^\n]*|G90|G21|G28|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C0 D\d+ M0 E0 F\d+ N0|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
+const LINE_OK = /^(;[^\n]*|G90|G21|G28|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
 
 /** Simulate a G-code file; throws on any violation. s: the settings it was made from (for z, paper, offsets). */
 function simulate(gcode, s) {
@@ -27,8 +27,8 @@ function simulate(gcode, s) {
     if (line === "G28") { homed = true; continue; }
     if (line.startsWith("M1006 A")) { // motor music: never while the pen may be on the paper; notes in a sane range
       assert.ok(z === null || z > zd + 1e-9 || draws === 0, `sound with the pen on the paper ${where}`);
-      const [, n, d] = /A(\d+) B(\d+)/.exec(line).map(Number);
-      assert.ok((n === 0 || (n >= 50 && n <= 84)) && d > 0 && d <= 200, `odd note ${where}`);
+      for (const [, n, d, v] of line.matchAll(/[ACE](\d+) [BDF](\d+) [LMN](\d+)/g).map(m => m.map(Number))) // each channel
+        assert.ok((n === 0 || (n >= 50 && n <= 84)) && d > 0 && d <= 200 && v <= 100, `odd note ${where}`);
       continue;
     }
     if (line.startsWith("M")) continue;

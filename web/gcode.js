@@ -30,7 +30,8 @@
   const MIN_PEN_LIFT = 1; // between writing height and pen-up height
   const SLIDE_HOVER = 5;  // above z_draw while the user slides the paper under the pen
 
-  // Motor "music" (Bambu M1006: one note per line, MIDI pitch, duration in 10 ms, volume 0-100). Only printers
+  // Motor "music" (Bambu M1006: one note per line, three channels A/B/L, C/D/M, E/F/N = pitch, duration in 10 ms,
+  // volume 0-100; Bambu's own start tune plays two channels at once). Only printers
   // known to play it: officially the A1 and A1 mini; confirmed by users on the P2S. Not the X1 series.
   const SOUND_PRINTERS = new Set(["Bambu Lab A1", "Bambu Lab A1 mini", "Bambu Lab P2S"]);
   const TUNES = { // [MIDI note or 0 for a rest, duration in 10 ms]; kept in the motors' clean range (C4-E5)
@@ -39,9 +40,11 @@
     resume: [[67, 10], [72, 20]],
     finish: [[72, 14], [67, 14], [64, 14], [60, 14], [0, 6], [64, 12], [67, 12], [72, 40]],
   };
-  const SOUND_VOLUME = 60;
-  const tune = name => ["M17", "M400 S1", "M1006 S1",
-    ...TUNES[name].map(([n, d]) => `M1006 A${n} B${d} L${n ? SOUND_VOLUME : 0} C0 D${d} M0 E0 F${d} N0`), "M1006 W"];
+  const SOUND_VOLUME = 100; // the same note on all three channels at full volume: as loud as the motors go
+  const tune = name => ["M17", "M400 S1", "M1006 S1", ...TUNES[name].map(([n, d]) => {
+    const v = n ? SOUND_VOLUME : 0;
+    return `M1006 A${n} B${d} L${v} C${n} D${d} M${v} E${n} F${d} N${v}`;
+  }), "M1006 W"];
 
   const DEFAULT_SETTINGS = {
     printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 0, offset_y: 0,

@@ -102,6 +102,7 @@ test("printer sounds: four tunes on supported printers, none elsewhere or when s
   const { gcode, cfg } = run(G.DEFAULT_SETTINGS, "Hello there", 1);
   simulate(gcode, cfg);
   assert.strictEqual((gcode.match(/^M1006 S1$/gm) || []).length, 6); // start, (pause + resume) x 2, finish
+  assert.match(gcode, /^M1006 A72 B26 L100 C72 D26 M100 E72 F26 N100$/m, "loud: every channel plays the note at full volume");
   for (const model of ["Bambu Lab X1 Carbon / X1E", "Bambu Lab P1P / P1S"])
     assert.ok(!/M1006/.test(run(withSet({ "printer.model": model }), "Hello there", 1).gcode), model);
   assert.ok(!/M1006/.test(run(withSet({ "printer.sounds": false }), "Hello there", 1).gcode));
