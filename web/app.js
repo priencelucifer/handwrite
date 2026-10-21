@@ -314,11 +314,14 @@
     const pX = px => X(p.x + px), pY = py => Y(p.y + p.height - py);
     ctx.fillStyle = "#ffffff"; ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 8;
     ctx.fillRect(pX(0), pY(0), p.width * s, p.height * s); ctx.shadowBlur = 0;
-    // the pen sits offset from the nozzle, so it can't reach the plate's far side: shade that strip
-    const [rx0, ry0, rx1, ry1] = G.penRange(cfg);
+    // shade the part of the page the pen can't write on: past the plate's edges, or out of reach because the pen
+    // sits off the nozzle. With sliding on, the part below the plate is written after the slide, so it isn't shaded.
+    const [rx0, ry0, rx1, ry1] = G.penRange(cfg), qx0 = p.x, qy0 = p.y, qx1 = p.x + p.width, qy1 = p.y + p.height;
+    const lost = [[qx0, Math.max(qy0, ry1), qx1, qy1], ...(p.slide ? [] : [[qx0, qy0, qx1, Math.min(qy1, ry0)]]),
+      [qx0, Math.max(qy0, ry0), Math.min(qx1, rx0), Math.min(qy1, ry1)], [Math.max(qx0, rx1), Math.max(qy0, ry0), qx1, Math.min(qy1, ry1)]]
+      .filter(([a, b2, c, d]) => c - a > 0.5 && d - b2 > 0.5);
     ctx.fillStyle = "rgba(120,126,140,.45)";
-    for (const [a, b2, c, d] of [[0, ry1, bx, by], [0, 0, bx, ry0], [0, ry0, rx0, ry1], [rx1, ry0, bx, ry1]])
-      if (c - a > 0.5 && d - b2 > 0.5) ctx.fillRect(X(a), Y(d), (c - a) * s, (d - b2) * s);
+    for (const [a, b2, c, d] of lost) ctx.fillRect(X(a), Y(d), (c - a) * s, (d - b2) * s);
     const [l, t, r, b] = G.writingArea(cfg);
     if (r > l && b > t) { ctx.setLineDash([5, 4]); ctx.strokeStyle = "#7aa2d6"; ctx.strokeRect(pX(l), pY(t), (r - l) * s, (b - t) * s); }
     // handwriting
@@ -343,8 +346,9 @@
     }
     ctx.setLineDash([7, 5]); ctx.strokeStyle = "#e08a00"; ctx.lineWidth = 2; ctx.strokeRect(X(0), Y(by), bx * s, by * s);
     ctx.setLineDash([]);
-    if ((by - ry1) * s > 18) label("pen can't reach (pen offset)", X(bx / 2), Y((by + ry1) / 2) + 5, css("--muted"), "center");
-    if (ry0 * s > 18) label("pen can't reach (pen offset)", X(bx / 2), Y(ry0 / 2) + 5, css("--muted"), "center");
+    const area = q => (q[2] - q[0]) * (q[3] - q[1]), big = lost.reduce((m, q) => (!m || area(q) > area(m) ? q : m), null);
+    if (big && (big[3] - big[1]) * s > 24 && (big[2] - big[0]) * s > 120) // at its top edge, clear of the chips at the bottom
+      label("pen can't reach", X((big[0] + big[2]) / 2), Y(big[3]) + 19, css("--muted"), "center");
     label(`${pr.model} · plate ${bx} × ${by} mm`, 14, 22, css("--muted"), "left");
     label("FRONT OF PRINTER", W / 2, H - 58, css("--muted"), "center");
   }
