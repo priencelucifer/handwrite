@@ -32,6 +32,9 @@ const data = {
   neat: [0.3, 1.0, 1.8].map(b => ({ label: b.toFixed(1), ...write(NEAT1, ["handwriting"], b, 12, 5) })),
   styles: [["Neat 1", style(0, 0, 1), 1.8], ["Italic 1", style(0, 15, 1), 1.7], ["Rounded 1", style(0, 5, 1.25), 1.4], ["Casual 1", style(2, 0, 1), 0.8]]
     .map(([label, hand, b]) => ({ label, ...write(hand, ["Handwriting"], b, 12, 7) })),
+  // "Edit any word or line" demo: a heading made bigger, a word moved and given another handwriting (Italic 1)
+  edit: { title: write(NEAT1, ["Science notes"], 1.8, 12, 3), body: write(NEAT1, ["The water cycle has", "four main stages"], 1.8, 12, 9),
+    word: write(NEAT1, ["important!"], 1.8, 12, 21), word2: write(style(0, 15, 1), ["important!"], 1.7, 12, 21) },
 };
 const file = path.join(WEB, "index.html"), html = fs.readFileSync(file, "utf8");
 const re = /(\/\*STROKES\*\/).*?(\/\*END\*\/)/s;
