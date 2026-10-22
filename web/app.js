@@ -289,6 +289,7 @@
   function setBusy(busy, text, err = false) {
     state.busy = busy;
     $("status").className = "pill" + (busy ? " busy" : err ? " err" : "");
+    const m = /(\d+) \/ (\d+)/.exec(text); $("status").style.setProperty("--p", busy && m ? (m[1] / m[2]).toFixed(3) : "0"); // pill progress
     $("statusText").textContent = text;
     $("save").disabled = $("saveAll").disabled = busy || !state.view || !!state.error;
   }
@@ -369,26 +370,26 @@
     // plate + grid, drawn where the pen tip can go (the nozzle's travel moved by the pen offset, like the cutter
     // corner below), so the strip the pen can't use shows at the front, where the pen would leave the real plate
     const plate = () => roundRect(X(dx), Y(by + dy), bx * s, by * s, 6 * Math.min(1, s));
-    ctx.fillStyle = "#3a3d42"; plate(); ctx.fill();
+    ctx.fillStyle = "#2A2B2D"; plate(); ctx.fill();
     ctx.lineWidth = 1;
     for (let g = 10; g < Math.max(bx, by); g += 10) {
       if (g % 50 && s * 10 < 12) continue; // fine grid only when zoomed in enough to tell lines apart
-      ctx.strokeStyle = g % 50 ? "#43464c" : "#52565d";
+      ctx.strokeStyle = g % 50 ? "#333538" : "#3E4044";
       if (g < bx) line(X(g + dx), Y(dy), X(g + dx), Y(by + dy));
       if (g < by) line(X(dx), Y(g + dy), X(bx + dx), Y(g + dy));
     }
     ctx.save(); plate(); ctx.clip(); // shade where the pen would be past the real plate's edges
     ctx.beginPath(); ctx.rect(X(dx), Y(by + dy), bx * s, by * s); ctx.rect(X(0), Y(by), bx * s, by * s);
-    ctx.fillStyle = "rgba(120,126,140,.45)"; ctx.fill("evenodd"); ctx.restore();
+    ctx.fillStyle = "rgba(150,140,125,.42)"; ctx.fill("evenodd"); ctx.restore();
     if (pr.keepout) { // nozzle may not go here (P1/X1 filament cutter); shown where the pen would be
       const [a, b, c, d] = pr.keepout;
-      ctx.fillStyle = "rgba(201,42,42,.35)";
+      ctx.fillStyle = "rgba(184,58,46,.35)";
       ctx.fillRect(X(a + pr.offset_x), Y(d + pr.offset_y), (c - a) * s, (d - b) * s);
     }
     // paper (in pass 1 position) + writing area
     const pX = px => X(p.x + px), pY = py => Y(p.y + p.height - py);
-    ctx.fillStyle = "#ffffff"; ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 8;
-    ctx.fillRect(pX(0), pY(0), p.width * s, p.height * s); ctx.shadowBlur = 0;
+    ctx.fillStyle = css("--sheet") || "#FFFDF8"; ctx.shadowColor = "rgba(40,30,15,.30)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+    ctx.fillRect(pX(0), pY(0), p.width * s, p.height * s); ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
     if (p.ruling > 0) { // ruled paper: its printed lines and margin line, to check the writing sits on them
       ctx.setLineDash([]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(90,140,220,.45)";
       for (let yy = p.first_line; yy < p.height; yy += p.ruling) line(pX(0), pY(yy), pX(p.width), pY(yy));
@@ -398,9 +399,9 @@
     const [l, t, r, b] = G.writingArea(cfg), m = p.margin, my = p.margin_y, w = p.width, h = p.height;
     const lost = [[m, my, w - m, t], [m, b, w - m, h - my], [m, t, l, b], [r, t, w - m, b]]
       .filter(([a, b2, c, d]) => c - a > 0.5 && d - b2 > 0.5);
-    ctx.fillStyle = "rgba(120,126,140,.45)";
+    ctx.fillStyle = "rgba(150,140,125,.42)";
     for (const [a, b2, c, d] of lost) ctx.fillRect(pX(a), pY(b2), (c - a) * s, (d - b2) * s);
-    if (r > l && b > t) { ctx.setLineDash([5, 4]); ctx.strokeStyle = "#7aa2d6"; ctx.strokeRect(pX(l), pY(t), (r - l) * s, (b - t) * s); }
+    if (r > l && b > t) { ctx.setLineDash([5, 4]); ctx.strokeStyle = "#6F92CC"; ctx.strokeRect(pX(l), pY(t), (r - l) * s, (b - t) * s); }
     // handwriting
     const v = cur();
     if (v) {
@@ -414,19 +415,22 @@
           for (let i = 1; i < st.length; i++) path.lineTo(pX(st[i][0]), pY(st[i][1]));
         }
       });
-      ["#c3c8d2", "#1b2a6b", "#c0392b"].forEach((c, j) => { ctx.strokeStyle = c; ctx.stroke(paths[j]); });
-      if (hover) { const [a, b2, c, d] = hover.box; ctx.fillStyle = "rgba(59,91,219,.14)"; ctx.fillRect(pX(a) - 3, pY(b2) - 3, (c - a) * s + 6, (d - b2) * s + 6); }
+      ["#C9C2B5", "#1B2A6B", "#B23A2B"].forEach((c, j) => { ctx.strokeStyle = c; ctx.stroke(paths[j]); });
+      if (hover) {
+        const [a, b2, c, d] = hover.box; ctx.fillStyle = "rgba(34,54,122,.12)"; ctx.fillRect(pX(a) - 3, pY(b2) - 3, (c - a) * s + 6, (d - b2) * s + 6);
+        ctx.strokeStyle = "#22367A"; ctx.lineWidth = 1; ctx.strokeRect(pX(a) - 3, pY(b2) - 3, (c - a) * s + 6, (d - b2) * s + 6);
+      }
       if (from > 1 || document.activeElement === $("startLine")) // line numbers, to pick where to start again
-        v.lines.forEach((ln, k) => label(String(k + 1), pX(G.extent(ln)[0]) - 10, pY(ln.baseline), k < from - 1 ? css("--muted") : "#3b5bdb", "right"));
+        v.lines.forEach((ln, k) => label(String(k + 1), pX(G.extent(ln)[0]) - 10, pY(ln.baseline), k < from - 1 ? "#6B6255" : "#22367A", "right", css("--sheet"))); // on the paper, which stays light
       // where the paper gets slid between passes
       for (let k = 1; k < v.passes.length; k++) {
         const prevB = G.extent(v.passes[k - 1].strokes)[3], nextT = G.extent(v.passes[k].strokes)[1], yy = (prevB + nextT) / 2;
-        ctx.setLineDash([6, 4]); ctx.strokeStyle = "#c92a2a"; ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 4]); ctx.strokeStyle = "#B83A2E"; ctx.lineWidth = 1.5;
         line(pX(0), pY(yy), pX(p.width), pY(yy));
-        label(`pass ${k + 1}: slide paper ${v.passes[k].shift - v.passes[k - 1].shift} mm back`, pX(p.width) - 6, pY(yy) - 6, "#c92a2a", "right");
+        label(`pass ${k + 1}: slide paper ${v.passes[k].shift - v.passes[k - 1].shift} mm back`, pX(p.width) - 6, pY(yy) - 6, "#A3301E", "right", css("--sheet"));
       }
     }
-    ctx.setLineDash([7, 5]); ctx.strokeStyle = "#e08a00"; ctx.lineWidth = 2; ctx.strokeRect(X(dx), Y(by + dy), bx * s, by * s);
+    ctx.setLineDash([7, 5]); ctx.strokeStyle = "#D9861E"; ctx.lineWidth = 2; ctx.strokeRect(X(dx), Y(by + dy), bx * s, by * s);
     ctx.setLineDash([]);
     const area = q => (q[2] - q[0]) * (q[3] - q[1]), big = lost.reduce((m, q) => (!m || area(q) > area(m) ? q : m), null);
     if (big && (big[3] - big[1]) * s > 24 && (big[2] - big[0]) * s > 120) // at its top edge, clear of the chips at the bottom
@@ -436,10 +440,10 @@
   }
   function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
   function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
-  function label(text, x, y, color, align) {
-    ctx.font = "600 12px system-ui, sans-serif"; ctx.textAlign = align; ctx.textBaseline = "alphabetic";
+  function label(text, x, y, color, align, bg) {
+    ctx.font = `600 12px ${css("--font-sans") || "system-ui, sans-serif"}`; ctx.textAlign = align; ctx.textBaseline = "alphabetic";
     const w = ctx.measureText(text).width, x0 = align === "right" ? x - w : align === "center" ? x - w / 2 : x;
-    ctx.fillStyle = css("--panel") || "#fff"; ctx.globalAlpha = .9; ctx.fillRect(x0 - 6, y - 14, w + 12, 20); ctx.globalAlpha = 1;
+    ctx.fillStyle = bg || css("--panel") || "#fff"; ctx.globalAlpha = .92; roundRect(x0 - 7, y - 15, w + 14, 21, 6); ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = color; ctx.fillText(text, x, y);
   }
 
@@ -511,6 +515,7 @@
   let frame = 0;
   function relayout() { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => render()); }
   new ResizeObserver(() => draw()).observe(canvas);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw()); // paper + labels follow the theme
   $("zoomIn").onclick = () => zoomAt(1.5); $("zoomOut").onclick = () => zoomAt(1 / 1.5);
   $("zoomFit").onclick = () => { Object.assign(view, { zoom: 1, panX: 0, panY: 0 }); draw(); };
 
@@ -521,8 +526,9 @@
   for (const [id, key] of [["bias", "bias"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"]]) {
     const el = $(id), out = el.nextElementSibling;
     el.value = W_()[key]; out.textContent = (+el.value).toFixed(2);
+    const fill = () => el.style.setProperty("--fill", (el.value - el.min) / (el.max - el.min) * 100 + "%"); fill();
     // only neatness needs new handwriting; the others just re-lay the cached words
-    el.addEventListener("input", () => { W_()[key] = +el.value; out.textContent = (+el.value).toFixed(2); scheduleRender(key === "bias" ? 400 : 60); });
+    el.addEventListener("input", () => { W_()[key] = +el.value; out.textContent = (+el.value).toFixed(2); fill(); scheduleRender(key === "bias" ? 400 : 60); });
   }
   bindNumber("xh", () => W_(), "x_height", 60);
   bindNumber("lineSpacing", () => W_(), "line_spacing", 60);
@@ -589,7 +595,7 @@
   // ---------- handwriting style picker with live previews ----------
   const thumbs = new Map();
   function buildStyles() {
-    const box = $("styles"); box.textContent = "";
+    const box = $("styles"), keepTop = box.scrollTop; box.textContent = "";
     let group = "";
     for (const st of presets) {
       const g = st.group;
@@ -602,13 +608,14 @@
       b.append(c, document.createTextNode(st.label));
       b.onclick = () => {
         W_().style = st.key;
-        if (st.bias !== undefined) { W_().bias = st.bias; $("bias").value = st.bias; $("bias").nextElementSibling.textContent = st.bias.toFixed(2); }
-        buildStyles(); scheduleRender(0);
+        if (st.bias !== undefined) { W_().bias = st.bias; $("bias").value = st.bias; $("bias").nextElementSibling.textContent = st.bias.toFixed(2); $("bias").style.setProperty("--fill", st.bias / 2 * 100 + "%"); }
+        buildStyles(); $("styles").querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true }); scheduleRender(0);
       };
       box.append(b);
       if (thumbs.has(st.key)) paintThumb(c, thumbs.get(st.key));
-      else pool.word(st, "Handwriting", 7, st.bias ?? 1, true).then(ink => { thumbs.set(st.key, ink); paintThumb(c, ink); if (st.key === W_().style) updateCapacity(); }).catch(() => {});
+      else pool.word(st, "Handwriting", 7, st.bias ?? 1, true).then(ink => { thumbs.set(st.key, ink); paintThumb(c, ink); if (st.key === W_().style) updateCapacity(); }).catch(() => b.classList.add("ready")); // no preview: end the skeleton anyway
     }
+    box.scrollTop = keepTop;
   }
   function paintThumb(c, ink) {
     const g = c.getContext("2d"); g.clearRect(0, 0, c.width, c.height);
@@ -618,6 +625,7 @@
     g.strokeStyle = "#1b2a6b"; g.lineWidth = 2; g.lineCap = g.lineJoin = "round"; g.beginPath();
     for (const s of ink) { s.forEach(([x, y], i) => { const px = 8 + (x - x0) * k, py = c.height - 6 - (y - y0) * k; i ? g.lineTo(px, py) : g.moveTo(px, py); }); }
     g.stroke();
+    if (c.parentElement) c.parentElement.classList.add("ready"); // ends the skeleton
   }
 
   // ---------- printer settings dialog ----------
@@ -640,9 +648,9 @@
     height: ["Paper height", "mm", "Only used when the paper is Custom."],
   };
   const GROUPS = [
+    ["Pen offset", "printer", ["offset_x", "offset_y"]],
     ["Pauses during printing", "printer", ["paper_pause_s", "pen_pause_s", "shift_pause_s"]],
     ["Pen heights", "printer", ["z_draw", "z_lift"]],
-    ["Pen offset", "printer", ["offset_x", "offset_y"]],
     ["Speeds", "printer", ["draw_feed", "travel_feed", "z_feed", "settle_ms"]],
     ["Custom printer", "printer", ["bed_x", "bed_y", "bed_z"]],
     ["Custom paper", "paper", ["width", "height"]],

@@ -21,308 +21,861 @@
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Handwrite", "url": "https://handwrite.rickykashyap.top/app", "description": "Free handwriting G-code generator for Bambu Lab A1, P1S and X1 printers with a pen holder. Type text and your 3D printer writes it in real-looking handwriting.", "image": "https://handwrite.rickykashyap.top/guide-app.png", "applicationCategory": "DesignApplication", "operatingSystem": "Any (runs in a web browser)", "browserRequirements": "Requires JavaScript and WebAssembly", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "sameAs": ["https://github.com/priencelucifer/handwrite"], "author": {"@type": "Person", "name": "Ricky Kashyap", "url": "https://www.linkedin.com/in/ricky-kashyap-7b776723a", "sameAs": ["https://www.linkedin.com/in/ricky-kashyap-7b776723a", "https://github.com/priencelucifer"]}}</script>
 <style>
+  /* ---------- 1. shared tokens (same block in app.html) ---------- */
   :root {
-    --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f8f9fb; --line: #e3e6eb; --text: #1c2230; --muted: #667085;
-    --accent: #3b5bdb; --accent-2: #eef2ff; --accent-text: #ffffff; --danger: #c92a2a; --ok: #2b8a3e; --amber: #e08a00;
-    --ink: #1b2a6b; --plate: #3a3d42; --plate-grid: #4a4e55; --paper: #ffffff; --tape: #f2c14e; --head: #dfe3e8; --head-line: #9aa3b2;
-    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 16px rgba(16,24,40,.06); --radius: 14px; color-scheme: light;
+    color-scheme: light dark;
+    /* surfaces */
+    --bg: #F4EFE6; --bg-band: #ECE5D8; --surface: #FFFDF8; --surface-2: #F8F4EC;
+    --line: #E3DACB; --line-strong: #CDBFA8; --field: #8F8270; /* --field: form-control borders + switch-off track (>=3:1) */
+    /* text (AA: text 15.4, text-2 6.7, text-3 5.2 on bg; text-3 4.8 on bg-band) */
+    --text: #1D1A15; --text-2: #5A5246; --text-3: #6B6255;
+    /* accent: ink blue */
+    --accent: #22367A; --accent-hover: #1A2A60; --accent-soft: #E4E8F4; --on-accent: #FFFFFF; --focus: #22367A;
+    /* status + craft */
+    --ok: #2C6A39; --danger: #A3301E; --danger-soft: #F7E3DE; --on-danger: #FFFFFF; --brass: #B5741C; --tape: #EBCB7A;
+    /* paper + ink: paper stays paper in dark mode, only dimmed */
+    --sheet: #FFFDF8; --sheet-text: #5E5649; --ink: #1B2A6B; --ink-2: #B23A2B; --ink-done: #C9C2B5;
+    /* physical machine colours (near-identical in both themes) */
+    --plate: #2A2B2D; --plate-grid: #333538; --plate-grid-major: #3E4044; --plate-label: #C3BCAE;
+    --edge: #D9861E; /* "orange dashes" */ --area: #6F92CC; /* "blue dashes" */ --slide: #B83A2E; /* "red dashes" */
+    --unreach: rgba(150,140,125,.42); /* "grey" */
+    --head: #ECE8E0; --head-line: #9C9384; --hotend: #C9C5BD; --holder: #33427A;
+    --pen: #34489A; --pen-cap: #1A2650; --pen-tip: #1D1A15;
+    /* hero machine window (always dark: it is a printer) */
+    --chamber: #18191B; --chamber-edge: transparent; --chamber-line: #2A2B2D; --chamber-text: #B9B2A4; --chamber-strong: #F2EEE6;
+    --chamber-code: #8F887B; --chamber-cur: #C2CFF8; --m-line: #9A958C; --m-fill: rgba(154,149,140,.14); --pen-ring: #A8BAF4;
+    /* final CTA band */
+    --band-ink: #1A2650; --on-band: #F4EFE6; --on-band-2: #C9D0E6;
+    /* app.js reads these two by name for canvas labels: keep literal values, never var() */
+    --panel: #FFFDF8; --muted: #6B6255;
+    /* type: system stacks only */
+    --font-display-xl: ui-serif, "Iowan Old Style", "Sitka Banner", "Palatino Linotype", Palatino, "URW Palladio L", P052, Georgia, serif;
+    --font-display: ui-serif, "Iowan Old Style", "Sitka Display", "Palatino Linotype", Palatino, "URW Palladio L", P052, Georgia, serif;
+    --font-sans: "Segoe UI Variable Text", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    /* radii */
+    --r-sheet: 3px; --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 28px; --r-pill: 999px;
+    /* shadows (warm) */
+    --sh-1: 0 1px 0 rgba(58,44,22,.05), 0 1px 3px rgba(58,44,22,.07);
+    --sh-2: 0 1px 1px rgba(58,44,22,.05), 0 6px 14px -4px rgba(58,44,22,.10), 0 18px 36px -12px rgba(58,44,22,.12);
+    --sh-3: 0 2px 4px rgba(40,30,15,.06), 0 24px 48px -16px rgba(40,30,15,.24), 0 48px 96px -32px rgba(40,30,15,.20);
+    --sh-paper: 0 1px 1px rgba(40,30,15,.08), 0 10px 24px -10px rgba(40,30,15,.28);
+    /* motion */
+    --d1: 120ms; --d2: 200ms; --d3: 360ms; --d4: 640ms; --d5: 1100ms; --stagger: 70ms;
+    --e-out: cubic-bezier(.22,1,.36,1);     /* default: fast start, soft landing */
+    --e-in-out: cubic-bezier(.65,0,.35,1);  /* machine moves */
+    --e-ink: cubic-bezier(.45,.05,.25,1);   /* hand-drawn marks */
+    --e-spring: cubic-bezier(.34,1.56,.64,1); /* only pins, checks, badges, switch knob */
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #111318; --panel: #181b22; --panel-2: #1e222b; --line: #2a2f3a; --text: #e6e8ee; --muted: #9aa3b2;
-      --accent: #748ffc; --accent-2: #1f2540; --accent-text: #0b0f1f; --danger: #ff8787; --ok: #69db7c;
-      --head: #2c313b; --head-line: #6b7484; --shadow: 0 1px 2px rgba(0,0,0,.4); color-scheme: dark;
+      --bg: #12110E; --bg-band: #0D0C0A; --surface: #1A1814; --surface-2: #221F1A;
+      --line: #2E2A24; --line-strong: #463F36; --field: #766C5C;
+      --text: #EEE7DA; --text-2: #B7AD9B; --text-3: #968C7B;
+      --accent: #A8BAF4; --accent-hover: #C2CFF8; --accent-soft: #1E2440; --on-accent: #0F1733; --focus: #A8BAF4;
+      --ok: #85C893; --danger: #F09B8B; --danger-soft: #3A1E19; --on-danger: #3A1E19; --brass: #E0A04A; --tape: #C9A95A;
+      --sheet: #EDE6D6;
+      --head: #55504A; --head-line: #8A8173; --hotend: #8F8A80; --holder: #5B6BA6;
+      --pen: #6B7FC4; --pen-cap: #2B3A75;
+      --chamber: #0E0F10; --chamber-edge: #2E2A24; --chamber-line: #232426;
+      --band-ink: #1E2440; --on-band: #EEE7DA; --on-band-2: #B7C1E0;
+      --panel: #1A1814; --muted: #968C7B;
+      --sh-1: 0 1px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,240,220,.03);
+      --sh-2: 0 1px 2px rgba(0,0,0,.4), 0 12px 28px -10px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,240,220,.04);
+      --sh-3: 0 30px 70px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(255,240,220,.05);
+      --sh-paper: 0 2px 2px rgba(0,0,0,.35), 0 16px 32px -12px rgba(0,0,0,.6);
     }
   }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  a { color: var(--accent); }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
-  main { overflow-x: clip; } /* the tilted hero sheet must not cause sideways scrolling on phones */
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- 2. shared base (same block in app.html) ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }            /* covers #ruledRow (.row[hidden]), #saveAll, #pager, #skipped, #summary, #error */
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: var(--r-pill);
+    border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font: 600 15px/1 var(--font-sans);
+    text-decoration: none; white-space: nowrap; cursor: pointer;
+    transition: background-color var(--d1), border-color var(--d1), box-shadow var(--d2), transform var(--d2) var(--e-out); }
+  .btn:hover { background: var(--surface-2); border-color: var(--field); }
+  .btn:active { transform: scale(.98); transition-duration: var(--d1); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: var(--sh-1); }
+  .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: var(--sh-2); transform: translateY(-1px); }
+  .btn.primary:active { transform: translateY(0) scale(.98); }
+  .btn.ghost { background: transparent; border-color: transparent; }
+  .btn.ghost:hover { background: var(--surface-2); }
+  .btn.small { height: 32px; padding: 0 12px; font-size: 13.5px; }
+  .btn.lg { height: 48px; padding: 0 24px; font-size: 16px; }
+  .btn:disabled { background: var(--surface-2); border-color: var(--line); color: var(--text-3); box-shadow: none; transform: none; cursor: not-allowed; }
+  @media (pointer: coarse) { .btn, .btn.small { min-height: 40px; min-width: 40px; } }
+  .ui, kbd { font: 600 13.5px/1.5 var(--font-sans); color: var(--text); background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-bottom-width: 2px; border-radius: 6px; padding: 0 7px; white-space: nowrap; }
+  code { font: .92em var(--font-mono); background: var(--surface-2); border-radius: 4px; padding: 1px 5px; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  /* ---------- 3. guide ---------- */
+  :root {
+    --header-h: 64px; --gutter: 40px;
+    --sheet-accent: #22367A; /* accent drawn ON paper: the sheet stays light in dark mode, so this stays dark */
+    --edge-text: #94570F;    /* orange label text on paper (AA on both sheets) */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .23 0 0 0 0 .17 0 0 0 0 .09 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --grain-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .9 0 0 0 0 .8 0 0 0 .045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  @media (prefers-color-scheme: dark) { :root { --grain: var(--grain-light); } }
+  @media (max-width: 1080px) { :root { --header-h: 100px; } }
+  @media (max-width: 1024px) { :root { --gutter: 24px; } }
+  @media (max-width: 600px) { :root { --gutter: 16px; } }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  html { scroll-padding-top: calc(var(--header-h) + 16px); }
+  body { margin: 0; background: var(--bg) var(--grain); color: var(--text); font: 17px/1.65 var(--font-sans); -webkit-font-smoothing: antialiased; }
+  @media (max-width: 600px) { body { font-size: 16px; } }
+  a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  a:hover { text-decoration-thickness: 2px; }
+  .wrap { max-width: 1200px; margin-inline: auto; padding-inline: var(--gutter); }
+  main { overflow-x: clip; counter-reset: sec; } /* the hero window and swipe tour must never scroll the page sideways */
+  [data-anim].off, [data-anim].off * { animation-play-state: paused !important; }
+  .skip { position: absolute; left: 8px; top: 8px; z-index: 100; padding: 10px 18px; border-radius: var(--r-pill); background: var(--accent);
+    color: var(--on-accent); font-weight: 600; text-decoration: none; box-shadow: var(--sh-2); transform: translateY(-200%); }
+  .skip:focus { transform: none; }
+
+  /* reveal: the hidden state exists only once the script has run (.rv-on) */
+  .rv { transition: opacity var(--d4) var(--e-out), transform var(--d4) var(--e-out); transition-delay: calc(var(--i, 0) * var(--stagger)); }
+  .rv-on .rv:not(.in) { opacity: 0; transform: translateY(18px); }
+  .rv-on figure.rv:not(.in), .rv-on .rv.fig:not(.in) { transform: translateY(12px) scale(.985); }
+  .rv.now { transition: none; }
+  @media print { .rv { opacity: 1 !important; transform: none !important; } .ink { stroke-dashoffset: 0 !important; } } /* handwriting still waiting to be written in */
 
   /* header */
-  header.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--panel) 88%, transparent);
-    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
-  header.top .wrap { display: flex; align-items: center; gap: 18px; height: 60px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 17px; color: var(--text); text-decoration: none; }
+  header.top { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 86%, transparent);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2); backdrop-filter: blur(12px) saturate(1.2); border-bottom: 1px solid var(--line); }
+  .top-row { display: flex; align-items: center; gap: 16px; height: 64px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; color: var(--text); text-decoration: none; font: 400 22px/1 var(--font-display); letter-spacing: -.01em; }
   .brand svg { color: var(--accent); }
-  nav { display: flex; gap: 4px; margin-left: auto; }
-  nav a { color: var(--muted); text-decoration: none; font-size: 14px; padding: 6px 10px; border-radius: 8px; }
-  nav a:hover { color: var(--text); background: var(--panel-2); }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 10px;
-    border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 15px; font-weight: 600;
-    text-decoration: none; cursor: pointer; white-space: nowrap; }
-  .btn:hover { background: var(--panel-2); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-  .btn.primary:hover { filter: brightness(1.06); }
-  .btn.small { height: 34px; padding: 0 12px; font-size: 14px; }
-  @media (max-width: 860px) { nav { display: none; } header.top .btn { margin-left: auto; } }
+  .guide-nav { position: relative; display: flex; gap: 2px; margin-left: auto; }
+  .guide-nav a { position: relative; padding: 10px 12px; color: var(--text-2); font-size: 14.5px; line-height: 1.2; text-decoration: none; border-radius: var(--r-sm); transition: color var(--d1); }
+  .guide-nav a::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 3px; height: 2px; border-radius: 1px; background: var(--accent);
+    transform: scaleX(0); transform-origin: left; transition: transform var(--d2) var(--e-out), opacity var(--d2); }
+  .guide-nav a:hover, .guide-nav a[aria-current] { color: var(--text); }
+  .guide-nav a:hover::after { transform: scaleX(1); opacity: .35; }
+  .guide-nav a[aria-current]::after { transform: scaleX(1); opacity: 1; }
+  .progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); opacity: .7; transform: scaleX(0); transform-origin: left; pointer-events: none; }
+  @media (max-width: 1080px) {
+    .top-row { display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: 56px 44px; height: auto; gap: 0 12px; }
+    .guide-nav { grid-column: 1 / -1; grid-row: 2; align-items: flex-start; gap: 6px; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) 4px;
+      overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; scroll-padding-inline: var(--gutter); overscroll-behavior-x: contain;
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+      mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent); }
+    .guide-nav::-webkit-scrollbar { display: none; }
+    .guide-nav a { flex: none; display: inline-flex; align-items: center; height: 40px; padding: 0 14px; font-size: 14px; scroll-snap-align: start;
+      border: 1px solid var(--line); border-radius: var(--r-pill); background: color-mix(in srgb, var(--surface) 60%, transparent); }
+    .guide-nav a::after { display: none; }
+    .guide-nav a:focus-visible { outline-offset: -3px; } /* the rail clips anything outside the chip */
+    .guide-nav a[aria-current] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  }
 
   /* hero */
-  .hero { display: grid; grid-template-columns: 1fr 1.05fr; gap: 48px; align-items: center; padding-block: 64px 40px; }
-  .hero h1 { font-size: clamp(32px, 5vw, 50px); line-height: 1.08; letter-spacing: -.025em; margin: 0 0 18px; }
-  .hero h1 em { font-style: normal; color: var(--accent); }
-  .lead { font-size: 18px; color: var(--muted); margin: 0 0 26px; max-width: 34em; }
-  .cta { display: flex; gap: 12px; flex-wrap: wrap; }
-  .facts { display: flex; gap: 18px; flex-wrap: wrap; margin: 26px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 14px; }
-  .facts li::before { content: "✓ "; color: var(--ok); font-weight: 700; }
-  .sheet { background: var(--paper); border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,.08), 0 18px 40px rgba(16,24,40,.16);
-    padding: 26px 26px 34px; transform: rotate(-1.2deg); position: relative; }
-  .sheet svg { display: block; width: 100%; height: auto; overflow: visible; }
-  .ink { fill: none; stroke: var(--ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-  @media (max-width: 860px) { .hero { grid-template-columns: 1fr; gap: 32px; padding-top: 36px; } }
+  .hero { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr); gap: 56px; align-items: center; padding-block: 56px 72px;
+    min-height: min(860px, calc(100svh - var(--header-h))); }
+  .over { margin: 0 0 20px; text-wrap: balance; font: 650 12px/1.4 var(--font-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); }
+  .hero h1 { margin: 0 0 24px; font: 400 clamp(40px, 3.2vw + 14px, 64px)/1.02 var(--font-display-xl); letter-spacing: -.02em;
+    font-variant-numeric: lining-nums; text-wrap: balance; }
+  .hero h1 .l { display: block; }
+  .hero h1 em { font-style: italic; color: var(--accent); }
+  .lead { margin: 0 0 32px; max-width: 34em; font-size: clamp(17px, .5vw + 14px, 20px); line-height: 1.6; color: var(--text-2); }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .arr { transition: transform var(--d2) var(--e-out); }
+  .btn:hover .arr { transform: translateX(3px); }
+  .facts { display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: 8px 20px; margin: 32px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--text-2); }
+  .facts li::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 8px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+  @keyframes rise16 { from { opacity: 0; transform: translateY(16px); } }
+  @keyframes fadein { from { opacity: 0; } }
+  .over { animation: rise 700ms var(--e-out) both; }
+  .hero h1 .l { animation: rise 900ms var(--e-out) 80ms both; }
+  .hero h1 .l + .l { animation-delay: 200ms; }
+  .lead { animation: rise 800ms var(--e-out) 300ms both; }
+  .hero .cta { animation: rise 800ms var(--e-out) 420ms both; }
+  .facts { animation: fadein 800ms var(--e-out) 540ms both; }
+  @media (max-width: 1000px) { .hero { grid-template-columns: minmax(0,1fr); gap: 40px; min-height: 0; padding-block: 40px 64px; } }
+  @media (max-width: 600px) { .hero .cta { flex-direction: column; } .hero .cta .btn { width: 100%; } }
+
+  /* hero machine: a Bambu Lab A1 from above */
+  .machine { margin: 0; min-width: 0; animation: rise16 1000ms var(--e-out) 200ms both; }
+  .m-win { border-radius: var(--r-lg); overflow: hidden; background: var(--chamber); border: 1px solid var(--chamber-edge); box-shadow: var(--sh-3); contain: layout paint; }
+  .m-bar { display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 6px 0 16px; border-bottom: 1px solid var(--chamber-line);
+    font: 500 12px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--chamber-text); white-space: nowrap; }
+  .m-bar b { display: inline-block; min-width: 6ch; text-align: right; color: var(--chamber-strong); font-weight: 500; margin-right: 12px; }
+  .pen-state { margin-left: auto; min-width: 9ch; padding: 4px 8px; border-radius: var(--r-pill); background: #26272A; text-align: center; }
+  .pen-state.down { background: #1E2440; color: var(--chamber-cur); }
+  .m-toggle { flex: none; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 10px; background: transparent;
+    color: var(--chamber-strong); cursor: pointer; transition: background-color var(--d1); }
+  .m-toggle:hover { background: #26272A; }
+  .m-toggle:focus-visible { outline-color: var(--pen-ring); outline-offset: -2px; } /* the window is always dark */
+  .m-toggle .i-play, .m-toggle[data-paused] .i-pause { display: none; }
+  .m-toggle[data-paused] .i-play { display: block; }
+  #machine { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; }
+  .m-code { margin: 0; padding: 10px 16px 12px; list-style: none; border-top: 1px solid var(--chamber-line); font: 12px/20px var(--font-mono);
+    color: var(--chamber-code); height: calc(6 * 20px + 22px); overflow: hidden; }
+  .m-code li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-code li.c { font-style: italic; }
+  .m-code li:last-child { color: var(--chamber-cur); }
+  .m-code li:last-child::before { content: "▸ "; }
+  .machine figcaption { padding: 10px 4px 0; font: 13px/1.4 var(--font-sans); color: var(--text-3); }
+  .xr { fill: var(--m-fill); stroke: var(--m-line); stroke-width: 1.25; }
+  #heroInk { stroke-width: 2.6; }
+  @media (max-width: 600px) {
+    #machine { aspect-ratio: 1 / 1; }
+    .dro-z { display: none; }
+    .m-code { height: calc(4 * 20px + 22px); }
+    .m-code li:nth-child(-n+2) { display: none; }
+  }
 
   /* sections */
-  section.block { padding: 56px 0; border-top: 1px solid var(--line); }
-  .kicker { color: var(--accent); font-weight: 650; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
-  h2 { font-size: clamp(26px, 3.4vw, 34px); line-height: 1.15; letter-spacing: -.02em; margin: 0 0 12px; }
-  h3 { font-size: 18px; margin: 0 0 6px; letter-spacing: -.01em; }
-  .intro { color: var(--muted); max-width: 46em; margin: 0 0 30px; }
-  .holder { display: flex; align-items: center; gap: 24px; }
-  .holder p { margin: 0 0 8px; }
-  .holder p.small { margin: 0; color: var(--muted); font-size: 14px; }
-  .holder .btn { flex: none; }
-  @media (max-width: 700px) { .holder { flex-direction: column; align-items: stretch; } }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
-  .muted { color: var(--muted); }
-  .note { border-left: 3px solid var(--amber); background: var(--panel); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 22px 0 0; }
-  .note.warn { border-color: var(--danger); }
-  kbd, .ui { font: 600 13.5px system-ui, sans-serif; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
-
-  .steps4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; counter-reset: s; }
-  .steps4 .card { position: relative; padding-top: 52px; }
-  .steps4 .card::before { counter-increment: s; content: counter(s); position: absolute; top: 18px; left: 20px; width: 26px; height: 26px;
-    border-radius: 50%; background: var(--accent-2); color: var(--accent); font-weight: 700; font-size: 14px; display: grid; place-items: center; }
-  .steps4 p { margin: 0; color: var(--muted); font-size: 15px; }
-  @media (max-width: 960px) { .steps4 { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 560px) { .steps4 { grid-template-columns: 1fr; } }
-
-  .samples { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
-  .sample { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px 12px 6px; text-align: center; }
-  .sample svg { width: 100%; height: 46px; }
-  .sample span { display: block; color: #667085; font-size: 12.5px; }
-  @media (max-width: 640px) { .samples { grid-template-columns: 1fr 1fr; } }
-
-  /* app tour */
-  .tour { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: #111318; }
-  .tour img { display: block; width: 100%; height: auto; }
-  .pin { position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; background: var(--amber); color: #1c2230;
-    font-weight: 800; font-size: 14px; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
-  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 26px; margin: 20px 0 0; padding: 0; list-style: none; }
-  .legend li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; font-size: 15px; }
-  .legend b.n { width: 24px; height: 24px; border-radius: 50%; background: var(--amber); color: #1c2230; display: grid; place-items: center; font-size: 13px; }
-
-  /* steppers: an SVG whose parts change with data-stage, plus the stage list */
-  .stepper { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; align-items: center; margin: 0; }
-  .stepper .stage { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
-  .stepper svg { display: block; width: 100%; height: auto; }
-  .stage-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .stage-list button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 30px 1fr; gap: 12px; width: 100%; padding: 12px 14px;
-    border-radius: 12px; border: 1px solid transparent; cursor: pointer; color: var(--muted); }
-  .stage-list button:hover { background: var(--panel); }
-  .stage-list button:focus-visible { outline: 2px solid var(--accent); }
-  .stage-list button[aria-current=step] { background: var(--panel); border-color: var(--line); color: var(--text); box-shadow: var(--shadow); }
-  .stage-list .n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px;
-    background: var(--panel-2); border: 1px solid var(--line); }
-  .stage-list button[aria-current=step] .n { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-  .stage-list .h { display: block; color: var(--text); font-size: 15.5px; margin-bottom: 2px; }
-  .stage-list button > span:last-child { display: block; }
-  .stage-list span.t { font-size: 14.5px; }
-  .stage-list .bar { height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 8px; display: none; }
-  .stage-list button[aria-current=step] .bar { display: block; }
-  .stage-list .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
-  .playing .stage-list button[aria-current=step] .bar i { animation: fill var(--ms, 5000ms) linear forwards; }
-  @keyframes fill { to { width: 100%; } }
-  @media (max-width: 860px) { .stepper { grid-template-columns: 1fr; } }
+  section.block { counter-increment: sec; padding-block: clamp(72px, 8vw, 128px); border: 0; }
+  .band { background: var(--bg-band); }
+  .sec-head { margin-bottom: 48px; }
+  .kicker { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; font: 650 12px/1 var(--font-sans); letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
+  .kicker::before { content: counter(sec, decimal-leading-zero); font: 500 12px/1 var(--font-mono); letter-spacing: 0; color: var(--accent); }
+  .kicker::after { content: ""; flex: 1; max-width: 120px; height: 1px; background: var(--line-strong); transform-origin: left; transition: transform 900ms var(--e-out) 250ms; }
+  .rv-on .kicker:not(.in)::after { transform: scaleX(0); }
+  h2 { margin: 0 0 16px; font: 400 clamp(34px, 3.2vw + 12px, 56px)/1.04 var(--font-display); letter-spacing: -.016em; font-variant-numeric: lining-nums; text-wrap: balance; }
+  h3 { margin: 0 0 6px; font: 620 18px/1.35 var(--font-sans); letter-spacing: -.008em; }
+  .h3-display { margin: 0 0 20px; font: 400 clamp(21px, 1vw + 16px, 26px)/1.22 var(--font-display); letter-spacing: -.005em; }
+  .intro, .muted { color: var(--text-2); max-width: 62ch; }
+  .intro { margin: 0; }
+  .intro + .intro { margin-top: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh-1); padding: 24px; }
+  .note { margin: 24px 0 0; padding: 14px 18px; max-width: 72ch; border-left: 2px solid var(--brass); background: color-mix(in srgb, var(--surface) 60%, transparent); border-radius: 0; color: var(--text); }
+  .note::before { content: "Note"; display: block; margin-bottom: 6px; font: 650 11.5px/1 var(--font-sans); letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
+  .note.warn { border-left-color: var(--danger); background: var(--danger-soft); }
+  .note.warn::before { content: "Caution"; }
 
   /* diagram parts shared by the SVGs */
+  .ink { fill: none; stroke: var(--ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .ink-red { stroke: var(--ink-2); }
   .plate { fill: var(--plate); }
-  .plate-edge { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 7 5; }
-  .grid { stroke: var(--plate-grid); stroke-width: 1; }
-  .paper { fill: var(--paper); stroke: #c9ced6; stroke-width: 1; }
-  .lbl { font: 600 11px system-ui, sans-serif; fill: var(--muted); letter-spacing: .06em; }
-  .lbl-dark { font: 600 11px system-ui, sans-serif; fill: #667085; }
-  .lbl-on-plate { font: 600 10.5px system-ui, sans-serif; fill: #c3c8d0; letter-spacing: .05em; }
-  .dim { stroke: var(--accent); stroke-width: 1.6; fill: none; }
-  .dim-text { font: 700 12.5px system-ui, sans-serif; fill: var(--accent); }
+  .plate-edge { fill: none; stroke: var(--edge); stroke-width: 2; stroke-dasharray: 7 5; }
+  .grid { stroke: var(--plate-grid-major); stroke-width: 1; }
+  .paper { fill: var(--sheet); stroke: var(--line-strong); stroke-width: 1; }
+  .tape { fill: var(--tape); }
+  .lbl { font: 600 10.5px var(--font-mono); letter-spacing: .06em; fill: var(--text-3); }
+  .lbl-dark { font: 600 11px var(--font-sans); fill: var(--sheet-text); }
+  .lbl-s { font: 600 10.5px var(--font-mono); letter-spacing: .06em; fill: var(--sheet-text); }
+  .lbl-on-plate { font: 600 10.5px var(--font-sans); letter-spacing: .05em; fill: var(--plate-label); }
+  .cap-strong { fill: var(--text); }
+  .on-ink { fill: var(--ink); }
+  .on-edge { fill: var(--edge-text); }
+  .on-accent-paper { fill: var(--sheet-accent); }
+  .t8 { font-size: 8px; } .t9 { font-size: 9px; } .t10 { font-size: 10px; }
+  .dim { stroke: var(--sheet-accent); stroke-width: 1.6; fill: none; }
+  .dim-text { font: 700 12.5px var(--font-sans); fill: var(--sheet-accent); }
   .pen-line { stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; fill: none; }
-  .aim { stroke: #9aa3b2; stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+  .aim { stroke: var(--head-line); stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+  .lead-line { stroke: var(--head-line); stroke-dasharray: 2 2; fill: none; }
   .fade { opacity: 0; transition: opacity .5s; }
-  .draw { stroke-dasharray: 1; stroke-dashoffset: 1; transition: none; }
+  .draw { stroke-dasharray: 1 2; stroke-dashoffset: 1.01; transition: none; }
   .head-body { fill: var(--head); stroke: var(--head-line); stroke-width: 1.2; }
-  .hotend { fill: #c7ccd4; stroke: var(--head-line); }
-  .pen-body { fill: #3b5bdb; } .pen-cap { fill: #22325e; } .pen-tip { fill: #1c2230; }
-  .moving { transition: transform 1.1s cubic-bezier(.5,.1,.2,1), opacity .5s; transform-box: view-box; }
+  .hotend { fill: var(--hotend); stroke: var(--head-line); }
+  .nozzle { fill: var(--head-line); }
+  .holder-rect { fill: var(--holder); }
+  .clamp { fill: var(--head-line); }
+  .pen-body { fill: var(--pen); } .pen-cap { fill: var(--pen-cap); } .pen-tip { fill: var(--pen-tip); }
+  .moving { transition: transform 1.1s var(--e-in-out), opacity .5s; transform-box: view-box; }
+  @keyframes draw { from { stroke-dashoffset: 1.01; } } /* pathLength=1 dashes are "1 2": hidden, the path sits inside the gap, so round caps leave no dot */
 
-  /* calibration stages */
-  #cal[data-stage="1"] .paper-g { animation: slidein 1.3s cubic-bezier(.5,.1,.2,1) .2s both; transform-box: view-box; }
-  @keyframes slidein { from { transform: translate(46px, 40px); } }
+  /* 01 how it works: steps with vignettes */
+  .steps4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; }
+  @media (max-width: 959px) { .steps4 { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  @media (max-width: 599px) { .steps4 { grid-template-columns: minmax(0,1fr); } }
+  .step { position: relative; display: flex; flex-direction: column; padding: 14px 14px 22px; }
+  .step.active { border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); box-shadow: var(--sh-2); }
+  .vx-frame { margin-bottom: 18px; aspect-ratio: 240 / 132; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); }
+  .vx { display: block; width: 100%; height: 100%; }
+  .step-h { display: flex; align-items: center; gap: 10px; margin: 0 4px 8px; }
+  .step-h h3 { margin: 0; }
+  .num { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; font: 500 13px/1 var(--font-mono);
+    background: var(--accent-soft); color: var(--accent); }
+  .step.active .num { background: var(--accent); color: var(--on-accent); }
+  .step p { margin: 0 4px; color: var(--text-2); font-size: 15.5px; }
+  .vx-bar { position: absolute; left: 18px; right: 18px; bottom: 9px; height: 2px; border-radius: 1px; overflow: hidden; }
+  .vx-bar i { display: block; height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left; }
+  .step.play .vx-bar i { animation: fillx 3.2s linear both; }
+  @keyframes fillx { to { transform: scaleX(1); } }
+  .vx text { font-family: var(--font-sans); }
+  /* 1 type */
+  .v1-text { font-size: 16px; fill: var(--text); white-space: pre; }
+  .v1-caret { transform-box: view-box; }
+  .v1-chip-t { font: 500 10px var(--font-mono); fill: var(--accent); }
+  .play .v1-text tspan { animation: typein 90ms steps(1) both; animation-delay: calc(var(--i) * 90ms); }
+  @keyframes typein { from { fill-opacity: 0; } }
+  .play .v1-caret { animation: caret 1080ms steps(12) both, blink 500ms steps(1) 1080ms 3; }
+  @keyframes caret { from { transform: translateX(calc(-1 * var(--w, 88px))); } }
+  @keyframes blink { 50% { opacity: 0; } }
+  .play .v1-chip { animation: chip-in var(--d3) var(--e-out) 1.3s both; }
+  @keyframes chip-in { from { opacity: 0; transform: translateY(6px); } }
+  /* 2 pick */
+  .v2-card rect { fill: var(--sheet); stroke: var(--line); }
+  .v2-card text { font: 500 8.5px var(--font-mono); fill: var(--sheet-text); text-anchor: middle; }
+  .v2 .ink { stroke-width: 3.4; }
+  .v2-ring { fill: none; stroke: var(--accent); stroke-width: 2; transform-box: view-box; }
+  .play .v2-ring { animation: ring-move 500ms var(--e-out) 400ms both; }
+  @keyframes ring-move { from { transform: translateX(-74px); } }
+  .play .v2-pick path { stroke-dasharray: 1 2; animation: draw 300ms linear both; animation-delay: calc(.9s + var(--j) * 80ms); }
+  /* 3 place */
+  .v3-sheet { transform-box: fill-box; transform-origin: center; }
+  .play .v3-sheet { animation: sheet-in 900ms var(--e-in-out) 300ms both; }
+  @keyframes sheet-in { from { transform: translate(40px, 26px) rotate(6deg); } }
+  .play .v3-area { animation: fadein 300ms var(--e-out) 1.3s both; }
+  .cursor { fill: #FFFDF8; stroke: #1D1A15; stroke-width: 1.2; stroke-linejoin: round; }
+  /* 4 save */
+  .v4-pill { transform-box: fill-box; transform-origin: center; }
+  .v4-pill text { font: 600 12px var(--font-sans); fill: var(--on-accent); }
+  .v4-ext { font: 500 10px var(--font-mono); fill: var(--text-2); }
+  .play .v4-pill { animation: press 200ms var(--e-spring) 300ms both; }
+  @keyframes press { from { transform: scale(.94); } }
+  .play .v4-file { animation: file-in 600ms var(--e-out) 500ms both; }
+  @keyframes file-in { from { opacity: 0; transform: translateX(-60px); } }
+  .play .v4-line { animation: fadein 300ms var(--e-out) both; animation-delay: calc(1.1s + var(--k) * 120ms); }
+
+  /* style samples */
+  .samples { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 40px; }
+  @media (max-width: 899px) { .samples { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  .sample { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 96px; min-width: 0; padding: 14px 12px 8px;
+    font: inherit; color: var(--sheet-text); cursor: pointer; border: 1px solid var(--line); border-radius: var(--r-md);
+    background: linear-gradient(color-mix(in srgb, var(--area) 25%, transparent), color-mix(in srgb, var(--area) 25%, transparent)) center 62% / calc(100% - 24px) 1px no-repeat var(--sheet);
+    transition: border-color var(--d2), box-shadow var(--d2), transform var(--d2) var(--e-out); }
+  .sample:hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
+  .sample.writing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .sample svg { display: block; width: 100%; height: 46px; overflow: visible; }
+  .sample span { font-size: 12.5px; }
+  .nib { opacity: 0; pointer-events: none; transition: opacity var(--d2); }
+  .nib-body { fill: var(--pen); } .nib-cap { fill: var(--pen-cap); } .nib-tip { fill: var(--pen-tip); }
+  .samples-cap { margin: 14px 0 0; font: 600 13px/1.5 var(--font-sans); color: var(--text-3); }
+  .samples-cap a { margin-left: 8px; white-space: nowrap; }
+  @media (max-width: 899px) { .samples-cap a { display: inline-block; padding-block: 11px; margin-left: 0; } }
+
+  /* app tour */
+  .tour-wrap { margin-top: 88px; }
+  .window { overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-3); }
+  .window-bar { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  .window-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); }
+  .tour { position: relative; background: #111318; }
+  .tour img { display: block; width: 100%; height: auto; }
+  .pin { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; display: grid; place-items: center; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent); font: 700 13px/1 var(--font-mono); border: 2px solid var(--sheet); box-shadow: var(--sh-2);
+    transition: transform var(--d2) var(--e-spring), box-shadow var(--d2); }
+  .pin:hover { transform: scale(1.12); }
+  .rv-on .window:not(.in) .pin { opacity: 0; }
+  .window.in .pin { animation: pin-pop 360ms var(--e-spring) backwards; animation-delay: calc(300ms + var(--n) * 70ms); }
+  @keyframes pin-pop { from { opacity: 0; transform: scale(.4); } }
+  .tour-hint { display: none; margin: 10px 0 0; font: 12px var(--font-mono); color: var(--text-3); }
+  @media (max-width: 640px) {
+    .tour-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+    .tour { min-width: 720px; }
+    .tour-hint { display: block; }
+  }
+  .legend { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 2px 24px; margin: 24px 0 0; padding: 0; list-style: none; }
+  @media (max-width: 899px) { .legend { grid-template-columns: minmax(0,1fr); } }
+  .legend li { display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 12px; align-items: start; padding: 8px 10px; border-radius: 8px; font-size: 15.5px; color: var(--text-2); }
+  .legend li b { color: var(--text); }
+  .legend b.n { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
+    font: 700 12px/1 var(--font-mono); box-shadow: var(--sh-1); }
+  .tour-wrap .legend li:hover { background: var(--accent-soft); }
+  .tour-wrap:has(.legend li:nth-child(1):hover) .pin:nth-of-type(1),
+  .tour-wrap:has(.legend li:nth-child(2):hover) .pin:nth-of-type(2),
+  .tour-wrap:has(.legend li:nth-child(3):hover) .pin:nth-of-type(3),
+  .tour-wrap:has(.legend li:nth-child(4):hover) .pin:nth-of-type(4),
+  .tour-wrap:has(.legend li:nth-child(5):hover) .pin:nth-of-type(5),
+  .tour-wrap:has(.legend li:nth-child(6):hover) .pin:nth-of-type(6),
+  .tour-wrap:has(.legend li:nth-child(7):hover) .pin:nth-of-type(7) { transform: scale(1.25); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+  /* 02 pen holder */
+  .spec { display: grid; grid-template-columns: minmax(0,5fr) minmax(0,7fr); gap: 40px; align-items: center; padding: 28px; }
+  .holder-fig { margin: 0; background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-md); }
+  .holder-fig svg { display: block; width: 100%; height: auto; }
+  .spec-copy p { margin: 0 0 14px; max-width: 60ch; }
+  .spec-line { font: 500 20px/1.3 var(--font-mono); color: var(--accent); }
+  .spec-line span { display: block; margin-bottom: 8px; font: 650 11.5px/1 var(--font-sans); letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
+  .spec-copy .small { font-size: 14.5px; color: var(--text-3); }
+  .spec-copy .btn { margin-top: 10px; }
+  .hx-part { fill: color-mix(in srgb, var(--head-line) 12%, transparent); stroke: var(--head-line); stroke-width: 1.25; }
+  .hx-fins { stroke: var(--head-line); stroke-width: .6; opacity: .45; fill: none; }
+  .hx-lead { stroke: var(--head-line); stroke-width: .75; stroke-dasharray: 2 3; fill: none; }
+  .h-ring { fill: color-mix(in srgb, var(--sheet-accent) 14%, transparent); stroke: var(--sheet-accent); stroke-width: 1.5; }
+  .h-tip { fill: var(--sheet-accent); }
+  .h-dim { stroke-dasharray: 1 2; }
+  .spec.in .h-pen { animation: pen-slide 900ms var(--e-out) 250ms both; }
+  @keyframes pen-slide { from { transform: translateY(-60px); } }
+  .spec.in .h-dim { animation: draw 500ms var(--e-ink) 950ms both; }
+  .spec.in .h-lbl { animation: fadein 400ms var(--e-out) 1.1s both; }
+  @media (max-width: 860px) { .spec { grid-template-columns: minmax(0,1fr); gap: 24px; padding: 20px; } }
+
+  /* steppers (#cal, #print) */
+  .stepper { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 32px; align-items: start; margin: 0; }
+  .stage { position: sticky; top: calc(var(--header-h) + 24px); padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-2); }
+  .stage > svg { display: block; width: 100%; height: auto; }
+  .stepper-toggle { position: absolute; right: 12px; bottom: 12px; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 50%; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--text); box-shadow: var(--sh-1);
+    transition: background-color var(--d1); }
+  .stepper-toggle:hover { background: var(--surface-2); }
+  .stepper-toggle .i-play, .stepper-toggle[data-paused] .i-pause { display: none; }
+  .stepper-toggle[data-paused] .i-play { display: block; }
+  .stage-list { position: relative; display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .stage-list::before { content: ""; position: absolute; left: 29.5px; top: 28px; bottom: 28px; width: 1px; background: var(--line-strong); }
+  .stage-list button { all: unset; box-sizing: border-box; position: relative; display: grid; grid-template-columns: 26px minmax(0,1fr); gap: 14px; width: 100%;
+    padding: 14px 16px; border: 1px solid transparent; border-radius: 12px; color: var(--text-2); cursor: pointer;
+    transition: background-color var(--d1), box-shadow var(--d2); }
+  .stage-list button:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+  .stage-list button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .stage-list button[aria-current=step] { background: var(--surface); border-color: var(--line); box-shadow: var(--sh-1), inset 3px 0 0 var(--accent); }
+  .stage-list .n { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font: 500 13px/1 var(--font-mono);
+    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--text-2); transition: background-color var(--d2), color var(--d2); }
+  .stage-list button[aria-current=step] .n { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .stage-list .h { display: block; margin-bottom: 4px; color: var(--text); font-size: 16px; line-height: 1.35; }
+  .stage-list button > span:last-child { display: block; }
+  .stage-list span.t { font-size: 15px; line-height: 1.6; }
+  .stage-list .bar { display: block; height: 2px; margin-top: 12px; overflow: hidden; border-radius: 2px; background: var(--line); visibility: hidden; }
+  .playing .stage-list button[aria-current=step] .bar { visibility: visible; }
+  .stage:has(.stepper-toggle[hidden]) :is(.cal-readout, .fig-cap) { margin-right: 0; } /* no toggle to clear */
+  .stage-list .bar i { display: block; width: 100%; height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left; }
+  .playing .stage-list button[aria-current=step] .bar i { animation: fill var(--ms, 5000ms) linear forwards; }
+  @keyframes fill { to { transform: scaleX(1); } }
+  .fig-cap { margin: 10px 52px 0 2px; font-size: 13px; line-height: 1.45; color: var(--text-3); }
+  .stepper .note-gap { margin-top: 0; }
+  @media (max-width: 860px) {
+    .stepper { grid-template-columns: minmax(0,1fr); gap: 20px; }
+    .stage { top: calc(var(--header-h) + 8px); z-index: 2; padding: 12px; }
+    .stage > svg { max-height: 34svh; } /* the stuck stage leaves room to read the step under it */
+    #cal .lbl, #cal .lbl-dark { font-size: 14px; } /* the stage shrinks to ~0.7x here */
+    #cal .dim-text { font-size: 16px; }
+  }
+  @media (max-height: 600px) { .stage { position: relative; top: auto; } }
+
+  /* 03 calibrate */
+  #cal[data-stage="1"] .paper-g { animation: slidein 1.2s var(--e-out) .2s both; transform-box: view-box; transform-origin: 70px 36px; }
+  @keyframes slidein { from { transform: translate(46px, 40px) rotate(4deg); } }
+  #cal .tab { fill: var(--tape); opacity: .85; transform-box: fill-box; transform-origin: center; }
+  #cal[data-stage="1"] .tab { animation: stamp 180ms var(--e-out) both; animation-delay: calc(1.5s + var(--k) * 200ms); }
+  @keyframes stamp { from { opacity: 0; transform: scale(1.4); } }
   #cal[data-stage="1"] .corner, #cal[data-stage="1"] .push { opacity: 1; }
   #cal[data-stage="2"] .s2, #cal[data-stage="3"] .s2 { opacity: 1; }
-  #cal[data-stage="2"] .draw, #cal[data-stage="3"] .draw { stroke-dashoffset: 0; transition: stroke-dashoffset 1.4s ease .5s; }
-  #cal[data-stage="2"] .draw.late { transition-delay: 2s; }
   #cal[data-stage="3"] .s3 { opacity: 1; }
-  #cal[data-stage="3"] .aim-g { opacity: .35; }
+  #cal[data-stage="3"] .aim-g .aim { opacity: .35; } /* fade the aimed line, keep its label readable */
   .corner { animation: pulse 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
   @keyframes pulse { 50% { transform: scale(1.5); } }
+  .corner2 { opacity: 0; fill: none; stroke: var(--edge); stroke-width: 1.5; transform-box: fill-box; transform-origin: center; }
+  #cal[data-stage="1"] .corner2 { animation: ring-out 1.4s var(--e-out) infinite; }
+  @keyframes ring-out { from { opacity: .6; transform: scale(1); } to { opacity: 0; transform: scale(2.2); } }
+  #cal .tool { opacity: 0; transform-box: view-box; }
+  #cal .tool .xh { stroke: var(--sheet-text); fill: none; }
+  #cal .tool .lnk { stroke: var(--sheet-accent); stroke-dasharray: 3 2; fill: none; }
+  #cal[data-stage="2"] .tool { opacity: 1; transform: translate(50px, 10px); animation: cal-tool 3s linear both; }
+  @keyframes cal-tool {
+    0% { opacity: 0; transform: translate(0,0); } 10% { opacity: 1; transform: translate(0,0); }
+    16.7% { transform: translate(0,0); } 63.3% { transform: translate(100px,0); }
+    76.7% { transform: translate(50px,-10px); } 96.7%, 100% { transform: translate(50px,10px); } }
+  #cal[data-stage="2"] .draw, #cal[data-stage="3"] .draw { stroke-dashoffset: 0; transition: stroke-dashoffset 1.4s linear .5s; }
+  #cal[data-stage="2"] .draw.late { transition: stroke-dashoffset .6s linear 2.3s; }
+  #cal .ln { stroke-dasharray: 1 2; }
+  #cal[data-stage="3"] .ln { animation: draw 600ms var(--e-ink) .2s both; }
+  #cal[data-stage="3"] .ln2 { animation-delay: .5s; }
+  .cal-readout { display: grid; gap: 4px; margin: 12px 52px 0 0; padding: 10px 14px; border-radius: 8px; background: var(--surface-2);
+    font: 12.5px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); opacity: 0; transition: opacity var(--d3); }
+  .cal-readout div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .cal-readout dt { min-width: 10ch; font: 650 11px/1.5 var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+  .cal-readout dd { margin: 0; }
+  .cal-readout b { color: var(--accent); font-weight: 600; }
+  .stepper[data-stage="3"] .cal-readout { opacity: 1; transition-delay: .9s; }
 
-  /* printing stages: head height and pen per stage */
+  /* 04 paper */
+  .paper-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 56px; align-items: start; }
+  @media (max-width: 899px) { .paper-grid { grid-template-columns: minmax(0,1fr); gap: 32px; } }
+  .paper-fig { padding: 16px; }
+  .paper-fig svg { display: block; width: 100%; height: auto; }
+  .legend--single { grid-template-columns: minmax(0,1fr); gap: 4px; margin-top: 24px; }
+  .legend--single li { grid-template-columns: 32px minmax(0,1fr); align-items: center; }
+  .legend--single li.li-btn { display: block; padding: 0; }
+  .legend--single li:not(.li-btn) { padding: 9px 11px; } /* the buttons carry a 1px border */
+  .layer { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 12px; align-items: center; width: 100%;
+    min-height: 44px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; color: var(--text-2); cursor: pointer; text-align: left;
+    transition: background-color var(--d1), border-color var(--d1); }
+  .layer:hover { background: var(--surface-2); }
+  .layer[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+  .layer:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .lost { fill: var(--unreach); }
+  .area { fill: none; stroke: var(--area); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .paper-fig [data-layer] { transition: opacity var(--d3); }
+  .paper-fig[data-solo] [data-layer] { opacity: .15; }
+  .paper-fig[data-solo="edge"] [data-layer="edge"], .paper-fig[data-solo="area"] [data-layer="area"], .paper-fig[data-solo="grey"] [data-layer="grey"] { opacity: 1; }
+  #firstLetter { stroke: var(--sheet-accent); transform-box: fill-box; transform-origin: center; animation: ping 1.6s var(--e-out) infinite; }
+  @keyframes ping { 0% { transform: scale(.55); opacity: 1; } 100% { transform: scale(1.25); opacity: .3; } }
+  .paper-fig.in #firstLetter { animation-delay: 1.6s; }
+  .paper-fig.in #paperInk path { stroke-dasharray: 1 2; animation: draw 400ms linear both; animation-delay: calc(var(--j) * 25ms); }
+
+  /* 05 printing (side view; on the A1 the bed moves front/back) */
   #print .head-y { transform: translate(0, 28px); }
   #print[data-stage="2"] .head-y { transform: translate(0, -14px); }
   #print[data-stage="3"] .head-y, #print[data-stage="4"] .head-y { transform: translate(0, 8px); }
+  #print[data-stage="1"] .head-y { animation: tap 1.2s var(--e-in-out) 1.3s; }
+  @keyframes tap { 0%, 50%, 100% { transform: translate(0, 28px); } 25%, 75% { transform: translate(0, 16px); } }
+  #print .ripple { fill: none; stroke: var(--edge); stroke-width: 1.5; opacity: 0; transform-box: fill-box; transform-origin: center; }
+  #print[data-stage="1"] .ripple { animation: ripple 600ms var(--e-out) 1.9s 2; }
+  @keyframes ripple { from { opacity: .7; transform: scale(.5); } to { opacity: 0; transform: scale(2); } }
   #print .pen-g { opacity: 0; transform: translate(0, -64px); }
   #print[data-stage="3"] .pen-g { opacity: 1; transform: translate(0, 0); transition-delay: 1s, 1s; transition-duration: 1.6s, .4s; }
   #print[data-stage="4"] .pen-g { opacity: 1; transform: translate(0, 0); }
   #print .paper-g { opacity: 0; transform: translate(220px, 0); }
   #print[data-stage="2"] .paper-g, #print[data-stage="3"] .paper-g, #print[data-stage="4"] .paper-g { opacity: 1; transform: translate(0, 0); }
   #print[data-stage="2"] .paper-g { transition-delay: .9s, .9s; }
+  #print .paper-strip { fill: var(--sheet); stroke: var(--line-strong); }
+  @media (prefers-color-scheme: dark) { #print .plate { stroke: var(--line-strong); } #print .pen-tip { fill: var(--head-line); } } /* the tip is near-black: lift it off the dark stage */
   #print .cap { transition: none; }
   #print[data-stage="1"] .s1, #print[data-stage="2"] .s2, #print[data-stage="3"] .s3, #print[data-stage="4"] .s4 { opacity: 1; transition: opacity .4s .2s; }
-  #print[data-stage="4"] .head-x { animation: write 2.6s ease-in-out infinite; }
-  @keyframes write { 0%,100% { transform: translate(-70px, 0); } 12% { transform: translate(-58px, -4px); } 25% { transform: translate(-30px, 0); }
-    37% { transform: translate(-12px, -4px); } 50% { transform: translate(18px, 0); } 62% { transform: translate(36px, -4px); } 75% { transform: translate(64px, 0); } 88% { transform: translate(10px, -6px); } }
+  #print[data-stage="4"] .head-x { animation: bob .4s var(--e-in-out) infinite alternate; }   /* pen lifts and lowers for every stroke */
+  @keyframes bob { to { transform: translateY(-4px); } }
+  #print[data-stage="4"] .bed-g { transform: translateX(24px); animation: bedstep 4.8s var(--e-in-out) .4s both; }
+  @keyframes bedstep { 0%,10% { transform: translateX(0); } 22%,45% { transform: translateX(8px); } 57%,80% { transform: translateX(16px); } 92%,100% { transform: translateX(24px); } }
   #print .inset .ink { stroke-width: 1.4; }
+  #print .inset-bg { fill: var(--sheet); stroke: var(--line); }
   #print[data-stage="4"] .inset .draw { stroke-dashoffset: 0; transition: stroke-dashoffset .35s linear; }
-  #print[data-stage="3"] .clamp { fill: var(--amber); transition: fill .3s 2.4s; }
-
-  /* settings reference */
-  .set-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-  .set { display: grid; grid-template-columns: 1fr 150px; gap: 16px; align-items: center; }
-  .set p { margin: 0; color: var(--muted); font-size: 15px; }
-  .set .def { display: inline-block; margin-top: 8px; font-size: 13px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line);
-    border-radius: 999px; padding: 1px 10px; }
-  .set svg { width: 100%; height: auto; }
-  .set .viz { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
-  .neat-row { display: grid; gap: 4px; }
-  .neat-row div { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 6px; }
-  .neat-row span { font: 600 11px system-ui; color: #667085; }
-  .neat-row svg { height: 30px; }
-  @media (max-width: 900px) { .set-grid { grid-template-columns: 1fr; } }
-  @media (max-width: 460px) { .set { grid-template-columns: 1fr; } .set .viz { max-width: 220px; } }
-  table.ref { width: 100%; border-collapse: collapse; font-size: 15px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-  table.ref th, table.ref td { text-align: left; padding: 11px 14px; border-top: 1px solid var(--line); vertical-align: top; }
-  table.ref thead th { border-top: 0; background: var(--panel-2); font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-  table.ref td:last-child { white-space: nowrap; color: var(--muted); }
-  table.ref tr.group th { background: var(--panel-2); font-size: 13.5px; color: var(--text); }
-  .table-scroll { overflow-x: auto; }
-
-  .extras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .extras svg { display: block; width: 100%; height: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; margin: 0 0 14px; }
-  .extras p { margin: 0; color: var(--muted); font-size: 15px; }
-  @media (max-width: 960px) { .extras { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 600px) { .extras { grid-template-columns: 1fr; } }
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
-  @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
-  ol.plain { margin: 0; padding-left: 22px; } ol.plain li { margin: 6px 0; }
-
-  details { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0 18px; margin: 0 0 10px; }
-  details summary { cursor: pointer; padding: 15px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
-  details summary::after { content: "+"; color: var(--muted); font-weight: 400; font-size: 20px; line-height: 1; }
-  details[open] summary::after { content: "−"; }
-  details p { margin: 0 0 16px; color: var(--muted); }
-
-  .final { text-align: center; padding: 64px 20px; }
-  footer .maker { margin: 0 0 10px; color: var(--text); font-size: 15px; }
-  footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 13.5px; }
-
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    *, *::before, *::after { animation: none !important; transition: none !important; }
+  #print[data-stage="3"] .clamp { fill: var(--edge); transition: fill .3s 2.4s; }
+  #print .clamp-g { transform-box: fill-box; transform-origin: center; transition: transform 300ms var(--e-spring); }
+  #print[data-stage="3"] .clamp-g, #print[data-stage="4"] .clamp-g { transform: rotate(90deg); }
+  #print[data-stage="3"] .clamp-g { transition-delay: 2.4s; }
+  #print .clamp-lever { stroke: var(--head); stroke-width: 1.6; stroke-linecap: round; }
+  #print .pring-track { fill: none; stroke: var(--line); stroke-width: 2; }
+  #print .pring { fill: none; stroke: var(--edge); stroke-width: 2; stroke-dasharray: 1 2; transform: rotate(-90deg); transform-box: fill-box; transform-origin: center; }
+  #print[data-stage="2"] .s2 .pring, #print[data-stage="3"] .s3 .pring { animation: deplete 4.4s linear 1s forwards; }
+  @keyframes deplete { to { stroke-dashoffset: 1.01; } }
+  @media (max-width: 1100px) { /* the wide side view shrinks to ~0.7x here: larger labels, captions in the narrower sans so they still fit */
+    #print > .lbl { font-size: 14px; }
+    #print .cap .lbl { font: 600 13px var(--font-sans); letter-spacing: 0; }
   }
+  @media (max-width: 640px) { #print .cap { display: none; } }
+
+  /* 06 settings */
+  .set-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+  @media (max-width: 899px) { .set-grid { grid-template-columns: minmax(0,1fr); } }
+  .set { display: grid; grid-template-columns: minmax(0,1fr) 168px; gap: 20px; align-items: start; }
+  .set .viz { align-self: center; }
+  .set p { margin: 0; color: var(--text-2); font-size: 15.5px; }
+  .set .def { display: inline-block; margin-top: 12px; padding: 2px 10px; border-radius: var(--r-pill); background: var(--surface-2); border: 1px solid var(--line);
+    font: 500 12.5px/1.6 var(--font-mono); color: var(--text-2); }
+  .set svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .viz { padding: 10px; background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-sm); }
+  .neat-row { display: grid; gap: 4px; }
+  .neat-row div { display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: center; gap: 6px; }
+  .neat-row span { font: 600 11px var(--font-mono); color: var(--sheet-text); }
+  .neat-row svg { height: 30px; }
+  .ph-rule { stroke: var(--ink-done); stroke-dasharray: 3 3; }
+  .hx { font: 44px var(--font-display); fill: var(--ink); }
+  .wob rect { transform: rotate(var(--r)); transform-box: fill-box; transform-origin: center; }
+  .set.in .wob rect { animation: unwob 900ms var(--e-out) both; animation-delay: calc(300ms + var(--k) * 40ms); }
+  @keyframes unwob { from { transform: rotate(0); } }
+  .set.in .ph-move { animation: lower 700ms var(--e-in-out) 300ms both; }
+  @keyframes lower { from { transform: translateY(-6px); } }
+  .off-line { stroke: var(--sheet-accent); stroke-width: 1.2; stroke-dasharray: 3 2; fill: none; transform-box: view-box; transform-origin: 100px 24px; }
+  .set.in .off-line { animation: grow 500ms var(--e-out) 400ms both; }
+  @keyframes grow { from { transform: scale(0); } }
+  @media (max-width: 460px) { .set { grid-template-columns: minmax(0,1fr); } .set .viz { max-width: 240px; } }
+  .h3-gap { margin: 48px 0 16px; }
+  .table-scroll { overflow: visible; }
+  table.ref { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 15px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); }
+  table.ref th, table.ref td { padding: 12px 16px; text-align: left; vertical-align: top; border-top: 1px solid var(--line); }
+  table.ref thead th { border-top: 0; background: var(--surface-2); font: 650 11.5px/1.4 var(--font-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); }
+  table.ref thead th:first-child { border-top-left-radius: var(--r-md); }
+  table.ref thead th:last-child { border-top-right-radius: var(--r-md); text-align: right; }
+  table.ref td:first-child { font-weight: 600; color: var(--text); }
+  table.ref td:nth-child(2) { color: var(--text-2); }
+  table.ref td:last-child { white-space: nowrap; text-align: right; font: 500 13px/1.75 var(--font-mono); color: var(--text-2); }
+  table.ref tr.group th { position: sticky; top: var(--header-h); z-index: 1; background: var(--surface-2); font: 400 16px/1.3 var(--font-display); color: var(--text); }
+  @media (max-width: 640px) {
+    .table-scroll { overflow: visible; }
+    table.ref, table.ref tbody, table.ref tr, table.ref td, table.ref th { display: block; }
+    table.ref thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    table.ref tr:not(.group) { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; padding: 14px 16px; border-top: 1px solid var(--line); }
+    table.ref td { padding: 0; border: 0; }
+    table.ref td:first-child { font-weight: 600; color: var(--text); }
+    table.ref td:last-child { grid-column: 2; grid-row: 1; text-align: right; font: 500 13px var(--font-mono); color: var(--text-2); white-space: normal; }
+    table.ref td:nth-child(2) { grid-column: 1 / -1; color: var(--text-2); }
+    table.ref tr.group th { position: sticky; top: var(--header-h); padding: 10px 16px; }
+    table.ref tbody tr:first-child th { border-top: 0; border-radius: var(--r-md) var(--r-md) 0 0; }
+  }
+
+  /* 07 extras */
+  .extras { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+  @media (max-width: 1023px) { .extras { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  @media (max-width: 639px) { .extras { grid-template-columns: minmax(0,1fr); } }
+  .extras svg { display: block; width: 100%; height: auto; margin: 0 0 16px; background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-sm); }
+  .extras p { margin: 0; color: var(--text-2); font-size: 15.5px; }
+  .ex-hl { fill: color-mix(in srgb, var(--sheet-accent) 14%, transparent); stroke: var(--sheet-accent); }
+  .ex-drop, .ex-head, .ex-body, .ex-arrow { transform-box: fill-box; }
+  .ex-word, .ex-row { transform-box: fill-box; transform-origin: left center; }
+  .extras .card.in .ex-drop { animation: ex-drop 500ms var(--e-out) both; animation-delay: calc(250ms + var(--k) * 40ms); }
+  .extras .card.in:hover .ex-drop { animation-name: ex-drop-h; }
+  @keyframes ex-drop { from { opacity: 0; transform: translateY(-6px); } }
+  @keyframes ex-drop-h { from { opacity: 0; transform: translateY(-6px); } }
+  .extras .card.in .ex-head { animation: ex-head 500ms var(--e-out) 250ms both; }
+  .extras .card.in:hover .ex-head { animation-name: ex-head-h; }
+  @keyframes ex-head { from { opacity: 0; transform: translateY(-4px); } }
+  @keyframes ex-head-h { from { opacity: 0; transform: translateY(-4px); } }
+  .extras .card.in .ex-body { animation: ex-drop 450ms var(--e-out) both; animation-delay: calc(650ms + var(--k) * 40ms); }
+  .extras .card.in:hover .ex-body { animation-name: ex-drop-h; }
+  .extras .card.in .ex-word { animation: ex-word 500ms var(--e-out) 400ms both; }
+  .extras .card.in:hover .ex-word { animation-name: ex-word-h; }
+  @keyframes ex-word { from { transform: scaleX(0); } }
+  @keyframes ex-word-h { from { transform: scaleX(0); } }
+  .extras .card.in .ex-arrow { animation: ex-arrow 400ms var(--e-out) 250ms both; }
+  .extras .card.in:hover .ex-arrow { animation-name: ex-arrow-h; }
+  @keyframes ex-arrow { from { opacity: 0; transform: translateX(-8px); } }
+  @keyframes ex-arrow-h { from { opacity: 0; transform: translateX(-8px); } }
+  .extras .card.in .ex-row { animation: ex-word 450ms var(--e-out) both; animation-delay: calc(550ms + var(--k) * 60ms); }
+  .extras .card.in:hover .ex-row { animation-name: ex-word-h; }
+  .ex-dry { transform-box: view-box; }
+  .extras .card.in .ex-dry { animation: ex-dry 1.4s var(--e-in-out) 300ms both; }
+  .extras .card.in:hover .ex-dry { animation-name: ex-dry-h; }
+  @keyframes ex-dry { 0% { transform: translateX(-30px); } 50% { transform: translateX(30px); } 100% { transform: none; } }
+  @keyframes ex-dry-h { 0% { transform: translateX(-30px); } 50% { transform: translateX(30px); } 100% { transform: none; } }
+
+  /* 08 faq */
+  .faq-grid { display: grid; gap: 8px; }
+  @media (min-width: 1024px) {
+    .faq-grid { grid-template-columns: minmax(0,4fr) minmax(0,8fr); gap: 56px; align-items: start; }
+    .faq-head { position: sticky; top: calc(var(--header-h) + 32px); }
+  }
+  .faq-list { max-width: 760px; }
+  .faq-list details { border-top: 1px solid var(--line); }
+  .faq-list details:last-child { border-bottom: 1px solid var(--line); }
+  .faq-list summary { position: relative; display: flex; align-items: center; min-height: 56px; padding: 16px 48px 16px 0; cursor: pointer; list-style: none;
+    font: 400 20px/1.3 var(--font-display); color: var(--text); transition: color var(--d1); }
+  .faq-list summary::-webkit-details-marker { display: none; }
+  .faq-list summary:hover { color: var(--accent); }
+  .faq-list summary::after { content: ""; position: absolute; right: 8px; top: 50%; width: 20px; height: 20px; margin-top: -10px;
+    background: linear-gradient(currentColor, currentColor) center / 100% 1.5px no-repeat, linear-gradient(currentColor, currentColor) center / 1.5px 100% no-repeat;
+    transition: transform var(--d2) var(--e-out); }
+  .faq-list details[open] > summary::after { transform: rotate(45deg); }
+  .faq-list details > p { margin: 0; max-width: 62ch; padding-bottom: 20px; color: var(--text-2); }
+  .faq-list details[open] > p { animation: faq-in var(--d3) var(--e-out); }
+  @keyframes faq-in { from { opacity: 0; transform: translateY(-4px); } }
+  @media (max-width: 600px) { .faq-list summary { font-size: 18.5px; } }
+
+  /* final CTA band + footer */
+  .final { padding-block: 120px; background: var(--band-ink) var(--grain-light); color: var(--on-band); text-align: center; }
+  .final h2 { margin: 0; color: var(--on-band); }
+  .final-ink { display: block; width: 260px; max-width: 70%; height: auto; margin: 12px auto 18px; overflow: visible; }
+  .final-ink .ink { stroke: var(--on-band); stroke-width: 2; }
+  .final-sub { margin: 0 auto 28px; max-width: 40ch; text-wrap: balance; color: var(--on-band-2); }
+  .final-btn { background: var(--on-band); color: var(--band-ink); border-color: transparent; box-shadow: 0 10px 30px -12px rgba(0,0,0,.5); }
+  .final-btn:hover { background: #FFFFFF; border-color: transparent; transform: translateY(-2px); }
+  .final-btn:focus-visible { outline-color: var(--on-band); }
+  @media (max-width: 600px) { .final { padding-block: 80px; } }
+  footer { padding: 40px 0 56px; border-top: 1px solid var(--line); }
+  .foot { display: grid; gap: 12px; }
+  @media (min-width: 900px) { .foot { grid-template-columns: minmax(0,1fr) minmax(0,1.4fr); gap: 56px; align-items: start; } }
+  .maker { margin: 0; font-size: 15px; color: var(--text); }
+  footer a { white-space: nowrap; }
+  .credits { margin: 0; font-size: 13.5px; line-height: 1.65; color: var(--text-3); }
+  @media (max-width: 899px) { footer p { line-height: 2.4; } footer a { padding-block: 11px; } } /* inline padding: 40px tap height without spreading the lines */
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 <header class="top">
-  <div class="wrap">
+  <div class="wrap top-row">
     <a class="brand" href="#">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       Handwrite
     </a>
-    <nav aria-label="Guide">
+    <nav class="guide-nav" aria-label="Guide">
       <a href="#how">How it works</a><a href="#holder">Pen holder</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#more">Extras</a><a href="#faq">FAQ</a>
     </nav>
     <a class="btn primary small" href="app.html">Open the app</a>
   </div>
+  <span class="progress" aria-hidden="true"></span>
 </header>
 
-<main>
+<main id="main">
   <div class="wrap hero">
-    <div>
-      <h1>Real handwriting,<br>written by <em>your 3D printer</em>.</h1>
-      <p class="lead">Type a letter, pick a handwriting, and get G-code that writes it with a pen on a Bambu Lab printer.
+    <div class="hero-copy">
+      <p class="over">For Bambu Lab A1, P1S and X1 printers with a pen holder</p>
+      <h1><span class="l">Real handwriting,</span> <span class="l">written by <em>your 3D printer</em>.</span></h1>
+      <p class="lead">Type a letter, pick a handwriting, and get G&#8209;code that writes it with a pen on a Bambu Lab printer.
         A neural network draws every word stroke by stroke, so letters join and vary like a person's, not like a font.</p>
       <div class="cta">
-        <a class="btn primary" href="app.html">Open the app</a>
-        <a class="btn" href="#how">How to use it</a>
+        <a class="btn primary lg" href="app.html">Open the app</a>
+        <a class="btn lg" href="#how">How to use it <svg class="arr" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
       </div>
       <ul class="facts"><li>Runs in your browser</li><li>Works offline</li><li>Nothing to install</li><li>Every move safety-checked</li></ul>
     </div>
-    <div class="sheet" aria-label="Animation: a pen writing 'Dear friend, this letter was written by my 3D printer.'">
-      <svg id="heroInk" role="img" aria-hidden="true"></svg>
-    </div>
+    <figure class="machine">
+      <div class="m-win">
+        <div class="m-bar">
+          <span class="dro" aria-hidden="true">X <b id="droX">0.00</b>Y <b id="droY">0.00</b><span class="dro-z">Z <b id="droZ">12.00</b></span></span>
+          <span class="pen-state" id="penState" aria-hidden="true">pen up</span>
+          <button type="button" class="m-toggle" id="heroToggle" aria-label="Pause animation" hidden>
+            <svg class="i-pause" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="8.5" y="2" width="3" height="10" rx="1" fill="currentColor"/></svg>
+            <svg class="i-play" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.2v9.6L12 7z" fill="currentColor"/></svg>
+          </button>
+        </div>
+        <svg id="machine" viewBox="0 0 640 480" preserveAspectRatio="xMidYMid slice" role="img"
+          aria-label="Animation: a Bambu Lab A1, seen from above, writes 'Dear friend, this letter was written by my 3D printer.' with a pen."><g id="heroInk" class="ink"></g></svg>
+        <ol class="m-code" id="heroCode" aria-hidden="true"></ol>
+      </div>
+      <figcaption>Bambu Lab A1 seen from above, 6× speed</figcaption>
+    </figure>
   </div>
 
   <section class="block" id="how">
     <div class="wrap">
-      <p class="kicker">How it works</p>
-      <h2>Four steps from text to paper</h2>
-      <p class="intro">Everything happens in the browser on your computer. Your text and handwriting never leave it.</p>
-      <div class="steps4">
-        <div class="card"><h3>Type your text</h3><p>Type or paste it in. The app tells you how many words fit on a page; longer text continues on page 2, 3 and so on.</p></div>
-        <div class="card"><h3>Pick a handwriting</h3><p>Choose from 45 styles. Neatness and line wobble make it tidier or more casual.</p></div>
-        <div class="card"><h3>Set printer and paper</h3><p>Choose your printer and paper size, then drag the paper on the build-plate preview to where it will sit.</p></div>
-        <div class="card"><h3>Save and print</h3><p>Click <span class="ui">Save G-code</span> and run the file like any other. The printer pauses so you can place the paper and attach the pen.</p></div>
+      <div class="sec-head" data-stagger>
+        <p class="kicker">How it works</p>
+        <h2>Four steps from text to paper</h2>
+        <p class="intro">Everything happens in the browser on your computer. Your text and handwriting never leave it.</p>
       </div>
-      <div class="samples" id="styleSamples" aria-label="Some of the handwriting styles"></div>
+      <div class="steps4" data-stagger>
+        <div class="card step">
+          <div class="vx-frame"><svg class="vx v1" viewBox="0 0 240 132" aria-hidden="true">
+            <rect x="16" y="28" width="208" height="52" rx="10" fill="var(--surface)" stroke="var(--field)"/>
+            <text class="v1-text" x="30" y="60"><tspan style="--i:0">D</tspan><tspan style="--i:1">e</tspan><tspan style="--i:2">a</tspan><tspan style="--i:3">r</tspan><tspan style="--i:4"> </tspan><tspan style="--i:5">f</tspan><tspan style="--i:6">r</tspan><tspan style="--i:7">i</tspan><tspan style="--i:8">e</tspan><tspan style="--i:9">n</tspan><tspan style="--i:10">d</tspan><tspan style="--i:11">,</tspan></text>
+            <rect class="v1-caret" x="121" y="44" width="1.5" height="20" fill="var(--accent)"/>
+            <g class="v1-chip"><rect x="152" y="92" width="58" height="18" rx="9" fill="var(--accent-soft)"/><text class="v1-chip-t" x="181" y="104.5" text-anchor="middle">2 words</text></g>
+          </svg></div>
+          <div class="step-h"><span class="num">1</span><h3>Type your text</h3></div>
+          <p>Type or paste it in. The app tells you how many words fit on a page; longer text continues on page 2, 3 and so on.</p>
+          <span class="vx-bar" aria-hidden="true"><i></i></span>
+        </div>
+        <div class="card step">
+          <div class="vx-frame"><svg class="vx v2" viewBox="0 0 240 132" aria-hidden="true">
+            <g class="v2-card"><rect x="12" y="30" width="68" height="56" rx="6"/><text x="46" y="78">Neat 1</text></g>
+            <g class="v2-card"><rect x="86" y="30" width="68" height="56" rx="6"/><text x="120" y="78">Italic 1</text></g>
+            <g class="v2-card"><rect x="160" y="30" width="68" height="56" rx="6"/><text x="194" y="78">Rounded 1</text></g>
+            <rect class="v2-ring" x="82" y="26" width="76" height="64" rx="8"/>
+          </svg></div>
+          <div class="step-h"><span class="num">2</span><h3>Pick a handwriting</h3></div>
+          <p>Choose from 45 styles. Neatness and line wobble make it tidier or more casual.</p>
+          <span class="vx-bar" aria-hidden="true"><i></i></span>
+        </div>
+        <div class="card step">
+          <div class="vx-frame"><svg class="vx v3" viewBox="0 0 240 132" aria-hidden="true">
+            <rect x="60" y="10" width="120" height="112" rx="4" fill="var(--plate)"/>
+            <path d="M72 10v112M84 10v112M96 10v112M108 10v112M120 10v112M132 10v112M144 10v112M156 10v112M168 10v112M60 22h120M60 34h120M60 46h120M60 58h120M60 70h120M60 82h120M60 94h120M60 106h120M60 118h120" stroke="var(--plate-grid-major)" stroke-width=".6"/>
+            <rect x="61" y="11" width="118" height="110" rx="3.5" fill="none" stroke="var(--edge)" stroke-dasharray="3 2"/>
+            <g class="v3-sheet">
+              <rect x="84" y="18" width="64" height="90" fill="var(--sheet)"/>
+              <rect class="v3-area" x="92" y="26" width="48" height="74" fill="none" stroke="var(--area)" stroke-dasharray="3 2"/>
+              <path class="cursor" d="M110 50v15l4-3.6 2.8 6.2 2.7-1.2-2.8-6.1h5.4z"/>
+            </g>
+          </svg></div>
+          <div class="step-h"><span class="num">3</span><h3>Set printer and paper</h3></div>
+          <p>Choose your printer and paper size, then drag the paper on the build-plate preview to where it will sit.</p>
+          <span class="vx-bar" aria-hidden="true"><i></i></span>
+        </div>
+        <div class="card step">
+          <div class="vx-frame"><svg class="vx v4" viewBox="0 0 240 132" aria-hidden="true">
+            <g class="v4-pill"><rect x="20" y="48" width="104" height="32" rx="16" fill="var(--accent)"/><text x="72" y="68.5" text-anchor="middle">Save G-code</text></g>
+            <path d="M130 64h12m-4-4 4 4-4 4" fill="none" stroke="var(--text-3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <g class="v4-file">
+              <path d="M150 30h48l16 16v60h-64z" fill="var(--surface)" stroke="var(--field)"/>
+              <path d="M198 30v16h16" fill="none" stroke="var(--field)"/>
+              <text class="v4-ext" x="158" y="62">.gcode</text>
+              <rect class="v4-line" style="--k:0" x="158" y="72" width="44" height="3" rx="1.5" fill="var(--line-strong)"/>
+              <rect class="v4-line" style="--k:1" x="158" y="80" width="34" height="3" rx="1.5" fill="var(--line-strong)"/>
+              <rect class="v4-line" style="--k:2" x="158" y="88" width="40" height="3" rx="1.5" fill="var(--line-strong)"/>
+            </g>
+          </svg></div>
+          <div class="step-h"><span class="num">4</span><h3>Save and print</h3></div>
+          <p>Click <span class="ui">Save G-code</span> and run the file like any other. The printer pauses so you can place the paper and attach the pen.</p>
+          <span class="vx-bar" aria-hidden="true"><i></i></span>
+        </div>
+      </div>
+      <div class="samples" id="styleSamples" role="group" aria-label="Some of the handwriting styles"></div>
+      <p class="samples-cap">4 of the 45 styles · tap one to see it written <a href="app.html">See all 45 styles in the app →</a></p>
 
-      <h3 style="margin-top:44px">A quick tour of the app</h3>
-      <div class="tour">
-        <img src="guide-app.png" alt="The Handwrite app: text box, handwriting styles and sliders on the left, the build-plate preview with the written page on the right" width="1500" height="1000" loading="lazy">
-        <span class="pin" style="left:20%;top:12%">1</span><span class="pin" style="left:21.5%;top:46%">2</span><span class="pin" style="left:23%;top:80.6%">3</span>
-        <span class="pin" style="left:39.3%;top:17.8%">4</span><span class="pin" style="left:24.5%;top:97%">5</span><span class="pin" style="left:90.4%;top:4%">6</span>
-        <span class="pin" style="left:83%;top:94.5%">7</span>
+      <div class="tour-wrap">
+        <h3 class="h3-display">A quick tour of the app</h3>
+        <div class="window rv fig">
+          <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="tour-scroll">
+            <div class="tour">
+              <img src="guide-app.png" alt="The Handwrite app: text box, handwriting styles and sliders on the left, the build-plate preview with the written page on the right" width="1500" height="1000" loading="lazy">
+              <span class="pin" style="left:24.7%;top:12%;--n:0">1</span><span class="pin" style="left:24.7%;top:47.1%;--n:1">2</span><span class="pin" style="left:21.5%;top:80.9%;--n:2">3</span>
+              <span class="pin" style="left:40%;top:17.8%;--n:3">4</span><span class="pin" style="left:10%;top:96.6%;--n:4">5</span><span class="pin" style="left:89.3%;top:4%;--n:5">6</span>
+              <span class="pin" style="left:72.8%;top:94%;--n:6">7</span>
+            </div>
+          </div>
+        </div>
+        <p class="tour-hint">Swipe to see the whole app →</p>
+        <ul class="legend" data-stagger>
+          <li><b class="n">1</b><span><b>Text.</b> Type or paste what you want written. Characters the model can't write are listed under it.</span></li>
+          <li><b class="n">2</b><span><b>Handwriting.</b> Click a style to use it.</span></li>
+          <li><b class="n">3</b><span><b>Sliders and sizes.</b> Neatness, line wobble, word spacing, letter size and line spacing. <a href="#settings">What each one does</a>.</span></li>
+          <li><b class="n">4</b><span><b>Build-plate preview.</b> The page as it will be written. Drag the paper, scroll to zoom, click a word to write it again.</span></li>
+          <li><b class="n">5</b><span><b>New version / Save G-code.</b> New version rewrites the same text with fresh handwriting. Save G-code makes the file.</span></li>
+          <li><b class="n">6</b><span><b>Printer settings.</b> The pen offset, pen heights, pauses and speeds.</span></li>
+          <li><b class="n">7</b><span><b>Time estimate.</b> How long the page takes, including the pauses.</span></li>
+        </ul>
       </div>
-      <ul class="legend">
-        <li><b class="n">1</b><span><b>Text.</b> Type or paste what you want written. Characters the model can't write are listed under it.</span></li>
-        <li><b class="n">2</b><span><b>Handwriting.</b> Click a style to use it.</span></li>
-        <li><b class="n">3</b><span><b>Sliders and sizes.</b> Neatness, line wobble, word spacing, letter size and line spacing. <a href="#settings">What each one does</a>.</span></li>
-        <li><b class="n">4</b><span><b>Build-plate preview.</b> The page as it will be written. Drag the paper, scroll to zoom, click a word to write it again.</span></li>
-        <li><b class="n">5</b><span><b>New version / Save G-code.</b> New version rewrites the same text with fresh handwriting. Save G-code makes the file.</span></li>
-        <li><b class="n">6</b><span><b>Printer settings.</b> The pen offset, pen heights, pauses and speeds.</span></li>
-        <li><b class="n">7</b><span><b>Time estimate.</b> How long the page takes, including the pauses.</span></li>
-      </ul>
     </div>
   </section>
 
   <section class="block" id="holder">
     <div class="wrap">
-      <p class="kicker">What you need</p>
-      <h2>Print the pen holder</h2>
-      <div class="card holder">
-        <div>
+      <div class="sec-head" data-stagger>
+        <p class="kicker">What you need</p>
+        <h2>Print the pen holder</h2>
+      </div>
+      <div class="card spec rv fig">
+        <figure class="holder-fig">
+          <!-- photo slot: a photo of the holder on the user's printer can replace this drawing; needs alt text -->
+          <svg viewBox="0 0 320 220" aria-hidden="true">
+            <rect class="hx-part" x="-10" y="12" width="340" height="26"/>
+            <path class="hx-lead" d="M-10 25H330"/>
+            <rect class="hx-part" x="100" y="20" width="120" height="112" rx="14"/>
+            <path class="hx-fins" d="M124 36v80M142 36v80M160 36v80M178 36v80M196 36v80"/>
+            <circle class="hx-part" cx="160" cy="90" r="9"/>
+            <path d="M145 90h30M160 75v30" stroke="var(--head-line)" stroke-width=".9"/>
+            <rect class="hx-part" x="150" y="130" width="26" height="14" rx="3"/>
+            <g class="h-pen"><circle class="h-ring" cx="162.4" cy="150" r="11"/><circle class="h-tip" cx="162.4" cy="150" r="2.2"/></g>
+            <path class="hx-lead" d="M171 90H236M175 150H236"/>
+            <path class="dim h-dim" pathLength="1" d="M244 90V150M238 90H250M238 150H250"/>
+            <g class="h-lbl">
+              <path class="hx-lead" d="M90 90H150M90 150H150"/>
+              <text class="lbl-s" x="84" y="94" text-anchor="end">nozzle</text>
+              <text class="lbl-s on-accent-paper" x="84" y="154" text-anchor="end">pen</text>
+              <text class="dim-text" x="256" y="125">25 mm</text>
+              <text class="lbl-s" x="163" y="182" text-anchor="middle">X 1 mm</text>
+            </g>
+            <text class="lbl-s" x="160" y="210" text-anchor="middle">↓ FRONT</text>
+          </svg>
+        </figure>
+        <div class="spec-copy">
           <p>Handwrite is set up for <b>Plotter</b> by Elli: a pen holder that clips onto the print head of the A1 and A1 mini, no screws.
             It's made for Stabilo pens and fits similar-sized markers. To fit it, take the front cover off the print head.</p>
+          <p class="spec-line"><span>Pen offset</span> X 1 · Y −25 mm</p>
           <p>Its pen offset, <b>X 1 · Y −25 mm</b>, is already the app's default, so with this holder you can skip calibrating.</p>
           <p class="small">Designed by Elli and shared free on MakerWorld, so it's downloaded from there.</p>
+          <a class="btn primary lg" href="https://makerworld.com/en/models/1247876-plotter#profileId-1269790" target="_blank" rel="noopener">Download the pen holder <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
         </div>
-        <a class="btn primary" href="https://makerworld.com/en/models/1247876-plotter#profileId-1269790" target="_blank" rel="noopener">Download the pen holder</a>
       </div>
     </div>
   </section>
 
-  <section class="block" id="calibrate">
+  <section class="block band" id="calibrate">
     <div class="wrap">
-      <p class="kicker">Before your first print</p>
-      <h2>Calibrate the pen offset</h2>
-      <p class="intro">The pen sits a little beside the nozzle, usually in front of it. The app needs to know by how much, so the writing
-        lands where the preview shows it and the pen never runs off the front of the plate. Using the <a href="#holder">Plotter holder</a>? Its offset is
-        X 1, Y −25 mm, already filled in (if you opened the app before, type it into <span class="ui">Printer settings → Pen offset</span>).
-        If BambuPlot already works for you, copy its “tool offset” there instead. Otherwise, print the offset test once:</p>
-      <figure class="stepper" data-ms="5200">
+      <div class="sec-head" data-stagger>
+        <p class="kicker">Before your first print</p>
+        <h2>Calibrate the pen offset</h2>
+        <p class="intro">The pen sits a little beside the nozzle, usually in front of it. The app needs to know by how much, so the writing
+          lands where the preview shows it and the pen never runs off the front of the plate.</p>
+        <p class="intro">Using the <a href="#holder">Plotter holder</a>? Its offset is
+          X 1, Y −25 mm, already filled in (if you opened the app before, type it into <span class="ui">Printer settings → Pen offset</span>).
+          If BambuPlot already works for you, copy its “tool offset” there instead. Otherwise, print the offset test once:</p>
+      </div>
+      <figure class="stepper rv fig" data-ms="5200">
         <div class="stage">
-          <svg id="cal" data-stage="1" viewBox="0 0 400 392" role="img" aria-label="Offset test on the build plate, seen from above">
+          <svg id="cal" data-stage="1" viewBox="0 0 400 392" role="img" aria-label="Offset test on the build plate, seen from above" data-anim>
             <text class="lbl" x="198" y="24" text-anchor="middle">BACK OF PRINTER</text>
             <rect class="plate" x="70" y="36" width="256" height="256" rx="5"/>
             <g class="grid"><path d="M121 36v256M172 36v256M223 36v256M274 36v256M70 87h256M70 138h256M70 189h256M70 240h256"/></g>
@@ -330,21 +883,37 @@
             <g class="paper-g moving">
               <rect class="paper" x="70" y="36" width="210" height="297"/>
               <text class="lbl-dark" x="175" y="318" text-anchor="middle">A4 PORTRAIT</text>
+              <g class="tab" style="--k:0"><rect x="74" y="38" width="22" height="9" transform="rotate(-35 85 42.5)"/></g>
+              <g class="tab" style="--k:1"><rect x="254" y="38" width="22" height="9" transform="rotate(35 265 42.5)"/></g>
             </g>
-            <g class="fade push"><path d="M128 92 L84 50" stroke="var(--amber)" stroke-width="2.5" fill="none" marker-end="url(#arr)"/><text class="lbl-dark" x="132" y="104" style="fill:var(--amber)">push into this corner</text></g>
-            <circle class="fade corner" cx="70" cy="36" r="7" fill="none" stroke="var(--amber)" stroke-width="2.5"/>
+            <g class="fade push"><path d="M128 92 L84 50" stroke="var(--edge)" stroke-width="2.5" fill="none" marker-end="url(#arr)"/><text class="lbl-dark on-edge" x="132" y="104">push into this corner</text></g>
+            <circle class="corner2" cx="70" cy="36" r="7"/>
+            <circle class="fade corner" cx="70" cy="36" r="7" fill="none" stroke="var(--edge)" stroke-width="2.5"/>
             <!-- nozzle aims 60 mm below the top edge; a pen 27 mm in front and 4.5 mm left draws 87 mm below, 100.5 mm from the left -->
             <g class="fade s2 aim-g"><path class="aim" d="M125 96 H225 M175 86 V106"/><text class="lbl-dark" x="230" y="92">aimed</text></g>
             <path class="pen-line draw" pathLength="1" d="M120.5 123 H220.5"/>
             <path class="pen-line draw late" pathLength="1" d="M170.5 113 V133"/>
-            <g class="fade s2"><text class="lbl-dark" x="228" y="127" style="fill:var(--ink)">drawn</text></g>
+            <g class="tool" aria-hidden="true">
+              <circle class="xh" cx="125" cy="96" r="6" stroke-width="1.5"/><path class="xh" d="M117 96h16M125 88v16"/>
+              <path class="lnk" d="M125 96 L120.5 123"/>
+              <circle cx="120.5" cy="123" r="4" fill="var(--ink)"/>
+            </g>
+            <g class="fade s2"><text class="lbl-dark on-ink" x="228" y="127">drawn</text></g>
             <g class="fade s3">
-              <path class="dim" d="M98 36 V123 M93 36 H103 M93 123 H103"/><text class="dim-text" x="92" y="84" text-anchor="end">87</text><text class="dim-text" x="92" y="98" text-anchor="end" style="font-size:10px">mm</text>
-              <path class="dim" d="M70 168 H170.5 M70 163 V173 M170.5 163 V173"/><text class="dim-text" x="120" y="160" text-anchor="middle">100.5 mm</text>
+              <path class="dim ln" pathLength="1" d="M98 36 V123 M93 36 H103 M93 123 H103"/><text class="dim-text" x="92" y="84" text-anchor="end"><tspan class="count" data-to="87">87</tspan></text><text class="dim-text t10" x="92" y="98" text-anchor="end">mm</text>
+              <path class="dim ln ln2" pathLength="1" d="M70 168 H170.5 M70 163 V173 M170.5 163 V173"/><text class="dim-text" x="120" y="160" text-anchor="middle"><tspan class="count" data-to="100.5">100.5</tspan> mm</text>
             </g>
             <text class="lbl" x="198" y="378" text-anchor="middle">FRONT · YOU STAND HERE</text>
-            <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--amber)"/></marker></defs>
+            <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--edge)"/></marker></defs>
           </svg>
+          <dl class="cal-readout" aria-live="off">
+            <div><dt>Long line</dt><dd>Y = 60 − 87 = <b>−27 mm</b></dd></div>
+            <div><dt>Short mark</dt><dd>X = 100.5 − 105 = <b>−4.5 mm</b></dd></div>
+          </dl>
+          <button type="button" class="stepper-toggle" aria-label="Pause animation" hidden>
+            <svg class="i-pause" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="8.5" y="2" width="3" height="10" rx="1" fill="currentColor"/></svg>
+            <svg class="i-play" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.2v9.6L12 7z" fill="currentColor"/></svg>
+          </button>
         </div>
         <ol class="stage-list">
           <li><button type="button" data-go="1"><span class="n">1</span><span><b class="h">Print the test and place A4 paper</b><span class="t">In <span class="ui">Printer settings → Pen offset</span>, click <span class="ui">Save offset test G-code</span> and start it with the pen out. In pause 1, push an A4 sheet into the <b>top-left (far-left) corner</b>: top edge on the plate's back edge, left edge on its left edge. Tape it.</span><span class="bar"><i></i></span></span></button></li>
@@ -357,61 +926,66 @@
   </section>
 
   <section class="block" id="paper">
-    <div class="wrap two">
-      <div>
+    <div class="wrap paper-grid">
+      <div data-stagger>
         <p class="kicker">Placing the paper</p>
         <h2>Reading the preview</h2>
         <p class="muted">The preview shows the build plate from above with the <b>front of the printer at the bottom</b>, drawn where the pen tip can reach. Drag the
           paper to where it will sit, or click <span class="ui">Place paper automatically</span> to put it where the pen reaches so writing starts at your top border.</p>
-        <ul class="legend" style="grid-template-columns:1fr">
-          <li><svg width="28" height="10" aria-hidden="true"><path d="M0 5H28" stroke="#e08a00" stroke-width="2.5" stroke-dasharray="6 4"/></svg><span><b>Orange dashes:</b> the edge of the area the pen can reach.</span></li>
-          <li><svg width="28" height="10" aria-hidden="true"><path d="M0 5H28" stroke="#7aa2d6" stroke-width="2.5" stroke-dasharray="5 4"/></svg><span><b>Blue dashes:</b> the writing area, inside your borders.</span></li>
-          <li><svg width="28" height="14" aria-hidden="true"><rect width="28" height="14" rx="3" fill="rgba(120,126,140,.55)"/></svg><span><b>Grey:</b> part of the page the pen can't reach (past the front of the plate). Text continues on the next page instead.</span></li>
-          <li><svg width="28" height="10" aria-hidden="true"><path d="M0 5H28" stroke="#c92a2a" stroke-width="2.5" stroke-dasharray="6 4"/></svg><span><b>Red dashes:</b> where you'll slide the paper back, only with <span class="ui">Long pages</span> ticked.</span></li>
+        <ul class="legend legend--single">
+          <li class="li-btn"><button type="button" class="layer" data-layer="edge" aria-pressed="false"><svg width="32" height="10" aria-hidden="true"><path d="M0 5H32" stroke="var(--edge)" stroke-width="2.5" stroke-dasharray="6 4"/></svg><span><b>Orange dashes:</b> the edge of the area the pen can reach.</span></button></li>
+          <li class="li-btn"><button type="button" class="layer" data-layer="area" aria-pressed="false"><svg width="32" height="10" aria-hidden="true"><path d="M0 5H32" stroke="var(--area)" stroke-width="2.5" stroke-dasharray="5 4"/></svg><span><b>Blue dashes:</b> the writing area, inside your borders.</span></button></li>
+          <li class="li-btn"><button type="button" class="layer" data-layer="grey" aria-pressed="false"><svg width="32" height="14" aria-hidden="true"><rect width="32" height="14" rx="3" fill="var(--unreach)"/></svg><span><b>Grey:</b> part of the page the pen can't reach (past the front of the plate). Text continues on the next page instead.</span></button></li>
+          <li><svg width="32" height="10" aria-hidden="true"><path d="M0 5H32" stroke="var(--slide)" stroke-width="2.5" stroke-dasharray="6 4"/></svg><span><b>Red dashes:</b> where you'll slide the paper back, only with <span class="ui">Long pages</span> ticked.</span></li>
         </ul>
         <div class="note"><b>The easy way to line it up:</b> in pause 1 the head stops with the pen holder right above where the first letter goes.
           Put the paper so that spot matches the preview, then tape all four corners. The paper must not move while the pen writes.</div>
       </div>
-      <div class="card" style="padding:14px">
+      <div class="card paper-fig rv fig" data-anim>
         <svg viewBox="0 0 360 380" role="img" aria-label="Preview of a page on the build plate">
           <rect class="plate" x="40" y="20" width="280" height="280" rx="5"/>
           <g class="grid"><path d="M96 20v280M152 20v280M208 20v280M264 20v280M40 76h280M40 132h280M40 188h280M40 244h280"/></g>
-          <rect x="40" y="276" width="280" height="24" fill="rgba(120,126,140,.45)"/>
+          <rect class="lost" data-layer="grey" x="40" y="276" width="280" height="24"/>
           <rect class="paper" x="76" y="36" width="208" height="294"/>
-          <rect x="90" y="276" width="180" height="40" fill="rgba(120,126,140,.45)"/>
-          <rect x="90" y="50" width="180" height="226" fill="none" stroke="#7aa2d6" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <rect class="lost" data-layer="grey" x="90" y="276" width="180" height="40"/>
+          <rect class="area" data-layer="area" x="90" y="50" width="180" height="226"/>
           <g class="ink" id="paperInk"></g>
-          <rect class="plate-edge" x="40" y="20" width="280" height="280" rx="5"/>
-          <rect x="132" y="290" width="96" height="18" rx="4" fill="#2a2f3a"/><text x="180" y="303" text-anchor="middle" class="lbl-on-plate">pen can't reach</text>
-          <g fill="var(--tape)" opacity=".9"><rect x="68" y="30" width="22" height="9" transform="rotate(-35 79 34)"/><rect x="270" y="30" width="22" height="9" transform="rotate(35 281 34)"/><rect x="68" y="322" width="22" height="9" transform="rotate(35 79 326)"/><rect x="270" y="322" width="22" height="9" transform="rotate(-35 281 326)"/></g>
-          <circle id="firstLetter" cx="100" cy="90" r="9" fill="none" stroke="var(--accent)" stroke-width="2"><animate attributeName="r" values="5;11;5" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;.3;1" dur="1.6s" repeatCount="indefinite"/></circle>
-          <text x="96" y="66" class="lbl-dark" style="fill:var(--accent)">↓ the pen stops here in pause 1</text>
+          <rect class="plate-edge" data-layer="edge" x="40" y="20" width="280" height="280" rx="5"/>
+          <g data-layer="grey"><rect x="132" y="290" width="96" height="18" rx="4" fill="var(--plate)"/><text x="180" y="303" text-anchor="middle" class="lbl-on-plate">pen can't reach</text></g>
+          <g class="tape" opacity=".9"><rect x="68" y="30" width="22" height="9" transform="rotate(-35 79 34)"/><rect x="270" y="30" width="22" height="9" transform="rotate(35 281 34)"/><rect x="68" y="322" width="22" height="9" transform="rotate(35 79 326)"/><rect x="270" y="322" width="22" height="9" transform="rotate(-35 281 326)"/></g>
+          <circle id="firstLetter" cx="100" cy="90" r="9" fill="none" stroke-width="2"/>
+          <text x="96" y="66" class="lbl-dark on-accent-paper">↓ the pen stops here in pause 1</text>
           <text class="lbl" x="180" y="360" text-anchor="middle">FRONT OF PRINTER</text>
         </svg>
       </div>
     </div>
   </section>
 
-  <section class="block" id="printing">
+  <section class="block band" id="printing">
     <div class="wrap">
-      <p class="kicker">Running the file</p>
-      <h2>What happens when you print</h2>
-      <p class="intro">Send the <code>.gcode</code> file to the printer the same way as other plain G-code (for example on the SD card). The pauses are timed:
-        the printer carries on by itself when the time is up. With <span class="ui">Printer sounds</span> on, it plays a tune at each pause.</p>
-      <figure class="stepper" data-ms="5600">
+      <div class="sec-head" data-stagger>
+        <p class="kicker">Running the file</p>
+        <h2>What happens when you print</h2>
+        <p class="intro">Send the <code>.gcode</code> file to the printer the same way as other plain G-code (for example on the SD card). The pauses are timed:
+          the printer carries on by itself when the time is up. With <span class="ui">Printer sounds</span> on, it plays a tune at each pause.</p>
+      </div>
+      <figure class="stepper rv fig" data-ms="5600">
         <div class="stage">
-          <svg id="print" data-stage="1" viewBox="0 0 560 280" role="img" aria-label="The print head, pen and paper, seen from the side">
+          <svg id="print" data-stage="1" viewBox="0 0 560 280" role="img" aria-label="The print head, pen and paper, seen from the side" data-anim>
             <text class="lbl" x="40" y="268">FRONT</text><text class="lbl" x="520" y="268" text-anchor="end">BACK</text>
-            <rect class="plate" x="40" y="220" width="480" height="14" rx="3"/>
-            <g class="paper-g moving"><rect x="150" y="214" width="270" height="6" fill="var(--paper)" stroke="#c9ced6"/>
-              <rect x="146" y="211" width="16" height="5" fill="var(--tape)"/><rect x="408" y="211" width="16" height="5" fill="var(--tape)"/></g>
+            <g class="bed-g moving">
+              <rect class="plate" x="40" y="220" width="480" height="14" rx="3"/>
+              <g class="paper-g moving"><rect class="paper-strip" x="150" y="214" width="270" height="6"/>
+                <rect class="tape" x="146" y="211" width="16" height="5"/><rect class="tape" x="408" y="211" width="16" height="5"/></g>
+            </g>
+            <ellipse class="ripple" cx="298" cy="220" rx="14" ry="3"/>
             <g class="head-y moving">
               <g class="head-x">
                 <rect class="head-body" x="250" y="60" width="96" height="96" rx="12"/>
                 <rect class="hotend" x="283" y="156" width="30" height="24" rx="3"/>
-                <path d="M287 180h22l-11 12z" fill="#9aa3b2"/>
-                <rect x="214" y="104" width="36" height="34" rx="5" fill="#8d96a7"/>
-                <circle class="clamp" cx="219" cy="121" r="4.5" fill="#5a6273"/>
+                <path class="nozzle" d="M287 180h22l-11 12z"/>
+                <rect class="holder-rect" x="214" y="104" width="36" height="34" rx="5"/>
+                <g class="clamp-g"><circle class="clamp" cx="219" cy="121" r="4.5"/><path class="clamp-lever" d="M219 118v6"/></g>
                 <g class="pen-g moving">
                   <rect class="pen-cap" x="226" y="62" width="12" height="22" rx="3"/>
                   <rect class="pen-body" x="226" y="84" width="12" height="104" rx="2"/>
@@ -419,14 +993,19 @@
                 </g>
               </g>
             </g>
-            <g class="fade cap s1"><text class="lbl" x="372" y="96" style="fill:var(--text)">pen out of the holder</text><text class="lbl" x="372" y="112">the nozzle touches the plate</text><text class="lbl" x="372" y="128">to find its height</text></g>
-            <g class="fade cap s2"><text class="lbl" x="372" y="96" style="fill:var(--text)">pause 1 · 30 s</text><text class="lbl" x="372" y="112">place the paper under</text><text class="lbl" x="372" y="128">the pen holder, tape it</text></g>
-            <g class="fade cap s3"><text class="lbl" x="372" y="96" style="fill:var(--text)">pause 2 · 30 s</text><text class="lbl" x="372" y="112">slide the pen down to</text><text class="lbl" x="372" y="128">the paper, then clamp it</text></g>
+            <g class="fade cap s1"><text class="lbl cap-strong" x="372" y="96">pen out of the holder</text><text class="lbl" x="372" y="112">the nozzle touches the plate</text><text class="lbl" x="372" y="128">to find its height</text></g>
+            <g class="fade cap s2"><circle class="pring-track" cx="364" cy="92" r="7"/><circle class="pring" cx="364" cy="92" r="7" pathLength="1"/><text class="lbl cap-strong" x="378" y="96">pause 1 · 30 s</text><text class="lbl" x="378" y="112">place the paper under</text><text class="lbl" x="378" y="128">the pen holder, tape it</text></g>
+            <g class="fade cap s3"><circle class="pring-track" cx="364" cy="92" r="7"/><circle class="pring" cx="364" cy="92" r="7" pathLength="1"/><text class="lbl cap-strong" x="378" y="96">pause 2 · 30 s</text><text class="lbl" x="378" y="112">slide the pen down to</text><text class="lbl" x="378" y="128">the paper, then clamp it</text></g>
             <g class="fade s4 inset">
-              <rect x="404" y="4" width="140" height="58" rx="6" fill="var(--paper)" stroke="var(--line)"/>
+              <rect class="inset-bg" x="404" y="4" width="140" height="58" rx="6"/>
               <g id="insetInk" transform="translate(412 12)"></g>
             </g>
           </svg>
+          <p class="fig-cap">Bambu Lab A1 shown: its bed moves front to back, the head moves across.</p>
+          <button type="button" class="stepper-toggle" aria-label="Pause animation" hidden>
+            <svg class="i-pause" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="8.5" y="2" width="3" height="10" rx="1" fill="currentColor"/></svg>
+            <svg class="i-play" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.2v9.6L12 7z" fill="currentColor"/></svg>
+          </button>
         </div>
         <ol class="stage-list">
           <li><button type="button" data-go="1"><span class="n">1</span><span><b class="h">Start with the pen out</b><span class="t">Take the pen out of the holder, then start the file. The printer homes first, and on the A1 homing touches the nozzle to the plate: a pen sticking out below it would crash.</span><span class="bar"><i></i></span></span></button></li>
@@ -443,81 +1022,86 @@
 
   <section class="block" id="settings">
     <div class="wrap">
-      <p class="kicker">Reference</p>
-      <h2>What each setting does</h2>
-      <p class="intro">The handwriting settings are on the left of the app. Every gap is an average: real handwriting never repeats exactly, so each word and line still varies a little, more with higher line wobble.</p>
-      <div class="set-grid">
+      <div class="sec-head" data-stagger>
+        <p class="kicker">Reference</p>
+        <h2>What each setting does</h2>
+        <p class="intro">The handwriting settings are on the left of the app. Every gap is an average: real handwriting never repeats exactly, so each word and line still varies a little, more with higher line wobble.</p>
+      </div>
+      <div class="set-grid" data-stagger>
         <div class="card set"><div><h3>Neatness</h3><p>How carefully the hand writes. Higher is tidier and more regular; lower is messier, with more variation between letters. Each style starts at the neatness it looks best at.</p><span class="def">0 to 2</span></div>
           <div class="viz neat-row" id="neatSamples"></div></div>
         <div class="card set"><div><h3>Line wobble</h3><p>How human the page layout is: lines that slope and bow a little, ragged starts, words that drift in size and slant. 0 gives ruler-straight lines.</p><span class="def">0 to 2 · default 1</span></div>
           <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
-            <text x="4" y="12" class="lbl-dark" style="font-size:9px">0</text>
-            <g fill="#c5cde0"><rect x="16" y="6" width="36" height="7" rx="3"/><rect x="58" y="6" width="22" height="7" rx="3"/><rect x="86" y="6" width="44" height="7" rx="3"/>
+            <text x="4" y="12" class="lbl-dark t9">0</text>
+            <g fill="var(--ink-done)"><rect x="16" y="6" width="36" height="7" rx="3"/><rect x="58" y="6" width="22" height="7" rx="3"/><rect x="86" y="6" width="44" height="7" rx="3"/>
               <rect x="16" y="22" width="28" height="7" rx="3"/><rect x="50" y="22" width="46" height="7" rx="3"/><rect x="102" y="22" width="30" height="7" rx="3"/></g>
-            <text x="4" y="58" class="lbl-dark" style="font-size:9px">2</text>
-            <g fill="var(--ink)" opacity=".75"><rect x="19" y="52" width="34" height="7" rx="3" transform="rotate(-2 36 55)"/><rect x="58" y="51" width="24" height="7" rx="3" transform="rotate(-3 70 54)"/><rect x="88" y="49" width="42" height="7" rx="3" transform="rotate(-4 109 52)"/>
-              <rect x="15" y="70" width="29" height="7" rx="3" transform="rotate(2 30 73)"/><rect x="49" y="71" width="47" height="7" rx="3" transform="rotate(1 72 74)"/><rect x="103" y="69" width="27" height="7" rx="3" transform="rotate(-3 116 72)"/></g>
+            <text x="4" y="58" class="lbl-dark t9">2</text>
+            <g class="wob" fill="var(--ink)" opacity=".75"><rect x="19" y="52" width="34" height="7" rx="3" style="--r:-2deg;--k:0"/><rect x="58" y="51" width="24" height="7" rx="3" style="--r:-3deg;--k:1"/><rect x="88" y="49" width="42" height="7" rx="3" style="--r:-4deg;--k:2"/>
+              <rect x="15" y="70" width="29" height="7" rx="3" style="--r:2deg;--k:3"/><rect x="49" y="71" width="47" height="7" rx="3" style="--r:1deg;--k:4"/><rect x="103" y="69" width="27" height="7" rx="3" style="--r:-3deg;--k:5"/></g>
           </svg></div></div>
         <div class="card set"><div><h3>Word and line spacing</h3><p><b>Word spacing</b> is the average gap between words, in letter heights. <b>Line spacing</b> is the distance from one line to the next, in mm; it must be at least 1.5 × the letter size.</p><span class="def">words 1.0 · lines 8 mm</span></div>
           <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
-            <g fill="#c5cde0"><rect x="10" y="18" width="40" height="10" rx="3"/><rect x="70" y="18" width="30" height="10" rx="3"/><rect x="10" y="62" width="56" height="10" rx="3"/><rect x="86" y="62" width="34" height="10" rx="3"/></g>
-            <path class="dim" d="M51 12H69 M51 9V15 M69 9V15"/><text x="60" y="8" class="dim-text" style="font-size:9px" text-anchor="middle">word</text>
-            <path class="dim" d="M134 28V72 M130 28H138 M130 72H138"/><text x="128" y="54" class="dim-text" style="font-size:9px" text-anchor="end">line</text>
+            <g fill="var(--ink-done)"><rect x="10" y="18" width="40" height="10" rx="3"/><rect x="70" y="18" width="30" height="10" rx="3"/><rect x="10" y="62" width="56" height="10" rx="3"/><rect x="86" y="62" width="34" height="10" rx="3"/></g>
+            <path class="dim" d="M51 12H69 M51 9V15 M69 9V15"/><text x="60" y="8" class="dim-text t9" text-anchor="middle">word</text>
+            <path class="dim" d="M134 28V72 M130 28H138 M130 72H138"/><text x="128" y="54" class="dim-text t9" text-anchor="end">line</text>
           </svg></div></div>
         <div class="card set"><div><h3>Letter size</h3><p>The height of small letters like <i>a</i>, <i>e</i> and <i>x</i> (the x-height), in mm. Capitals and tall letters are about twice that.</p><span class="def">1 to 20 mm · default 2.8</span></div>
           <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
-            <path d="M8 70H142 M8 49H142" stroke="#c5cde0" stroke-dasharray="3 3"/>
-            <text x="22" y="70" style="font: 44px Georgia, serif; fill: var(--ink)">hx</text>
-            <path class="dim" d="M110 49V70 M106 49H114 M106 70H114"/><text x="118" y="61" class="dim-text" style="font-size:10px">2.8 mm</text>
+            <path class="ph-rule" d="M8 70H142 M8 49H142"/>
+            <text x="22" y="70" class="hx">hx</text>
+            <path class="dim" d="M102 49V70 M98 49H106 M98 70H106"/><text x="109" y="63" class="dim-text t10">2.8 mm</text>
           </svg></div></div>
         <div class="card set"><div><h3>Pen heights</h3><p><b>Writing height</b> is the nozzle's height while the pen is down; the pen is clamped touching the paper at this height in pause 2. <b>Pen-up height</b> is used between strokes, about 2 mm higher.</p><span class="def">10 mm · 12 mm</span></div>
           <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
             <rect x="6" y="80" width="138" height="8" rx="2" class="plate"/>
-            <rect x="44" y="12" width="34" height="32" rx="5" class="head-body"/><path d="M56 44h10l-5 8z" fill="#9aa3b2"/>
-            <rect x="32" y="20" width="10" height="56" rx="2" class="pen-body"/><path d="M33 76h8l-4 4z" class="pen-tip"/>
-            <path class="dim" d="M98 52V80 M94 52H102"/><text x="104" y="68" class="dim-text" style="font-size:10px">10 mm</text>
-            <path d="M61 52H96" stroke="#9aa3b2" stroke-dasharray="2 2"/>
+            <g class="ph-move">
+              <rect x="44" y="12" width="34" height="32" rx="5" class="head-body"/><path d="M56 44h10l-5 8z" class="nozzle"/>
+              <rect x="32" y="20" width="10" height="56" rx="2" class="pen-body"/><path d="M33 76h8l-4 4z" class="pen-tip"/>
+            </g>
+            <path class="dim" d="M98 52V80 M94 52H102"/><text x="104" y="68" class="dim-text t10">10 mm</text>
+            <path d="M61 52H96" class="lead-line"/>
           </svg></div></div>
         <div class="card set"><div><h3>Pen offset</h3><p>Where the pen tip is compared with the nozzle. X is left/right (negative = pen to the left); Y is front/back (negative = pen in front). Measure it with the offset test.</p><span class="def">X 1 · Y −25 (Plotter holder)</span></div>
           <div class="viz"><svg viewBox="0 0 150 96" aria-hidden="true">
-            <text x="6" y="11" class="lbl-dark" style="font-size:8px">↑ BACK</text><text x="6" y="92" class="lbl-dark" style="font-size:8px">↓ FRONT</text>
-            <circle cx="100" cy="24" r="9" fill="#c7ccd4" stroke="#9aa3b2"/><text x="114" y="27" class="lbl-dark" style="font-size:9px">nozzle</text>
-            <circle cx="82" cy="64" r="6" class="pen-body"/><text x="60" y="67" class="lbl-dark" style="font-size:9px;fill:var(--ink)" text-anchor="end">pen</text>
-            <path class="dim" d="M100 34V64"/><text x="105" y="52" class="dim-text" style="font-size:9px">Y −27</text>
-            <path class="dim" d="M100 76H82 M100 72V80 M82 72V80"/><text x="91" y="90" class="dim-text" style="font-size:9px" text-anchor="middle">X −4.5</text>
+            <text x="6" y="11" class="lbl-dark t8">↑ BACK</text><text x="6" y="92" class="lbl-dark t8">↓ FRONT</text>
+            <path class="off-line" d="M100 24 L82 64"/>
+            <circle cx="100" cy="24" r="9" class="hotend"/><text x="114" y="27" class="lbl-dark t9">nozzle</text>
+            <circle cx="82" cy="64" r="6" class="pen-body"/><text x="60" y="67" class="lbl-dark t9 on-ink" text-anchor="end">pen</text>
+            <path class="dim" d="M100 34V64"/><text x="105" y="52" class="dim-text t9">Y −27</text>
+            <path class="dim" d="M100 76H82 M100 72V80 M82 72V80"/><text x="91" y="90" class="dim-text t9" text-anchor="middle">X −4.5</text>
           </svg></div></div>
       </div>
 
-      <h3 style="margin:40px 0 12px">Everything else</h3>
+      <h3 class="h3-display h3-gap">Everything else</h3>
       <div class="table-scroll">
-      <table class="ref">
-        <thead><tr><th>Setting</th><th>What it does</th><th>Default</th></tr></thead>
-        <tbody>
-          <tr class="group"><th colspan="3">Page (left panel)</th></tr>
-          <tr><td>Printer</td><td>Which printer the file is for. Its bed size is used for every safety check, so only run the file on that printer.</td><td>Bambu Lab A1</td></tr>
-          <tr><td>Paper · Orientation</td><td>A4, A5, A6, US Letter, a 4×6 in card or Custom, portrait or landscape.</td><td>A5 portrait</td></tr>
-          <tr><td>Border ↔ / ↕</td><td>Blank margin left and right (↔) and top and bottom (↕) of the page.</td><td>15 mm · 15 mm</td></tr>
-          <tr><td>Printer sounds</td><td>Bambu's own start and finish tunes, plus a tune at each pause. A1, A1 mini and P2S only.</td><td>On</td></tr>
-          <tr><td>Long pages</td><td>For pages longer than the pen reaches (A4 on an A1). Off: the text continues on the next page. On: the printer pauses mid-page so you can slide the paper back.</td><td>Off</td></tr>
-          <tr><td>Lines</td><td>Plain paper, or the ruling of lined paper (6 to 10 mm). With lined paper, measure where its first printed line (↓ from the top edge) and margin line (→ from the left edge) are: every line of writing then sits on a printed line. Picking one also sets letters that suit it (2.3 mm for 8 mm lines).</td><td>Plain paper</td></tr>
-          <tr><td>Header · Page numbers</td><td>A line at the top of every sheet: your header text on the left, “Page 1”, “Page 2”… on the right. Each sheet's is written afresh.</td><td>Off</td></tr>
-          <tr class="group"><th colspan="3">Printing (left panel)</th></tr>
-          <tr><td>Dry run</td><td>Saves files that do everything except write: the pen is clamped as usual, then stays 8 mm above the paper.</td><td>Off</td></tr>
-          <tr><td>Start at line</td><td>Saves this page from that line on, after the pen ran out or the run stopped. Lines above it turn grey in the preview and aren't written again.</td><td>1</td></tr>
-          <tr><td>New version</td><td>Writes the same text again with fresh handwriting and layout. Use it if a word comes out garbled.</td><td></td></tr>
-          <tr><td>Save G-code · Save all pages</td><td>Saves the page on screen, or every page as a zip (1_page.gcode, 2_page.gcode, …). Print them in order with a fresh sheet each time.</td><td></td></tr>
-          <tr class="group"><th colspan="3">Printer settings → Pauses during printing</th></tr>
-          <tr><td>Pause 1: place the paper</td><td>How long the head waits above the first letter so you can place and tape the paper.</td><td>30 s</td></tr>
-          <tr><td>Pause 2: attach the pen</td><td>How long it waits at writing height so you can slide the pen down to the paper and clamp it.</td><td>30 s</td></tr>
-          <tr><td>Pause 3: slide the paper</td><td>Only with Long pages on: time to slide the paper back between passes.</td><td>45 s</td></tr>
-          <tr class="group"><th colspan="3">Printer settings → Speeds</th></tr>
-          <tr><td>Writing speed</td><td>Pen speed while writing. 1500 is about the speed of real handwriting; each stroke varies a little.</td><td>1500 mm/min</td></tr>
-          <tr><td>Travel speed</td><td>Speed of pen-up moves between strokes.</td><td>6000 mm/min</td></tr>
-          <tr><td>Up/down speed</td><td>How fast the pen is lifted and lowered.</td><td>600 mm/min</td></tr>
-          <tr><td>Pen settle time</td><td>A tiny wait after every pen down and up so the ink starts and stops cleanly. Raise it if strokes start faint.</td><td>60 ms</td></tr>
-          <tr class="group"><th colspan="3">Printer settings → Custom sizes</th></tr>
-          <tr><td>Bed width, depth, max height</td><td>Only used when the printer is Custom.</td><td></td></tr>
-          <tr><td>Paper width, height</td><td>Only used when the paper is Custom.</td><td></td></tr>
+      <table class="ref" role="table">
+        <thead role="rowgroup"><tr role="row"><th role="columnheader">Setting</th><th role="columnheader">What it does</th><th role="columnheader">Default</th></tr></thead>
+        <tbody role="rowgroup">
+          <tr class="group" role="row"><th colspan="3" role="cell">Page (left panel)</th></tr>
+          <tr role="row"><td role="cell">Printer</td><td role="cell">Which printer the file is for. Its bed size is used for every safety check, so only run the file on that printer.</td><td role="cell">Bambu Lab A1</td></tr>
+          <tr role="row"><td role="cell">Paper · Orientation</td><td role="cell">A4, A5, A6, US Letter, a 4×6 in card or Custom, portrait or landscape.</td><td role="cell">A5 portrait</td></tr>
+          <tr role="row"><td role="cell">Border ↔ / ↕</td><td role="cell">Blank margin left and right (↔) and top and bottom (↕) of the page.</td><td role="cell">15 mm · 15 mm</td></tr>
+          <tr role="row"><td role="cell">Printer sounds</td><td role="cell">Bambu's own start and finish tunes, plus a tune at each pause. A1, A1 mini and P2S only.</td><td role="cell">On</td></tr>
+          <tr role="row"><td role="cell">Long pages</td><td role="cell">For pages longer than the pen reaches (A4 on an A1). Off: the text continues on the next page. On: the printer pauses mid-page so you can slide the paper back.</td><td role="cell">Off</td></tr>
+          <tr role="row"><td role="cell">Lines</td><td role="cell">Plain paper, or the ruling of lined paper (6 to 10 mm). With lined paper, measure where its first printed line (↓ from the top edge) and margin line (→ from the left edge) are: every line of writing then sits on a printed line. Picking one also sets letters that suit it (2.3 mm for 8 mm lines).</td><td role="cell">Plain paper</td></tr>
+          <tr role="row"><td role="cell">Header · Page numbers</td><td role="cell">A line at the top of every sheet: your header text on the left, “Page 1”, “Page 2”… on the right. Each sheet's is written afresh.</td><td role="cell">Off</td></tr>
+          <tr class="group" role="row"><th colspan="3" role="cell">Printing (left panel)</th></tr>
+          <tr role="row"><td role="cell">Dry run</td><td role="cell">Saves files that do everything except write: the pen is clamped as usual, then stays 8 mm above the paper.</td><td role="cell">Off</td></tr>
+          <tr role="row"><td role="cell">Start at line</td><td role="cell">Saves this page from that line on, after the pen ran out or the run stopped. Lines above it turn grey in the preview and aren't written again.</td><td role="cell">1</td></tr>
+          <tr role="row"><td role="cell">New version</td><td role="cell">Writes the same text again with fresh handwriting and layout. Use it if a word comes out garbled.</td><td role="cell"></td></tr>
+          <tr role="row"><td role="cell">Save G-code · Save all pages</td><td role="cell">Saves the page on screen, or every page as a zip (1_page.gcode, 2_page.gcode, …). Print them in order with a fresh sheet each time.</td><td role="cell"></td></tr>
+          <tr class="group" role="row"><th colspan="3" role="cell">Printer settings → Pauses during printing</th></tr>
+          <tr role="row"><td role="cell">Pause 1: place the paper</td><td role="cell">How long the head waits above the first letter so you can place and tape the paper.</td><td role="cell">30 s</td></tr>
+          <tr role="row"><td role="cell">Pause 2: attach the pen</td><td role="cell">How long it waits at writing height so you can slide the pen down to the paper and clamp it.</td><td role="cell">30 s</td></tr>
+          <tr role="row"><td role="cell">Pause 3: slide the paper</td><td role="cell">Only with Long pages on: time to slide the paper back between passes.</td><td role="cell">45 s</td></tr>
+          <tr class="group" role="row"><th colspan="3" role="cell">Printer settings → Speeds</th></tr>
+          <tr role="row"><td role="cell">Writing speed</td><td role="cell">Pen speed while writing. 1500 is about the speed of real handwriting; each stroke varies a little.</td><td role="cell">1500 mm/min</td></tr>
+          <tr role="row"><td role="cell">Travel speed</td><td role="cell">Speed of pen-up moves between strokes.</td><td role="cell">6000 mm/min</td></tr>
+          <tr role="row"><td role="cell">Up/down speed</td><td role="cell">How fast the pen is lifted and lowered.</td><td role="cell">600 mm/min</td></tr>
+          <tr role="row"><td role="cell">Pen settle time</td><td role="cell">A tiny wait after every pen down and up so the ink starts and stops cleanly. Raise it if strokes start faint.</td><td role="cell">60 ms</td></tr>
+          <tr class="group" role="row"><th colspan="3" role="cell">Printer settings → Custom sizes</th></tr>
+          <tr role="row"><td role="cell">Bed width, depth, max height</td><td role="cell">Only used when the printer is Custom.</td><td role="cell"></td></tr>
+          <tr role="row"><td role="cell">Paper width, height</td><td role="cell">Only used when the paper is Custom.</td><td role="cell"></td></tr>
         </tbody>
       </table>
       </div>
@@ -526,61 +1110,67 @@
 
   <section class="block" id="more">
     <div class="wrap">
-      <p class="kicker">More you can do</p>
-      <h2>Lined paper, two pens and other extras</h2>
-      <p class="intro">Small things that save a page, or make it look more like your own notebook.</p>
-      <div class="extras">
+      <div class="sec-head" data-stagger>
+        <p class="kicker">More you can do</p>
+        <h2>Lined paper, two pens and other extras</h2>
+        <p class="intro">Small things that save a page, or make it look more like your own notebook.</p>
+      </div>
+      <div class="extras" data-stagger>
         <div class="card">
           <svg viewBox="0 0 220 110" aria-hidden="true">
             <path d="M0 34H220M0 56H220M0 78H220M0 100H220" stroke="rgba(90,140,220,.5)"/><path d="M36 0V110" stroke="rgba(220,80,80,.65)"/>
-            <g fill="var(--ink)" opacity=".8"><rect x="44" y="26" width="38" height="8" rx="3"/><rect x="88" y="26" width="24" height="8" rx="3"/><rect x="118" y="26" width="52" height="8" rx="3"/>
-              <rect x="44" y="48" width="30" height="8" rx="3"/><rect x="80" y="48" width="48" height="8" rx="3"/><rect x="134" y="48" width="34" height="8" rx="3"/><rect x="174" y="48" width="22" height="8" rx="3"/>
-              <rect x="44" y="70" width="44" height="8" rx="3"/><rect x="94" y="70" width="28" height="8" rx="3"/></g>
+            <g fill="var(--ink)" opacity=".8"><g class="ex-drop" style="--k:0"><rect x="44" y="26" width="38" height="8" rx="3"/><rect x="88" y="26" width="24" height="8" rx="3"/><rect x="118" y="26" width="52" height="8" rx="3"/></g>
+              <g class="ex-drop" style="--k:1"><rect x="44" y="48" width="30" height="8" rx="3"/><rect x="80" y="48" width="48" height="8" rx="3"/><rect x="134" y="48" width="34" height="8" rx="3"/><rect x="174" y="48" width="22" height="8" rx="3"/></g>
+              <g class="ex-drop" style="--k:2"><rect x="44" y="70" width="44" height="8" rx="3"/><rect x="94" y="70" width="28" height="8" rx="3"/></g></g>
           </svg>
           <h3>Lined paper</h3>
           <p>Under <span class="ui">Page → Lines</span>, pick your paper's ruling, then measure two things with a ruler: how far its first printed line is below the top edge, and where its margin line is. Every line of writing then sits on a printed line, right of the margin, and the letter size drops to suit the lines if it was bigger.</p>
         </div>
-        <div class="card">
+        <div class="card" id="marksCard">
           <svg id="marksDemo" viewBox="0 0 220 110" aria-hidden="true"></svg>
           <h3>Underline, and a second pen</h3>
           <p>Type <code>_like this_</code> to underline words with a hand-drawn line, and <code>*like this*</code> to write them with a second pen, a red one say. The printer writes everything in the first pen, then lifts so you can swap pens, and writes the rest.</p>
         </div>
         <div class="card">
           <svg viewBox="0 0 220 110" aria-hidden="true">
-            <g fill="var(--ink)" opacity=".85"><rect x="16" y="14" width="34" height="8" rx="3"/><rect x="55" y="14" width="40" height="8" rx="3"/><rect x="160" y="14" width="28" height="8" rx="3"/><rect x="193" y="14" width="10" height="8" rx="3"/></g>
-            <g fill="#c5cde0"><rect x="16" y="40" width="44" height="7" rx="3"/><rect x="66" y="40" width="30" height="7" rx="3"/><rect x="102" y="40" width="56" height="7" rx="3"/><rect x="164" y="40" width="38" height="7" rx="3"/>
-              <rect x="16" y="60" width="36" height="7" rx="3"/><rect x="58" y="60" width="50" height="7" rx="3"/><rect x="114" y="60" width="40" height="7" rx="3"/>
-              <rect x="16" y="80" width="52" height="7" rx="3"/><rect x="74" y="80" width="34" height="7" rx="3"/><rect x="114" y="80" width="46" height="7" rx="3"/><rect x="166" y="80" width="30" height="7" rx="3"/></g>
-            <text x="16" y="34" class="lbl-dark" style="font-size:8px">your header</text><text x="203" y="34" class="lbl-dark" style="font-size:8px" text-anchor="end">Page 2</text>
+            <g class="ex-head"><g fill="var(--ink)" opacity=".85"><rect x="16" y="14" width="34" height="8" rx="3"/><rect x="55" y="14" width="40" height="8" rx="3"/><rect x="160" y="14" width="28" height="8" rx="3"/><rect x="193" y="14" width="10" height="8" rx="3"/></g>
+              <text x="16" y="34" class="lbl-dark t8">your header</text><text x="203" y="34" class="lbl-dark t8" text-anchor="end">Page 2</text></g>
+            <g fill="var(--ink-done)"><g class="ex-body" style="--k:0"><rect x="16" y="40" width="44" height="7" rx="3"/><rect x="66" y="40" width="30" height="7" rx="3"/><rect x="102" y="40" width="56" height="7" rx="3"/><rect x="164" y="40" width="38" height="7" rx="3"/></g>
+              <g class="ex-body" style="--k:1"><rect x="16" y="60" width="36" height="7" rx="3"/><rect x="58" y="60" width="50" height="7" rx="3"/><rect x="114" y="60" width="40" height="7" rx="3"/></g>
+              <g class="ex-body" style="--k:2"><rect x="16" y="80" width="52" height="7" rx="3"/><rect x="74" y="80" width="34" height="7" rx="3"/><rect x="114" y="80" width="46" height="7" rx="3"/><rect x="166" y="80" width="30" height="7" rx="3"/></g></g>
           </svg>
           <h3>Header and page numbers</h3>
           <p>Fill in <span class="ui">Page → Header</span> (your name and the date, say) and tick <span class="ui">Page numbers</span>. Every sheet starts with that line, written afresh each time, with “Page 1”, “Page 2” and so on at the right.</p>
         </div>
         <div class="card">
           <svg viewBox="0 0 220 110" aria-hidden="true">
-            <g fill="#c5cde0"><rect x="16" y="30" width="40" height="9" rx="3"/><rect x="62" y="30" width="30" height="9" rx="3"/><rect x="146" y="30" width="44" height="9" rx="3"/>
+            <g fill="var(--ink-done)"><rect x="16" y="30" width="40" height="9" rx="3"/><rect x="62" y="30" width="30" height="9" rx="3"/><rect x="146" y="30" width="44" height="9" rx="3"/>
               <rect x="16" y="62" width="52" height="9" rx="3"/><rect x="74" y="62" width="34" height="9" rx="3"/><rect x="114" y="62" width="40" height="9" rx="3"/></g>
-            <rect x="94" y="24" width="48" height="21" rx="4" fill="rgba(59,91,219,.16)" stroke="var(--accent)"/><rect x="98" y="30" width="40" height="9" rx="3" fill="var(--ink)"/>
-            <path d="M126 40l0 22 5-5 4 9 4-2-4-9 7 0z" fill="#fff" stroke="#1c2230" stroke-width="1.4" stroke-linejoin="round"/>
+            <rect class="ex-hl" x="94" y="24" width="48" height="21" rx="4"/><rect class="ex-word" x="98" y="30" width="40" height="9" rx="3" fill="var(--ink)"/>
+            <path class="cursor" d="M126 40l0 22 5-5 4 9 4-2-4-9 7 0z" stroke-width="1.4"/>
           </svg>
           <h3>Write one word again</h3>
           <p>Point at a word in the preview and click it: just that word is written again, and the rest of the page keeps its handwriting. Click again for another version, or use <span class="ui">New version</span> for the whole page.</p>
         </div>
         <div class="card">
           <svg viewBox="0 0 220 110" aria-hidden="true">
-            <g fill="#d3d8e0"><rect x="34" y="12" width="60" height="7" rx="3"/><rect x="100" y="12" width="70" height="7" rx="3"/><rect x="34" y="28" width="80" height="7" rx="3"/><rect x="120" y="28" width="40" height="7" rx="3"/><rect x="34" y="44" width="50" height="7" rx="3"/><rect x="90" y="44" width="38" height="7" rx="3"/></g>
-            <g fill="var(--ink)" opacity=".85"><rect x="34" y="60" width="44" height="7" rx="3"/><rect x="84" y="60" width="64" height="7" rx="3"/><rect x="34" y="76" width="70" height="7" rx="3"/><rect x="110" y="76" width="44" height="7" rx="3"/><rect x="34" y="92" width="52" height="7" rx="3"/></g>
-            <text x="26" y="67" class="dim-text" style="font-size:10px" text-anchor="end">4 →</text>
+            <g fill="var(--ink-done)"><rect x="34" y="12" width="60" height="7" rx="3"/><rect x="100" y="12" width="70" height="7" rx="3"/><rect x="34" y="28" width="80" height="7" rx="3"/><rect x="120" y="28" width="40" height="7" rx="3"/><rect x="34" y="44" width="50" height="7" rx="3"/><rect x="90" y="44" width="38" height="7" rx="3"/></g>
+            <g fill="var(--ink)" opacity=".85"><g class="ex-row" style="--k:0"><rect x="34" y="60" width="44" height="7" rx="3"/><rect x="84" y="60" width="64" height="7" rx="3"/></g>
+              <g class="ex-row" style="--k:1"><rect x="34" y="76" width="70" height="7" rx="3"/><rect x="110" y="76" width="44" height="7" rx="3"/></g>
+              <g class="ex-row" style="--k:2"><rect x="34" y="92" width="52" height="7" rx="3"/></g></g>
+            <text x="26" y="67" class="dim-text t10 ex-arrow" text-anchor="end">4 →</text>
           </svg>
           <h3>Start again from a line</h3>
           <p>If the pen runs dry or the run stops, leave the paper taped down, fit a new pen and set <span class="ui">Printing → Start at line</span> to the line it stopped on. The lines above it turn grey and aren't written again.</p>
         </div>
         <div class="card">
           <svg viewBox="0 0 220 110" aria-hidden="true">
-            <rect x="10" y="92" width="200" height="8" rx="2" class="plate"/><rect x="40" y="88" width="140" height="4" fill="var(--paper)" stroke="#c9ced6"/>
-            <rect x="96" y="18" width="34" height="30" rx="5" class="head-body"/><path d="M108 48h10l-5 8z" fill="#9aa3b2"/>
-            <rect x="82" y="16" width="10" height="44" rx="2" class="pen-body"/><path d="M83 60h8l-4 6z" class="pen-tip"/>
-            <path class="dim" d="M70 66V88 M66 66H74 M66 88H74"/><text x="62" y="81" class="dim-text" style="font-size:10px" text-anchor="end">8 mm</text>
+            <rect x="10" y="92" width="200" height="8" rx="2" class="plate"/><rect x="40" y="88" width="140" height="4" class="paper"/>
+            <g class="ex-dry">
+              <rect x="96" y="18" width="34" height="30" rx="5" class="head-body"/><path d="M108 48h10l-5 8z" class="nozzle"/>
+              <rect x="82" y="16" width="10" height="44" rx="2" class="pen-body"/><path d="M83 60h8l-4 6z" class="pen-tip"/>
+            </g>
+            <path class="dim" d="M70 66V88 M66 66H74 M66 88H74"/><text x="62" y="81" class="dim-text t10" text-anchor="end">8 mm</text>
           </svg>
           <h3>Dry run</h3>
           <p>Tick <span class="ui">Printing → Dry run</span> to save a file that does everything except write: the pen is clamped as usual, then stays 8 mm above the paper. Check where it goes before you use any ink.</p>
@@ -591,9 +1181,12 @@
   </section>
 
   <section class="block" id="faq">
-    <div class="wrap">
-      <p class="kicker">Troubleshooting</p>
-      <h2>Questions</h2>
+    <div class="wrap faq-grid">
+      <div class="faq-head" data-stagger>
+        <p class="kicker">Troubleshooting</p>
+        <h2>Questions</h2>
+      </div>
+      <div class="faq-list" data-stagger>
       <details><summary>The pen goes off the front of the plate on the last lines</summary><p>The pen offset is missing or wrong. Run the <a href="#calibrate">offset test</a>, save the offset, then save your G-code again: files saved before still use the old offset.</p></details>
       <details><summary>Not all of my text is on the page</summary><p>It continues on the next page. Use the arrows above the preview to see each page and <span class="ui">Save all pages</span> to get them all. For one long A4 page instead, tick <span class="ui">Long pages</span> and slide the paper when asked.</p></details>
       <details><summary>A word looks garbled or has a stray mark</summary><p>The model occasionally slips. Click that word in the preview to write just it again, or <span class="ui">New version</span> for the whole page. Raising <span class="ui">Neatness</span> a little also helps.</p></details>
@@ -601,21 +1194,25 @@
       <details><summary>Some characters are missing</summary><p>The model knows letters, digits and <code>! " # ' ( ) , - . : ; ?</code>. Accents are dropped (é becomes e), capital Q, X and Z are written lowercase, and anything else is skipped. The app lists what it skipped under the text box.</p></details>
       <details><summary>The nozzle shows a temperature</summary><p>The G-code never heats anything, and it switches the nozzle heater off right after homing. Any heat you still see is left over from a print and cools down by itself. If your pen holder is printed in PLA, keep it away from the hotend.</p></details>
       <details><summary>Is the G-code safe for my printer?</summary><p>Every setting is range-checked, and every move in the file is checked against the chosen printer's bed (and the P1/X1 filament-cutter corner) before it is saved. If anything is unsafe, the app refuses to save and says why. Only run a file on the printer named at the top of it, and do a dry run first.</p></details>
+      </div>
     </div>
   </section>
 
   <section class="final">
-    <h2>Ready to write?</h2>
-    <p class="muted" style="margin:0 0 22px">It opens in your browser and remembers your settings.</p>
-    <a class="btn primary" href="app.html">Open the app</a>
+    <div class="wrap" data-stagger>
+      <h2>Ready to write?</h2>
+      <svg class="final-ink" id="finalInk" viewBox="0 0 185 44" aria-hidden="true"></svg>
+      <p class="final-sub">It opens in your browser and remembers your settings.</p>
+      <div><a class="btn lg final-btn" href="app.html">Open the app</a></div>
+    </div>
   </section>
 </main>
 <footer>
-  <div class="wrap">
+  <div class="wrap foot">
     <p class="maker">Made by <b>Ricky Kashyap</b> · <a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener" target="_blank">LinkedIn</a> · <a href="https://github.com/priencelucifer" rel="me noopener" target="_blank">GitHub</a> · <a href="https://github.com/priencelucifer/handwrite" target="_blank" rel="noopener">Source code</a></p>
-    Handwriting model and weights from <a href="https://github.com/sjvasquez/handwriting-synthesis">sjvasquez/handwriting-synthesis</a> (trained on IAM-OnDB),
+    <p class="credits">Handwriting model and weights from <a href="https://github.com/sjvasquez/handwriting-synthesis">sjvasquez/handwriting-synthesis</a> (trained on IAM-OnDB),
     inference ported from <a href="https://github.com/tibordp/kurvengefahr">tibordp/kurvengefahr</a>, G-code conventions from
-    <a href="https://github.com/Joep648/BambuPlot">BambuPlot</a>, printer tunes from <a href="https://github.com/bambulab/BambuStudio">Bambu Studio</a>.
+    <a href="https://github.com/Joep648/BambuPlot">BambuPlot</a>, printer tunes from <a href="https://github.com/bambulab/BambuStudio">Bambu Studio</a>.</p>
   </div>
 </footer>
 
@@ -626,6 +1223,7 @@ const STROKES = /*STROKES*/{"hero":{"w":320,"h":144,"paths":["M10.8 7.6L10.9 8.2
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const NS = "http://www.w3.org/2000/svg";
 const el = (name, attrs, parent) => { const e = document.createElementNS(NS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.append(e); return e; };
+const $ = id => document.getElementById(id);
 /** Paths of one written block into svg (an <svg> sets its viewBox; a <g> is scaled to width w). */
 function ink(target, block, cls = "ink", w) {
   if (target.tagName === "svg") target.setAttribute("viewBox", `0 0 ${block.w + 8} ${block.h}`);
@@ -633,80 +1231,382 @@ function ink(target, block, cls = "ink", w) {
   return block.paths.map(d => el("path", { d, class: cls }, g));
 }
 
-if (STROKES) {
-  // hero: the pen writes stroke by stroke at a steady speed, lifts between strokes, then starts over
-  const svg = document.getElementById("heroInk"), paths = ink(svg, STROKES.hero);
-  const pen = el("g", {}, svg);
-  el("path", { d: "M0 0 L6 -16 L13 -13 L3 2 Z", fill: "#3b5bdb" }, pen);
-  el("path", { d: "M6 -16 L11 -30 L18 -27 L13 -13 Z", fill: "#22325e" }, pen);
-  el("circle", { r: 1.6, fill: "#1c2230" }, pen);
-  const lens = paths.map(p => p.getTotalLength()), SPEED = 230, LIFT = 0.09;
-  let start = 0;
-  const plan = lens.map(l => { const s = { at: start, dur: l / SPEED }; start += s.dur + LIFT; return s; }), total = start;
-  paths.forEach((p, i) => { p.style.strokeDasharray = `${lens[i]} ${lens[i]}`; p.style.strokeDashoffset = reduce ? 0 : lens[i]; });
-  if (reduce) pen.style.display = "none";
-  else {
-    let t = 0, last = null, visible = true;
-    new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(svg);
-    const frame = now => {
-      requestAnimationFrame(frame);
-      if (!visible) { last = null; return; }
-      if (last !== null) t += (now - last) / 1000;
-      last = now;
-      if (t > total + 3) t = 0; // hold the finished page for 3 s, then write it again
-      let at = null;
-      plan.forEach((s, i) => {
-        const done = Math.min(1, Math.max(0, (t - s.at) / s.dur));
-        paths[i].style.strokeDashoffset = lens[i] * (1 - done);
-        if (t >= s.at && t < s.at + s.dur) at = paths[i].getPointAtLength(lens[i] * done);
-        else if (t >= s.at + s.dur && t < s.at + s.dur + LIFT && paths[i + 1]) { // pen up, moving to the next stroke
-          const a = paths[i].getPointAtLength(lens[i]), b = paths[i + 1].getPointAtLength(0), k = (t - s.at - s.dur) / LIFT;
-          at = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k - 4 * Math.sin(Math.PI * k) };
-        }
-      });
-      if (!at) { const p = paths[paths.length - 1]; at = p.getPointAtLength(lens[lens.length - 1]); at = { x: at.x + 6, y: at.y - 6 }; }
-      pen.setAttribute("transform", `translate(${at.x} ${at.y})`);
-    };
-    requestAnimationFrame(frame);
-  }
-  for (const s of STROKES.styles) {
-    const box = document.createElement("div"); box.className = "sample";
-    const sv = el("svg", { "aria-hidden": "true" }, box); ink(sv, s);
-    const label = document.createElement("span"); label.textContent = s.label; box.append(label);
-    document.getElementById("styleSamples").append(box);
-  }
-  for (const s of STROKES.neat) {
-    const row = document.createElement("div"), lab = document.createElement("span"); lab.textContent = s.label;
-    const sv = el("svg", { "aria-hidden": "true" }); ink(sv, s); row.append(lab, sv);
-    document.getElementById("neatSamples").append(row);
-  }
-  // a few lines on the paper diagram, and a word in the printing inset that draws stroke by stroke
-  const page = document.getElementById("paperInk");
-  const k = 165 / (STROKES.hero.w + 8), first = ink(el("g", { transform: "translate(96 80)" }, page), STROKES.hero, "ink", 165)[0].getPointAtLength(0);
-  document.getElementById("firstLetter").setAttribute("cx", 96 + first.x * k);
-  document.getElementById("firstLetter").setAttribute("cy", 80 + first.y * k);
-  const marks = document.getElementById("marksDemo"), word = STROKES.neat[2], km = 150 / (word.w + 8);
-  ink(el("g", { transform: "translate(35 10)" }, marks), word, "ink", 150);
-  el("path", { d: `M33 ${14 + word.h * km} q40 2 76 0 t78 -1`, class: "ink" }, marks); // the hand-drawn underline
-  const red = ink(el("g", { transform: `translate(35 ${24 + word.h * km})` }, marks), word, "ink", 150);
-  red.forEach(p => { p.style.stroke = "#c0392b"; });
-  const inset = ink(document.getElementById("insetInk"), STROKES.neat[2], "ink draw", 124);
-  inset.forEach((p, i) => { p.setAttribute("pathLength", "1"); p.style.transitionDelay = `${0.3 + i * 0.12}s`; });
+/** rAF loop: step(dt s) runs only while el is on screen and the tab is visible; pause(true) holds it. */
+function loop(el, step) {
+  let seen = false, raf = 0, last = 0, paused = false;
+  const run = now => { raf = requestAnimationFrame(run); step(last ? Math.min(.05, (now - last) / 1000) : 0); last = now; };
+  const sync = () => { const go = seen && !paused && !document.hidden;
+    if (go && !raf) { last = 0; raf = requestAnimationFrame(run); } else if (!go && raf) { cancelAnimationFrame(raf); raf = 0; } };
+  new IntersectionObserver(([e]) => { seen = e.isIntersecting; sync(); }).observe(el);
+  document.addEventListener("visibilitychange", sync);
+  return { pause(p) { paused = p; sync(); } };
+}
+/** Draws paths one after another at `speed` units/s (constant, like a plotter); optional nib follows. Re-calling restarts. */
+function writeOnce(paths, speed, nib, delay = 0, done) {
+  const lens = paths.map(p => p.getTotalLength()), run = paths.run = (paths.run || 0) + 1;
+  paths.forEach((p, i) => blank(p, lens[i], reduce));
+  if (reduce) { if (done) done(); return; }
+  let i = 0, d = 0, last = 0;
+  const f = now => { if (paths.run !== run) return;
+    d += last ? (now - last) / 1000 * speed : 0; last = now;
+    while (i < paths.length && d >= lens[i]) { paths[i].style.strokeDashoffset = 0; d -= lens[i++]; }
+    if (i >= paths.length) { if (nib) nib.style.opacity = 0; if (done) done(); return; }
+    paths[i].style.strokeDashoffset = lens[i] - d;
+    if (nib) { const pt = paths[i].getPointAtLength(d); nib.setAttribute("transform", `translate(${pt.x} ${pt.y})`); nib.style.opacity = 1; }
+    requestAnimationFrame(f); };
+  setTimeout(() => requestAnimationFrame(f), delay);
+}
+/** Dash a path of length l so it is hidden (or fully drawn). The gap is longer than the path and the hidden
+ *  offset puts the whole path inside it, so round caps leave no dot at the start. */
+function blank(p, l, drawn) { p.style.strokeDasharray = `${l} ${l + 2}`; p.style.strokeDashoffset = drawn ? 0 : l + 1; }
+/** Blanks paths (and cancels a running writeOnce on them) so they can be written in later. */
+function hide(paths) {
+  paths.run = (paths.run || 0) + 1;
+  paths.forEach(p => blank(p, p.getTotalLength()));
+}
+/** Calls fn once, the first time el is at least `threshold` on screen. */
+function onSeen(el, fn, threshold = 0.4) {
+  if (!el) return;
+  const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { io.disconnect(); fn(); } }, { threshold });
+  io.observe(el);
+}
+/** Handwriting that writes itself in when scrolled to: blank until it is half visible, then written. */
+function writeOnView(el, groups, go) {
+  if (reduce || !el) return;
+  groups.forEach(hide);
+  onSeen(el, go, 0.5);
+}
+const hoverFine = matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+// infinite CSS animations (ping, pulse, bob) pause offscreen
+document.querySelectorAll("[data-anim]").forEach(n => new IntersectionObserver(([e]) => n.classList.toggle("off", !e.isIntersecting)).observe(n));
+
+// reveal on scroll; the hidden state only exists once this has run, so content is visible without JS
+if (!reduce && "IntersectionObserver" in window) {
+  document.querySelectorAll("[data-stagger]").forEach(g => [...g.children].forEach((c, i) => { c.classList.add("rv"); c.style.setProperty("--i", Math.min(i, 5)); }));
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }),
+    { rootMargin: "0px 0px -10% 0px", threshold: 0.12 });
+  for (const r of document.querySelectorAll(".rv")) r.getBoundingClientRect().top < innerHeight ? r.classList.add("in", "now") : io.observe(r);
+  document.documentElement.classList.add("rv-on");
 }
 
-// steppers: click a stage, or let them play through while on screen
+// header: current section in the nav, scroll progress
+(() => {
+  const nav = document.querySelector(".guide-nav"), bar = document.querySelector(".progress");
+  if (nav) {
+    const links = new Map([...nav.querySelectorAll("a")].map(a => [a.hash.slice(1), a]));
+    let current;
+    const mark = id => {
+      if (id === current) return;
+      current = id;
+      links.forEach((a, k) => k === id ? a.setAttribute("aria-current", "location") : a.removeAttribute("aria-current"));
+      const a = links.get(id);
+      if (a && nav.scrollWidth > nav.clientWidth) { // chip rail: bring the active chip into view without scrolling the page
+        const pad = nav.firstElementChild.offsetLeft, l = a.offsetLeft, r = l + a.offsetWidth; // pad: the rail's side padding, which the fade mask covers
+        if (l - pad < nav.scrollLeft || r + pad > nav.scrollLeft + nav.clientWidth) nav.scrollTo({ left: l - pad, behavior: reduce ? "auto" : "smooth" });
+      }
+    };
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) mark(e.target.id || null); }), { rootMargin: "-40% 0px -55% 0px" });
+    document.querySelectorAll("section.block[id]").forEach(s => io.observe(s));
+    const hero = document.querySelector(".hero"); if (hero) io.observe(hero);
+  }
+  if (bar) {
+    let max = 1, queued = false;
+    const paint = () => { queued = false; bar.style.transform = `scaleX(${Math.min(1, Math.max(0, scrollY / max))})`; };
+    const measure = () => { max = Math.max(1, document.documentElement.scrollHeight - innerHeight); paint(); };
+    addEventListener("scroll", () => { if (!queued) { queued = true; requestAnimationFrame(paint); } }, { passive: true });
+    addEventListener("resize", measure);
+    const main = document.querySelector("main"); if (main && "ResizeObserver" in window) new ResizeObserver(measure).observe(main);
+    measure();
+  }
+})();
+
+// hero: a Bambu Lab A1 seen from above writes the note. Bed slides front/back, head crosses left/right,
+// the pen sits 25 mm in front of the nozzle (the Plotter default offset X 1, Y -25), G-code as gcode.js writes it.
+(() => {
+  const svg = $("machine"), inkG = $("heroInk"), fig = svg && svg.closest(".machine"), btn = $("heroToggle");
+  if (!svg || !inkG || !fig || !STROKES || !STROKES.hero) return;
+  const S = 2.4, X0 = 320 - 128 * S, GY = 170, OFF = { x: 1, y: -25 }, PX = { x: 23, y: 60, w: 210, h: 148 }; // px/mm, nozzle screen line, A5 landscape
+  const K = 170 / (STROKES.hero.w + 8), IX = PX.x + 20, IY = PX.y + PX.h - 14; // mm per STROKES unit, ink origin on the bed
+  // bed (mm, y toward the back): plate, grid, edge, taped sheet, ink
+  const bed = el("g", {}, svg), bedIn = el("g", { transform: `scale(${S} ${-S})` }, bed);
+  el("rect", { x: 0, y: 0, width: 256, height: 256, rx: 3, fill: "var(--plate)" }, bedIn);
+  let minor = "", major = "";
+  for (let v = 10; v < 256; v += 10) { const d = `M${v} 0V256M0 ${v}H256`; if (v % 50) minor += d; else major += d; }
+  el("path", { d: minor, stroke: "var(--plate-grid)", "stroke-width": .4 }, bedIn);
+  el("path", { d: major, stroke: "var(--plate-grid-major)", "stroke-width": .5 }, bedIn);
+  el("rect", { x: 1, y: 1, width: 254, height: 254, rx: 3, fill: "none", stroke: "var(--edge)", "stroke-width": .8, "stroke-dasharray": "3 2" }, bedIn);
+  el("rect", { x: PX.x + .6, y: PX.y - 1.2, width: PX.w, height: PX.h, fill: "rgba(0,0,0,.35)" }, bedIn);
+  el("rect", { x: PX.x, y: PX.y, width: PX.w, height: PX.h, fill: "var(--sheet)" }, bedIn);
+  for (const [x, y, r] of [[PX.x, PX.y + PX.h, -35], [PX.x + PX.w, PX.y + PX.h, 35], [PX.x, PX.y, 35], [PX.x + PX.w, PX.y, -35]])
+    el("rect", { x: x - 6, y: y - 2, width: 12, height: 4, fill: "var(--tape)", opacity: .9, transform: `rotate(${r} ${x} ${y})` }, bedIn);
+  bedIn.append(inkG);
+  inkG.setAttribute("transform", `translate(${IX} ${IY}) scale(${K} ${-K})`);
+  const strokes = STROKES.hero.paths.map(d => d.slice(1).split("L").map(p => p.trim().split(/\s+/).map(Number)));
+  const paths = STROKES.hero.paths.map(d => el("path", { d }, inkG));
+  const L = strokes.map(s => { let l = 0; for (let j = 1; j < s.length; j++) l += Math.hypot(s[j][0] - s[j - 1][0], s[j][1] - s[j - 1][1]); return l; });
+  const blankAll = () => paths.forEach((p, i) => blank(p, L[i] + 1));
+  // gantry, drawn over the bed: X beam, head (front cover off), holder clip, pen ring
+  const gan = el("g", {}, svg);
+  el("rect", { x: -10, y: GY - 78, width: 660, height: 26, class: "xr" }, gan);
+  el("path", { d: `M-10 ${GY - 65}H650`, stroke: "var(--m-line)", "stroke-width": .75, "stroke-dasharray": "2 4" }, gan);
+  const head = el("g", {}, gan);
+  el("rect", { x: -60, y: -70, width: 120, height: 112, rx: 14, class: "xr" }, head);
+  el("path", { d: "M-36 -54v80M-18 -54v80M0 -54v80M18 -54v80M36 -54v80", stroke: "var(--m-line)", "stroke-width": .6, opacity: .45 }, head);
+  el("circle", { r: 9, class: "xr" }, head);
+  el("path", { d: "M-15 0H15M0 -15V15", stroke: "var(--m-line)", "stroke-width": .9 }, head);
+  el("rect", { x: -10, y: 40, width: 26, height: 14, rx: 3, class: "xr" }, head);
+  const pen = el("g", { transform: `translate(${OFF.x * S} ${-OFF.y * S})` }, head);
+  const ring = el("circle", { r: 11, fill: "rgba(168,186,244,.14)", stroke: "var(--pen-ring)", "stroke-width": 1.5 }, pen);
+  const tip = el("circle", { r: 2.2, fill: "var(--pen-ring)" }, pen);
+
+  // motion model: the moves gcode.js writes with the default speeds and heights
+  const mm = strokes.map(s => s.map(([u, v]) => [IX + K * u, IY - K * v]));
+  const f2 = v => v.toFixed(2), xy = ([x, y]) => `X${f2(x - OFF.x)} Y${f2(y - OFF.y)}`, frac = n => (Math.imul(n, 0x9e3779b1) >>> 0) / 4294967296;
+  const Z = { draw: 10, lift: 12 }, SETTLE = .06, SPEED = 6;
+  const lines = ["G90", "G21", "G28", "M104 S0", "G1 Z25.00 F600", `G0 ${xy(mm[0][0])} F6000`,
+    "; place the paper: the first letter goes right under the pen holder", "G4 S30", "G1 Z10.00 F600",
+    "; attach the pen: slide it down until it touches the paper, then clamp it", "G4 S30", "G1 Z12.00 F600", "; PASS 1 of 1: paper slid 0 mm toward the back"];
+  const PREAMBLE = lines.length, segs = [];
+  let t = 0, at = mm[0][0];
+  const add = (line, to, z0, z1, dur, ink) => { lines.push(line); segs.push({ t0: t, t1: t += dur, a: [...at, z0], b: [...to, z1], line: lines.length - 1, ink }); at = to; };
+  mm.forEach((s, n) => {
+    add(`G0 ${xy(s[0])} F6000`, s[0], Z.lift, Z.lift, Math.hypot(s[0][0] - at[0], s[0][1] - at[1]) / 100);
+    add("G1 Z10.00 F600", s[0], Z.lift, Z.draw, .2); add("G4 P60", s[0], Z.draw, Z.draw, SETTLE);
+    const feed = Math.round(1500 * (.85 + .3 * frac(n + 1)));
+    let done = 0;
+    for (let j = 1; j < s.length; j++) {
+      const l = Math.hypot(s[j][0] - s[j - 1][0], s[j][1] - s[j - 1][1]);
+      add(`G1 ${xy(s[j])}` + (j === 1 ? ` F${feed}` : ""), s[j], Z.draw, Z.draw, l / (feed / 60), { i: n, l0: done / K, l1: (done += l) / K });
+    }
+    add("G1 Z12.00 F600", at, Z.draw, Z.lift, .2); add("G4 P60", at, Z.lift, Z.lift, SETTLE);
+  });
+  add("G1 Z22.00 F600", at, Z.lift, 22, 1);
+  const T = t; // ~80 printer seconds
+
+  const code = $("heroCode"), rows = code ? [...Array(6)].map(() => code.appendChild(document.createElement("li"))) : [];
+  let shown = null;
+  const tape = i => { if (i === shown) return; shown = i; rows.forEach((r, k) => { const s = lines[i - rows.length + 1 + k] || ""; r.textContent = s; r.className = s[0] === ";" ? "c" : ""; }); };
+  const set = (e, v) => { if (e && e.textContent !== v) e.textContent = v; };
+  const dX = $("droX"), dY = $("droY"), dZ = $("droZ"), dPen = $("penState");
+  let wasDown = null;
+  function pose(x, y, z) { // x, y = pen point on the bed (mm)
+    const nx = x - OFF.x, ny = y - OFF.y, up = Math.min(1, Math.max(0, (z - Z.draw) / 2)), down = z <= Z.draw + .01;
+    bed.setAttribute("transform", `translate(${X0} ${GY + S * ny})`);
+    head.setAttribute("transform", `translate(${X0 + S * nx} ${GY})`);
+    ring.setAttribute("transform", `scale(${1 + .12 * up + .01 * Math.max(0, z - 12)})`); tip.setAttribute("opacity", 1 - up * .7);
+    set(dX, f2(nx)); set(dY, f2(ny)); set(dZ, f2(z));
+    if (dPen && down !== wasDown) { wasDown = down; dPen.textContent = down ? "pen down" : "pen up"; dPen.classList.toggle("down", down); }
+  }
+  let ptr = 0;
+  function at_(sim) {
+    while (ptr < segs.length - 1 && segs[ptr].t1 <= sim) { const s = segs[ptr++]; if (s.ink) paths[s.ink.i].style.strokeDashoffset = L[s.ink.i] + 1 - s.ink.l1; }
+    const s = segs[ptr], a = Math.min(1, Math.max(0, (sim - s.t0) / ((s.t1 - s.t0) || 1))), p = s.a.map((v, k) => v + (s.b[k] - v) * a);
+    if (s.ink) paths[s.ink.i].style.strokeDashoffset = L[s.ink.i] + 1 - (s.ink.l0 + (s.ink.l1 - s.ink.l0) * a);
+    pose(p[0], p[1], p[2]); tape(s.line);
+  }
+  const start = segs[0].a;
+  blankAll();
+  if (reduce) { // hold frame: the whole note, machine back at the start pose with the pen up
+    at_(T); paths.forEach(p => { p.style.strokeDashoffset = 0; }); pose(start[0], start[1], Z.lift);
+    return;
+  }
+  pose(start[0], start[1], Z.lift); tape(-1);
+  // phases (real s): type the preamble (first loop) -> write T/SPEED -> glide back 1.2 -> hold 3.5 -> ink fades .5 -> again
+  const LINE = .08, GLIDE = 1.2, HOLD = 3.5, FADE = .5, end = segs[segs.length - 1].b;
+  const ease = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+  let real = 0, pre = PREAMBLE * LINE + .3;
+  const step = dt => {
+    real += dt;
+    if (real < pre) { tape(Math.min(PREAMBLE - 1, Math.floor(real / LINE))); return; }
+    const r = real - pre, w = T / SPEED;
+    if (r < w) at_(r * SPEED);
+    else if (r < w + GLIDE) { at_(T); const e = ease((r - w) / GLIDE); pose(end[0] + (start[0] - end[0]) * e, end[1] + (start[1] - end[1]) * e, end[2] + (Z.lift - end[2]) * e); }
+    else if (r < w + GLIDE + HOLD) { /* hold: the whole note is legible */ }
+    else if (r < w + GLIDE + HOLD + FADE) inkG.style.opacity = 1 - (r - w - GLIDE - HOLD) / FADE;
+    else { real = 0; pre = 0; ptr = 0; blankAll(); inkG.style.opacity = 1; }
+  };
+  let lp = null, paused = false;
+  if (btn) {
+    btn.hidden = false;
+    btn.addEventListener("click", () => {
+      paused = !paused;
+      btn.toggleAttribute("data-paused", paused);
+      btn.setAttribute("aria-label", paused ? "Play animation" : "Pause animation");
+      if (lp) lp.pause(paused);
+    });
+  }
+  setTimeout(() => { lp = loop(fig, step); if (paused) lp.pause(true); }, 700);
+})();
+
+// 01: four step vignettes, played one after another while the cards are on screen
+(() => {
+  const text = document.querySelector(".v1-text"), caret = document.querySelector(".v1-caret");
+  if (text && caret) { const w = text.getComputedTextLength(); caret.setAttribute("x", 30 + w + 2); caret.style.setProperty("--w", w + "px"); }
+  const v2 = document.querySelector(".v2"), ringEl = v2 && v2.querySelector(".v2-ring");
+  if (v2 && STROKES) STROKES.styles.slice(0, 3).forEach((s, i) => {
+    const g = el("g", { transform: `translate(${18 + i * 74} 38)`, class: i === 1 ? "v2-pick" : "" });
+    v2.insertBefore(g, ringEl);
+    const ps = ink(g, s, "ink", 56);
+    if (i === 1) ps.forEach((p, j) => { p.setAttribute("pathLength", "1"); p.style.setProperty("--j", j); });
+  });
+  const grid = document.querySelector(".steps4"), cards = grid ? [...grid.querySelectorAll(".step")] : [];
+  if (reduce || !cards.length) return;
+  let cur = 0, timer = 0, seen = false;
+  const play = i => {
+    cur = i;
+    cards.forEach((c, k) => { c.classList.toggle("active", k === i); c.classList.remove("play"); });
+    requestAnimationFrame(() => requestAnimationFrame(() => cards[i].classList.add("play"))); // restart its CSS without a forced reflow
+  };
+  if (matchMedia("(max-width: 599px)").matches) {
+    // one column: only one card is on screen, so play the card crossing the middle of the viewport
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) play(cards.indexOf(e.target)); }), { rootMargin: "-35% 0px -35% 0px" });
+    cards.forEach(c => io.observe(c));
+    return;
+  }
+  const chain = wait => { clearTimeout(timer); timer = setTimeout(() => { if (!seen) return; play((cur + 1) % cards.length); chain(3200); }, wait); };
+  new IntersectionObserver(([e]) => {
+    seen = e.isIntersecting;
+    if (seen) { play(cur); chain(3200); } else { clearTimeout(timer); cards[cur].classList.remove("play"); }
+  }, { threshold: 0.35 }).observe(grid);
+  cards.forEach((c, i) => c.addEventListener("pointerenter", e => { if (e.pointerType !== "mouse" || !seen) return; if (i !== cur) play(i); chain(6000); }));
+})();
+
+if (STROKES) {
+  // style samples: buttons that write themselves again
+  const box = $("styleSamples");
+  if (box) {
+    const writers = STROKES.styles.map(s => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "sample"; b.setAttribute("aria-label", `Write ${s.label} again`);
+      const sv = el("svg", { "aria-hidden": "true", focusable: "false" }, b), paths = ink(sv, s);
+      const nib = el("g", { class: "nib" }, sv), glyph = el("g", { transform: "scale(.6)" }, nib); // the pen, tip at its origin
+      el("path", { d: "M0 0 L6 -16 L13 -13 L3 2 Z", class: "nib-body" }, glyph);
+      el("path", { d: "M6 -16 L11 -30 L18 -27 L13 -13 Z", class: "nib-cap" }, glyph);
+      el("circle", { r: 1.6, class: "nib-tip" }, glyph);
+      const label = document.createElement("span"); label.textContent = s.label; b.append(label);
+      box.append(b);
+      const write = (delay = 0) => {
+        if (reduce) { b.classList.add("writing"); setTimeout(() => b.classList.remove("writing"), 200); return; }
+        setTimeout(() => b.classList.add("writing"), delay);
+        writeOnce(paths, 400, nib, delay, () => b.classList.remove("writing"));
+      };
+      b.addEventListener("click", () => write());
+      if (hoverFine) b.addEventListener("pointerenter", () => write());
+      return { paths, write };
+    });
+    writeOnView(box, writers.map(w => w.paths), () => writers.forEach((w, i) => w.write(200 + i * 350)));
+  }
+  // neatness rows
+  const neatBox = $("neatSamples");
+  if (neatBox) {
+    const rows = STROKES.neat.map(s => {
+      const row = document.createElement("div"), lab = document.createElement("span"); lab.textContent = s.label;
+      const sv = el("svg", { "aria-hidden": "true" }); const paths = ink(sv, s); row.append(lab, sv);
+      neatBox.append(row);
+      return paths;
+    });
+    writeOnView(neatBox, rows, () => rows.forEach((ps, i) => writeOnce(ps, 300, null, 250 + i * 250)));
+  }
+  // a few lines on the paper diagram, drawn in when the card appears; the ring marks the first letter
+  const page = $("paperInk");
+  if (page) {
+    const k = 165 / (STROKES.hero.w + 8), pp = ink(el("g", { transform: "translate(96 80)" }, page), STROKES.hero, "ink", 165), first = pp[0].getPointAtLength(0);
+    const ringFL = $("firstLetter");
+    if (ringFL) { ringFL.setAttribute("cx", 96 + first.x * k); ringFL.setAttribute("cy", 80 + first.y * k); }
+    pp.forEach((p, j) => { p.setAttribute("pathLength", "1"); p.style.setProperty("--j", j); });
+  }
+  // underline and second pen: blue word, hand-drawn underline, then the red word
+  const marks = $("marksDemo");
+  if (marks) {
+    const word = STROKES.neat[2], km = 150 / (word.w + 8);
+    const blue = ink(el("g", { transform: "translate(35 10)" }, marks), word, "ink", 150);
+    const under = [el("path", { d: `M33 ${14 + word.h * km} q40 2 76 0 t78 -1`, class: "ink" }, marks)];
+    const red = ink(el("g", { transform: `translate(35 ${24 + word.h * km})` }, marks), word, "ink ink-red", 150);
+    const play = () => { hide(under); hide(red); writeOnce(blue, 520, null, 0, () => writeOnce(under, 320, null, 0, () => writeOnce(red, 520))); };
+    writeOnView(marks, [blue, under, red], play);
+    const card = $("marksCard");
+    if (card && hoverFine && !reduce) card.addEventListener("pointerenter", play);
+  }
+  // the printing inset: a word that draws stroke by stroke in stage 4
+  const insetG = $("insetInk");
+  if (insetG) {
+    const inset = ink(insetG, STROKES.neat[2], "ink draw", 124);
+    inset.forEach((p, i) => { p.setAttribute("pathLength", "1"); p.style.transitionDelay = `${0.3 + i * 0.12}s`; });
+  }
+  // closing CTA: "Handwriting" in Neat 1
+  const fin = $("finalInk");
+  if (fin) { const fp = ink(fin, STROKES.styles[0]); writeOnView(fin, [fp], () => writeOnce(fp, 400, null, 300)); }
+}
+
+// paper legend: solo one layer of the diagram
+(() => {
+  const fig = document.querySelector(".paper-fig"), btns = [...document.querySelectorAll(".layer")];
+  if (!fig) return;
+  btns.forEach(b => b.addEventListener("click", () => {
+    const on = b.getAttribute("aria-pressed") !== "true";
+    btns.forEach(o => o.setAttribute("aria-pressed", String(o === b && on)));
+    if (on) fig.dataset.solo = b.dataset.layer; else delete fig.dataset.solo;
+  }));
+})();
+
+// calibrate stage 3: the measured numbers count up
+function countUp(root) {
+  root.querySelectorAll(".count").forEach(n => {
+    const to = +n.dataset.to, dec = (n.dataset.to.split(".")[1] || "").length, t0 = performance.now();
+    const f = now => { const k = Math.min(1, (now - t0) / 700); n.textContent = (to * (1 - Math.pow(1 - k, 3))).toFixed(dec); if (k < 1) requestAnimationFrame(f); };
+    requestAnimationFrame(f);
+  });
+}
+
+// steppers: click a stage, or let them play through while on screen.
+// Phones (one column, sticky stage on top): no timer; the stage follows the step scrolling up under it.
+// Reduced motion keeps scroll-follow: swapping the stage is a state change, and CSS already drops its transitions.
+// Landscape phones (≤600 tall) get no sticky stage, so they autoplay like desktop.
+// shortcut: the mode is picked once at load, so rotating a tablet across 860 px keeps the first mode.
+const scrollSteps = matchMedia("(max-width: 860px) and (min-height: 601px)").matches;
 for (const fig of document.querySelectorAll(".stepper")) {
   const svg = fig.querySelector("svg[data-stage]"), buttons = [...fig.querySelectorAll("[data-go]")], ms = +fig.dataset.ms || 5000;
-  let stage = 1, timer = null, auto = !reduce, visible = false;
+  const toggle = fig.querySelector(".stepper-toggle"), stageBox = fig.querySelector(".stage");
+  if (!svg || !buttons.length) continue;
+  let stage = 1, timer = null, auto = !reduce && !scrollSteps, visible = false;
   fig.style.setProperty("--ms", ms + "ms");
   const show = s => {
-    stage = s; svg.dataset.stage = s;
+    stage = s; svg.dataset.stage = s; fig.dataset.stage = s;
     buttons.forEach(b => b.toggleAttribute("aria-current", false));
     const cur = buttons[s - 1]; cur.setAttribute("aria-current", "step");
     const bar = cur.querySelector(".bar i"); bar.style.animation = "none"; void bar.offsetWidth; bar.style.animation = "";
+    if (svg.id === "cal" && s === 3 && !reduce) countUp(svg);
   };
   const tick = () => { clearTimeout(timer); if (auto && visible) timer = setTimeout(() => { show(stage % buttons.length + 1); tick(); }, ms); };
-  buttons.forEach(b => b.addEventListener("click", () => { auto = false; fig.classList.remove("playing"); clearTimeout(timer); show(+b.dataset.go); }));
+  const label = () => { if (!toggle) return; toggle.setAttribute("aria-label", auto ? "Pause animation" : "Play animation"); toggle.toggleAttribute("data-paused", !auto); };
+  const stop = () => { auto = false; fig.classList.remove("playing"); clearTimeout(timer); label(); };
+  buttons.forEach(b => b.addEventListener("click", () => { stop(); show(+b.dataset.go); }));
+  if (scrollSteps && stageBox) {
+    // watch a thin band just below the stuck stage: the step crossing it is the one being read
+    let io = null;
+    const inBand = new Set();
+    const watch = () => {
+      if (io) io.disconnect();
+      inBand.clear();
+      const top = (parseFloat(getComputedStyle(stageBox).top) || 0) + stageBox.offsetHeight + 24, band = 32;
+      io = new IntersectionObserver(es => {
+        es.forEach(e => { const n = buttons.indexOf(e.target.firstElementChild) + 1; if (e.isIntersecting) inBand.add(n); else inBand.delete(n); });
+        const n = Math.min(...inBand);
+        if (n !== Infinity && n !== stage) show(n);
+      }, { rootMargin: `${-top}px 0px ${-Math.max(0, innerHeight - top - band)}px 0px` });
+      buttons.forEach(b => io.observe(b.parentElement));
+    };
+    watch();
+    addEventListener("resize", watch);
+  }
+  if (toggle && !reduce && !scrollSteps) {
+    toggle.hidden = false;
+    toggle.addEventListener("click", () => {
+      if (auto) { stop(); return; }
+      auto = true; label(); fig.classList.toggle("playing", visible); show(stage); tick();
+    });
+  }
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; fig.classList.toggle("playing", auto && visible); tick(); }, { threshold: 0.35 }).observe(fig);
   show(1);
 }
