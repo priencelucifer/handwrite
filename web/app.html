@@ -353,6 +353,28 @@
   @media (prefers-color-scheme: dark) { #error.chip.err { background: var(--danger-soft); color: var(--danger); } }
   @keyframes in8 { from { opacity: 0; transform: translateY(8px); } }
 
+  /* ---------- word editor: over the preview while a word (or its line) is selected ---------- */
+  .wordbar { position: absolute; top: 60px; left: 12px; z-index: 3; width: max-content; max-width: calc(100% - 24px); /* app.js puts it by the selection */
+    display: grid; gap: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+    box-shadow: var(--sh-3); animation: wb-in var(--d3) var(--e-out); }
+  @keyframes wb-in { from { opacity: 0; transform: translateY(-4px); } }
+  .wb-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .wb-head b { min-width: 0; font: 400 17px var(--font-display); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wb-scope { flex: none; margin-left: auto; width: 180px; }
+  .wb-scope button { height: 28px; font-size: 12.5px; }
+  .seg:has(#wbLine[aria-pressed="true"])::before { transform: translateX(100%); }
+  .wb-x { flex: none; height: 30px; min-width: 30px; padding: 0; border-color: transparent; background: transparent; }
+  .wb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .wb-group { display: inline-flex; align-items: center; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); }
+  .wb-group .btn { height: 32px; min-width: 32px; padding: 0 9px; border: 0; background: transparent; color: var(--text); font-size: 15px; }
+  .wb-group .btn:hover { background: var(--surface); }
+  .wb-group output { min-width: 50px; text-align: center; font: 600 12.5px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
+  .wordbar select { width: auto; max-width: 190px; height: 36px; font-size: 13px; }
+  .wb-tip { margin: 0; font-size: 12px; color: var(--text-3); }
+  .wordbar.fixed-word .wb-edit { display: none; } /* header words are written afresh per sheet: only "write again" */
+  @media (pointer: coarse) { .wb-group .btn { min-width: 40px; height: 40px; } .wb-scope button { height: 36px; } }
+  .linkish { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
   /* ---------- dialogs ---------- */
   dialog { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 0; width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
     overflow: hidden; background: var(--surface); color: var(--text); box-shadow: var(--sh-3); }
@@ -454,6 +476,7 @@
         <p class="hint" id="capacity" role="status"></p>
         <p class="hint warn" id="skipped" hidden></p>
         <p class="hint">Marks: <code>_underline these words_</code> · <code>*second pen*</code> (the printer pauses to swap pens).</p>
+        <p class="hint" id="editsNote" hidden><span id="editsCount"></span> <button type="button" class="linkish" id="resetEdits">Reset all</button></p>
       </section>
       <section class="card">
         <h2>Handwriting</h2>
@@ -521,8 +544,27 @@
       <button class="btn small" id="zoomIn" type="button" aria-label="Zoom in">+</button>
       <button class="btn small" id="zoomFit" type="button">Fit</button>
     </div>
+    <div class="wordbar" id="wordBar" role="toolbar" aria-label="Change the selected word" hidden>
+      <div class="wb-head">
+        <b id="wbLabel"></b>
+        <div class="seg wb-scope wb-edit" role="group" aria-label="Change"><button type="button" id="wbWord" aria-pressed="true">Word</button><button type="button" id="wbLine" aria-pressed="false">Whole line</button></div>
+        <button class="btn small wb-x" id="wbClose" type="button" aria-label="Done (Esc)" title="Done (Esc)">✕</button>
+      </div>
+      <div class="wb-row">
+        <div class="wb-group wb-edit" role="group" aria-label="Move">
+          <button class="btn" id="wbLeft" type="button" aria-label="Move left" title="Move left (←)">←</button><button class="btn" id="wbUp" type="button" aria-label="Move up" title="Move up (↑)">↑</button><button class="btn" id="wbDown" type="button" aria-label="Move down" title="Move down (↓)">↓</button><button class="btn" id="wbRight" type="button" aria-label="Move right" title="Move right (→)">→</button>
+        </div>
+        <div class="wb-group wb-edit" role="group" aria-label="Size">
+          <button class="btn" id="wbSmaller" type="button" aria-label="Smaller" title="Smaller (−)">A−</button><output id="wbSize">100%</output><button class="btn" id="wbBigger" type="button" aria-label="Bigger" title="Bigger (+)">A+</button>
+        </div>
+        <select id="wbStyle" class="wb-edit" aria-label="Handwriting for the selection"></select>
+        <button class="btn small" id="wbAgain" type="button">↻ Write again</button>
+        <button class="btn small ghost wb-edit" id="wbReset" type="button">Reset</button>
+      </div>
+      <p class="wb-tip wb-edit">Drag it, or use the arrow keys: 0.5 mm a press, 5 mm with Shift.</p>
+    </div>
     <div class="info">
-      <div class="chip legend"><span><i class="k-edge"></i>plate edge</span><span><i class="k-area"></i>writing area</span><span><i class="k-slide"></i>paper slide</span><span class="tip">click a word: write it again</span></div>
+      <div class="chip legend"><span><i class="k-edge"></i>plate edge</span><span><i class="k-area"></i>writing area</span><span><i class="k-slide"></i>paper slide</span><span class="tip">click a word to move, resize or restyle it</span></div>
       <div class="chip" id="summary" hidden></div>
       <div class="chip err" id="error" hidden></div>
     </div>

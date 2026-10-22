@@ -21,10 +21,12 @@ function fakeInk(rng) {
 const mulberry = seed => { let a = seed | 0; const random = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   return { random, normal: () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random()) }; };
 
-function run(settings, text, seed) {
+function run(settings, text, seed, edit) {
   const cfg = G.resolve(settings);
   const rng = mulberry(seed);
-  const lines = G.layout(G.words(text, seed), fakeInk(rng), cfg, rng);
+  const paras = G.words(text, seed);
+  if (edit) edit(paras.flat(), rng); // word changes made in the preview: size, move
+  const lines = G.layout(paras, fakeInk(rng), cfg, rng);
   const passes = G.planPasses(lines, cfg);
   return { cfg, gcode: G.toGcode(passes, cfg, G.describe(cfg, seed)), passes };
 }
@@ -136,7 +138,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
   const rng = mulberry(12345), pick = a => a[Math.floor(rng.random() * a.length)], U = (a, b) => a + rng.random() * (b - a);
   const models = Object.keys(G.PRINTERS), papers = Object.keys(G.PAPERS);
   const vocab = "the quick brown fox jumps over a lazy dog and writes letters home to friends each day HELLO, NASA OK I _the fox_ *dog day* _*both*_".split(" ");
-  const tally = { ok: 0, refused: 0 };
+  const tally = { ok: 0, refused: 0, edited: 0 };
   for (let c = 0; c < 4000; c++) {
     const s = structuredClone(G.DEFAULT_SETTINGS);
     s.printer.model = pick(models);
@@ -152,8 +154,13 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
     const text = Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () =>
       Array.from({ length: Math.floor(rng.random() * 25) }, () => pick(vocab)).join(" ")).join("\n");
+    // words edited in the preview: some bigger or smaller, some moved anywhere (on or off the page)
+    const edit = rng.random() < 0.4 ? (ws, r) => { for (const w of ws) if (r.random() < 0.3) {
+      if (r.random() < 0.5) w.size = 0.3 + r.random() * 3.7;
+      if (r.random() < 0.5) { w.dx = (r.random() - 0.5) * 60; w.dy = (r.random() - 0.5) * 60; }
+    } } : null;
     let out;
-    try { out = run(s, text, c); } catch (e) {
+    try { out = run(s, text, c, edit); } catch (e) {
       if (!(e instanceof G.WriteError)) throw new Error(`case ${c} crashed: ${e.stack}\n${JSON.stringify(s)}`);
       tally.refused++;
       continue;
@@ -162,10 +169,11 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     try { simulate(out.gcode, { ...s, printer: cfg.printer, paper: cfg.paper }); }
     catch (e) { throw new Error(`case ${c} UNSAFE: ${e.message}\n${JSON.stringify(s)}\n${JSON.stringify(text)}`); }
     tally.ok++;
+    if (edit) tally.edited++;
   }
   test.diagnostic?.(`fuzz: ${tally.ok} files simulated safely, ${tally.refused} setups refused`);
-  console.log(`fuzz: ${tally.ok} files simulated safely, ${tally.refused} setups refused`);
-  assert.ok(tally.ok > 500, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
+  console.log(`fuzz: ${tally.ok} files simulated safely (${tally.edited} with edited words), ${tally.refused} setups refused`);
+  assert.ok(tally.ok > 500 && tally.edited > 100, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
 });
 
 test("page capacity estimate: plausible, grows with paper, counts paragraph lines", () => {
@@ -475,6 +483,60 @@ test("_underline_ and *second pen* marks: parsed per word, underlined under the 
   let n = 20;
   while (run(a4, Array(n).fill("line of red words").join("\n"), 4).passes.length < 2) n++; // marks don't change the layout
   assert.throws(() => run(a4, Array(n).fill("line of *red* words").join("\n"), 4), /second pen/);
+});
+
+test("editing words: a moved word lands exactly that far away and nothing else moves; size scales a word or a line", () => {
+  const cfg = G.resolve(G.DEFAULT_SETTINGS), ink = ({ word }) => [[[0, 0], [0.6 * word.length, 1]], [[0.1, -0.5], [0.3, 1.6]]];
+  const text = "Name Ricky Kashyap\nBranch CSE and _some more words_ to fill a line or two of the page";
+  const lay = (edit = () => {}) => { const paras = G.words(text, 3); edit(paras.flat()); return G.layout(paras, ink, cfg, mulberry(5)); };
+  const find = (ls, key) => { for (const l of ls) for (const w of l.words) if (w.key === key) return { l, w }; };
+  const base = lay();
+  assert.deepEqual(G.words("a b a", 1)[0].map(w => w.key), ["a|1", "b|1", "a|2"], "keys: the word and which time it appears");
+  assert.notStrictEqual(G.words("a", 1)[0][0].seed, G.words("a", 2)[0][0].seed);
+  assert.strictEqual(G.words("a", 1)[0][0].key, G.words("a", 2)[0][0].key, "a key survives New version");
+  assert.ok(G.headerWords("Name", true, 1, 0).flat().every(w => w.key.startsWith("header0:")), "header words never share a key with the text");
+
+  for (const [key, dx, dy] of [["CSE|1", 12, -3.5], ["more|1", -20, 9], ["Name|1", 30, 40]]) {
+    const moved = lay(ws => { const w = ws.find(w => w.key === key); w.dx = dx; w.dy = dy; });
+    assert.strictEqual(moved.length, base.length);
+    const { w: bw } = find(base, key), { l: ml, w: mw } = find(moved, key);
+    base.forEach((l, i) => {
+      if (moved[i] !== ml) return assert.strictEqual(JSON.stringify(moved[i]), JSON.stringify(l), `${key}: other lines stay put`);
+      l.words.forEach((a, wi) => { // its line: every word's strokes the same, the moved one shifted by exactly dx, dy
+        const b = moved[i].words[wi], [ox, oy] = b.key === key ? [dx, dy] : [0, 0];
+        assert.strictEqual(b.key, a.key);
+        for (let j = 0; j < a.s1 - a.s0; j++) l[a.s0 + j].forEach(([x, y], q) => {
+          const [mx, my] = moved[i][b.s0 + j][q];
+          assert.ok(Math.abs(mx - x - ox) < 1e-9 && Math.abs(my - y - oy) < 1e-9, `${key} moved by exactly ${dx}, ${dy}; ${a.key} stays`);
+        });
+      });
+    });
+    assert.ok(Math.abs(mw.box[0] - bw.box[0] - dx) < 1e-9 && Math.abs(mw.box[1] - bw.box[1] - dy) < 1e-9, "its box moves with it");
+  }
+  // an underlined word takes its underline along; the rest of the run keeps its own
+  const ul = lay(ws => { const w = ws.find(w => w.key === "more|1"); w.dx = -20; w.dy = 9; });
+  assert.strictEqual(ul.flat().filter(s => s.moved).length, 2 + 1, "the word's 2 strokes and its own underline");
+
+  // size: the word is exactly that much wider; a whole line at half size fits more words on it
+  const big = lay(ws => { ws.find(w => w.key === "Branch|1").size = 2; });
+  const width = (ls, key) => { const { w } = find(ls, key); return w.box[2] - w.box[0]; };
+  assert.ok(Math.abs(width(big, "Branch|1") / width(base, "Branch|1") - 2) < 1e-9);
+  const small = lay(ws => ws.filter(w => !/^(Name|Ricky|Kashyap)\|/.test(w.key)).forEach(w => { w.size = 0.5; }));
+  assert.ok(small.length < base.length, "smaller words: fewer lines");
+  assert.ok(Math.abs(width(small, "CSE|1") / width(base, "CSE|1") - 0.5) < 1e-9);
+  // a big word in the middle of the page pushes the next lines down instead of writing into them
+  const tall = lay(ws => { ws.find(w => w.key === "Ricky|1").size = 3; });
+  const gapBelow = ls => ls[1].baseline - ls[0].baseline;
+  assert.ok(gapBelow(tall) > gapBelow(base), "room for the big word");
+  const lows = G.extent(tall[0])[3], tops = G.extent(tall[1])[1];
+  assert.ok(tops > lows - 1e-9 || G.extent([tall[1][0]])[1] > lows - 3, "the line under it keeps clear");
+
+  // refused: off the paper, beyond the pen's reach, nonsense from storage
+  for (const e of [{ dx: -100 }, { dy: -60 }, { dx: 500 }, { dy: 1e9 }, { dx: NaN }, { dy: "5" }, { size: 5 }, { size: 0.1 }, { size: "2" }, { size: NaN }])
+    assert.throws(() => lay(ws => Object.assign(ws[0], e)), G.WriteError, JSON.stringify(e));
+  // and a page with edits still makes a file the simulator accepts
+  const out = run(G.DEFAULT_SETTINGS, text, 3, ws => { ws[1].size = 2.5; ws[4].dx = 15; ws[4].dy = 20; ws[6].size = 0.4; });
+  simulate(out.gcode, out.cfg);
 });
 
 test("header and page numbers: the first line of every sheet, header from the left, page number ending at the right", () => {

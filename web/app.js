@@ -3,7 +3,7 @@
 (() => {
   "use strict";
   const E = HWEngine, G = HWGcode, $ = id => document.getElementById(id);
-  const STORE = { settings: "hw.settings", text: "hw.text", seed: "hw.seed" };
+  const STORE = { settings: "hw.settings", text: "hw.text", seed: "hw.seed", edits: "hw.edits" };
   const load = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
   const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage off: settings last this session */ } };
 
@@ -33,6 +33,7 @@
     dryRun: false,      // this session only: save files that write 8 mm above the paper
     startLine: 1,       // save the page from this line on (the pen ran out or the run stopped mid-page)
     rerolls: new Map(), // a word's original seed -> how often it was clicked to be written again
+    edits: loadEdits(), // word key ("word|n", see G.words) -> {dx, dy, size, style}: changes made in the preview
   };
   { // older saves named the 13 originals "9" or "p:9"
     const st = String(state.settings.writing.style), old = /^(?:p:)?(d+)$/.exec(st);
@@ -48,6 +49,41 @@
     return s;
   }
   const styleOf = key => presets.find(s => s.key === key);
+
+  // ---------- word edits: move, size and handwriting per word, made in the preview ----------
+  /** Saved edits, checked: storage can hold anything. The layout checks them again. */
+  function loadEdits() {
+    const out = new Map(), raw = load(STORE.edits, null);
+    if (raw && typeof raw === "object") for (const [k, e] of Object.entries(raw)) { const c = cleanEdit(e); if (c) out.set(k, c); }
+    return out;
+  }
+  function cleanEdit(e) {
+    if (!e || typeof e !== "object") return null;
+    const num = v => typeof v === "number" && Number.isFinite(v), o = {};
+    if (num(e.dx) && Math.abs(e.dx) >= 0.005) o.dx = Math.round(Math.min(Math.max(e.dx, -999), 999) * 100) / 100;
+    if (num(e.dy) && Math.abs(e.dy) >= 0.005) o.dy = Math.round(Math.min(Math.max(e.dy, -999), 999) * 100) / 100;
+    if (num(e.size) && Math.abs(e.size - 1) >= 0.005) o.size = Math.round(Math.min(Math.max(e.size, G.WORD_SIZE[0]), G.WORD_SIZE[1]) * 100) / 100;
+    if (typeof e.style === "string" && e.style) o.style = e.style;
+    return Object.keys(o).length ? o : null;
+  }
+  /** Change the edits of these word keys: f(edit) returns the new edit; empty ones are dropped. */
+  function changeEdits(keys, f) {
+    for (const k of keys) { const e = cleanEdit(f({ ...state.edits.get(k) })); if (e) state.edits.set(k, e); else state.edits.delete(k); }
+    keep(STORE.edits, Object.fromEntries(state.edits));
+    syncBar(); scheduleRender(0);
+  }
+  /** The text's words with their edits applied (G.words output, changed in place). */
+  function applyEdits(paras) {
+    for (const w of paras.flat()) {
+      const e = state.edits.get(w.key);
+      if (!e) continue;
+      if (e.size) w.size = e.size;
+      if (e.dx) w.dx = e.dx;
+      if (e.dy) w.dy = e.dy;
+      if (e.style && styleOf(e.style)) { w.style = e.style; for (const p of w.parts || []) p.style = e.style; }
+    }
+    return paras;
+  }
 
   // ---------- word generation: a pool of Web Workers, each with its own copy of the model ----------
   const pool = (() => {
@@ -212,7 +248,10 @@
     for (const c of head.dropped) dropped.add(c);
     $("skipped").hidden = !dropped.size;
     $("skipped").textContent = dropped.size ? `Skipped characters the handwriting can't write: ${[...dropped].join(" ")}` : "";
-    const paras = G.words(clean, state.seed), all = rerolled(paras.flat());
+    const paras = applyEdits(G.words(clean, state.seed)), all = rerolled(paras.flat());
+    const changed = all.filter(w => state.edits.has(w.key)).length;
+    $("editsNote").hidden = !changed;
+    $("editsCount").textContent = `${changed} word${changed === 1 ? "" : "s"} changed in the preview.`;
     const cap = updateCapacity();
     // Clearly too long: say so now instead of writing every word first (borderline cases are decided by the real layout).
     if (cap && cap.pages > G.MAX_PAGES * 1.2)
@@ -222,15 +261,16 @@
     if (long) return fail(new Error(`The word "${long.word.slice(0, 20)}…" is too long (${G.MAX_WORD} letters at most).`));
 
     const bias = cfg.writing.bias;
-    const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !inkCache.has(inkKey(style.key, bias, w))).map(w => [inkKey(style.key, bias, w), w])).values()];
+    const keyOf = w => inkKey(w.style || style.key, bias, w); // a word can have its own handwriting
+    const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !inkCache.has(keyOf(w))).map(w => [keyOf(w), w])).values()];
     /** Have the workers write these words into inkCache. False if this render was replaced or failed (fail() shown). */
     const generate = async list => {
       if (!list.length) return true;
       let done = 0;
       setBusy(true, `Writing 0 / ${list.length} words`);
       try {
-        await Promise.all(list.map(w => pool.word(style, w.word, w.seed, bias, false, "page").then(ink => {
-          inkCache.set(inkKey(style.key, bias, w), ink);
+        await Promise.all(list.map(w => pool.word(styleOf(w.style) || style, w.word, w.seed, bias, false, "page").then(ink => {
+          inkCache.set(keyOf(w), ink);
           if (token === renderToken) setBusy(true, `Writing ${++done} / ${list.length} words`);
         })));
         return token === renderToken;
@@ -257,7 +297,7 @@
           if (missing(hw.flat()).length) throw Object.assign(new Error("header words needed"), { needPage: k });
           return hw;
         } };
-        pages = G.layoutPages(paras, w => inkCache.get(inkKey(style.key, bias, w)), cfg, rng, G.MAX_PAGES, opts).map((lines, k, all) => {
+        pages = G.layoutPages(paras, w => inkCache.get(keyOf(w)), cfg, rng, G.MAX_PAGES, opts).map((lines, k, all) => {
           try { return { lines, passes: G.planPasses(lines, cfg) }; }
           catch (e) { if (all.length > 1) e.message = `Page ${k + 1}: ${e.message}`; throw e; }
         });
@@ -272,7 +312,8 @@
     state.page = Math.min(state.page || 0, pages.length - 1);
     state.error = "";
     setBusy(false, "Ready");
-    draw(); updateSummary();
+    if (sel && !selected().length) select(null); // its words are gone (text changed) or on another page
+    draw(); updateSummary(); syncBar();
   }
 
   /** The page on screen: {cfg, lines, passes}, or null. */
@@ -348,6 +389,7 @@
   const canvas = $("plate"), ctx = canvas.getContext("2d");
   const view = { zoom: 1, panX: 0, panY: 0, s: 1, ox: 0, oy: 0 };
   let drag = null;
+  let sel = null; // selected word(s): {key: the word clicked, keys: what changes (it, or its whole line), lineKeys, line: bool}
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
   function plateCfg() { // what to draw: the last layout's cfg, or the settings alone when there is no layout yet
@@ -407,18 +449,28 @@
     if (v) {
       ctx.setLineDash([]); ctx.lineWidth = Math.max(0.8, 0.5 * s); ctx.lineCap = ctx.lineJoin = "round";
       const from = startLine(v), paths = [new Path2D(), new Path2D(), new Path2D()]; // already written, pen 1, pen 2
+      const [ox, oy] = drag && drag.kind === "word" && drag.moved ? drag.delta : [0, 0];
       v.lines.forEach((ln, k) => {
-        for (const st of ln) {
-          const path = paths[k < from - 1 ? 0 : st.pen === G.PEN2 ? 2 : 1];
-          path.moveTo(pX(st[0][0]), pY(st[0][1]));
-          if (st.length === 1) path.lineTo(pX(st[0][0]) + 0.01, pY(st[0][1]));
-          for (let i = 1; i < st.length; i++) path.lineTo(pX(st[i][0]), pY(st[i][1]));
-        }
+        const lifted = new Set(); // strokes of the selected words while they are being dragged
+        if (ox || oy) for (const w of ln.words || []) if (sel.keys.includes(w.key)) for (let j = w.s0; j < w.s1; j++) lifted.add(j);
+        ln.forEach((st, j) => {
+          const path = paths[k < from - 1 ? 0 : st.pen === G.PEN2 ? 2 : 1], ax = lifted.has(j) ? ox : 0, ay = lifted.has(j) ? oy : 0;
+          path.moveTo(pX(st[0][0] + ax), pY(st[0][1] + ay));
+          if (st.length === 1) path.lineTo(pX(st[0][0] + ax) + 0.01, pY(st[0][1] + ay));
+          for (let i = 1; i < st.length; i++) path.lineTo(pX(st[i][0] + ax), pY(st[i][1] + ay));
+        });
       });
       ["#C9C2B5", "#1B2A6B", "#B23A2B"].forEach((c, j) => { ctx.strokeStyle = c; ctx.stroke(paths[j]); });
-      if (hover) {
-        const [a, b2, c, d] = hover.box; ctx.fillStyle = "rgba(34,54,122,.12)"; ctx.fillRect(pX(a) - 3, pY(b2) - 3, (c - a) * s + 6, (d - b2) * s + 6);
-        ctx.strokeStyle = "#22367A"; ctx.lineWidth = 1; ctx.strokeRect(pX(a) - 3, pY(b2) - 3, (c - a) * s + 6, (d - b2) * s + 6);
+      const outline = ([a, b2, c, d], fill, width, dash = []) => {
+        ctx.setLineDash(dash); ctx.fillStyle = fill; ctx.fillRect(pX(a) - 3, pY(b2) - 3, (c - a) * s + 6, (d - b2) * s + 6);
+        ctx.strokeStyle = "#22367A"; ctx.lineWidth = width; ctx.strokeRect(pX(a) - 3, pY(b2) - 3, (c - a) * s + 6, (d - b2) * s + 6); ctx.setLineDash([]);
+      };
+      if (hover && !(sel && sel.keys.includes(hover.key))) outline(hover.box, "rgba(34,54,122,.10)", 1);
+      const picked = selected();
+      for (const w of picked) { const [a, b2, c, d] = w.box; outline([a + ox, b2 + oy, c + ox, d + oy], "rgba(34,54,122,.16)", w.key === sel.key ? 2 : 1, w.key === sel.key ? [] : [4, 3]); }
+      if (picked.length) {
+        const [a, b2, c, d] = G.extent(picked.map(w => [[w.box[0], w.box[1]], [w.box[2], w.box[3]]]));
+        placeBar(pX(a + ox), pY(b2 + oy), pX(c + ox), pY(d + oy), W, H);
       }
       if (from > 1 || document.activeElement === $("startLine")) // line numbers, to pick where to start again
         v.lines.forEach((ln, k) => label(String(k + 1), pX(G.extent(ln)[0]) - 10, pY(ln.baseline), k < from - 1 ? "#6B6255" : "#22367A", "right", css("--sheet"))); // on the paper, which stays light
@@ -438,6 +490,17 @@
     label(`${pr.model} · plate ${bx} × ${by} mm`, 14, 22, css("--muted"), "left");
     label("FRONT OF PRINTER", X(dx + bx / 2), Math.min(Y(dy) + 22, H - 58), css("--muted"), "center"); // just under the plate, above the chips
   }
+  /** The word bar sits just under the selection (above it when there's no room), inside the preview. */
+  function placeBar(x0, y0, x1, y1, W, H) {
+    const bar = $("wordBar");
+    if (bar.hidden) return;
+    const bw = bar.offsetWidth, bh = bar.offsetHeight, gap = 12;
+    const x = Math.max(gap, Math.min((x0 + x1) / 2 - bw / 2, W - bw - gap));
+    let y = y1 + gap + 4;
+    if (y + bh > H - gap) y = y0 - bh - gap - 4;
+    y = Math.max(gap, Math.min(y, H - bh - gap));
+    bar.style.left = `${canvas.offsetLeft + x}px`; bar.style.top = `${canvas.offsetTop + y}px`;
+  }
   function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
   function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
   function label(text, x, y, color, align, bg) {
@@ -453,31 +516,42 @@
     const [x, y] = toBed(e), p = cfg.paper;
     return x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height;
   }
-  /** The word under the pointer on the page shown: {seed, box} from the layout, or null. */
+  /** The word under the pointer on the page shown: {w: {seed, key, box, s0, s1}, ln: its line}, or null. */
   function wordAt(e) {
     const v = cur(), cfg = plateCfg();
     if (!v || !cfg || state.busy) return null;
     const [bx, by] = toBed(e), p = cfg.paper, x = bx - p.x, y = p.y + p.height - by, pad = 0.6;
-    for (const ln of v.lines) for (const w of ln.words || []) if (x >= w.box[0] - pad && x <= w.box[2] + pad && y >= w.box[1] - pad && y <= w.box[3] + pad) return w;
+    for (const ln of v.lines) for (const w of ln.words || []) if (x >= w.box[0] - pad && x <= w.box[2] + pad && y >= w.box[1] - pad && y <= w.box[3] + pad) return { w, ln };
     return null;
   }
-  let hover = null; // word under the pointer: clicking it writes just that word again
+  let hover = null; // word under the pointer
   canvas.addEventListener("pointerdown", e => {
     canvas.setPointerCapture(e.pointerId);
-    const p = state.settings.paper;
+    const p = state.settings.paper, hit = e.button === 0 ? wordAt(e) : null;
+    if (hit) { // a word: select it (unless it's part of the selection already) and maybe drag it
+      if (!sel || !sel.keys.includes(hit.w.key)) select(hit.w, hit.ln);
+      drag = { kind: isFixed(hit.w.key) ? "none" : "word", start: toBed(e), sx: e.clientX, sy: e.clientY, moved: false, delta: [0, 0] };
+      return draw();
+    }
     drag = e.button === 0 && onPaper(e) ? { kind: "paper", start: toBed(e), x: p.x, y: p.y, sx: e.clientX, sy: e.clientY, moved: false }
-      : { kind: "pan", sx: e.clientX, sy: e.clientY, px: view.panX, py: view.panY };
+      : { kind: "pan", sx: e.clientX, sy: e.clientY, px: view.panX, py: view.panY, moved: false };
   });
   canvas.addEventListener("pointermove", e => {
     if (!drag) {
-      const w = wordAt(e);
-      if ((w && w.seed) !== (hover && hover.seed)) { hover = w; draw(); }
-      canvas.style.cursor = w ? "pointer" : onPaper(e) ? "grab" : "default";
+      const hit = wordAt(e), w = hit && hit.w;
+      if ((w && w.key) !== (hover && hover.key)) { hover = w; draw(); }
+      canvas.style.cursor = w ? (sel && sel.keys.includes(w.key) && !isFixed(w.key) ? "move" : "pointer") : onPaper(e) ? "grab" : "default";
       return;
     }
-    canvas.style.cursor = "grabbing";
-    if (drag.kind === "pan") { view.panX = drag.px + e.clientX - drag.sx; view.panY = drag.py + e.clientY - drag.sy; return draw(); }
+    if (drag.kind === "none") return;
     if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return; // still a click, not a drag
+    canvas.style.cursor = drag.kind === "word" ? "move" : "grabbing";
+    if (drag.kind === "word") { // mm on the page (y down), kept on the paper; drawn live, laid out when let go
+      const [x, y] = toBed(e);
+      drag.moved = true; drag.delta = fitMove(x - drag.start[0], drag.start[1] - y);
+      return draw();
+    }
+    if (drag.kind === "pan") { drag.moved = true; view.panX = drag.px + e.clientX - drag.sx; view.panY = drag.py + e.clientY - drag.sy; return draw(); }
     drag.moved = true; hover = null;
     const cfg = plateCfg(); if (!cfg) return;
     const [x, y] = toBed(e), p = state.settings.paper, pr = cfg.printer;
@@ -486,21 +560,97 @@
     p.y = Math.round(Math.min(Math.max(drag.y + y - drag.start[1], 20 - cfg.paper.height), pr.bed_y - 20));
     relayout();
   });
-  canvas.addEventListener("pointerup", e => {
-    if (drag && drag.kind === "paper") {
-      if (drag.moved) scheduleRender(0);
-      else { const w = wordAt(e); if (w) rewriteWord(w.seed); }
-    }
+  canvas.addEventListener("pointerup", () => {
+    const d = drag;
     drag = null;
+    if (!d) return;
+    if (d.kind === "word" && d.moved) return moveBy(...d.delta);
+    if (d.kind === "paper" && d.moved) return scheduleRender(0);
+    if ((d.kind === "paper" || d.kind === "pan") && !d.moved && sel) { select(null); draw(); } // a click beside the words: done
   });
   canvas.addEventListener("pointerleave", () => { if (hover && !drag) { hover = null; draw(); } });
-  /** Write one word again: it gets the next fresh seed, the rest of the page keeps its handwriting. */
-  function rewriteWord(seed) {
-    const orig = seedOrigin.get(seed) ?? seed;
-    state.rerolls.set(orig, (state.rerolls.get(orig) || 0) + 1);
+  /** Write these words again: each gets the next fresh seed, the rest of the page keeps its handwriting. */
+  function rewriteWords(seeds) {
+    for (const seed of seeds) {
+      const orig = seedOrigin.get(seed) ?? seed;
+      state.rerolls.set(orig, (state.rerolls.get(orig) || 0) + 1);
+    }
     hover = null;
     scheduleRender(0);
   }
+
+  // ---------- the selection and its editor bar ----------
+  const isFixed = key => key.startsWith("header"); // header words are written afresh per sheet: no lasting edits
+  const wordText = key => key.replace(/^header\d+:/, "").replace(/\|\d+$/, "");
+  /** The selected words on the page shown, from the last layout: [{seed, key, box, s0, s1}]. */
+  function selected() {
+    const v = cur();
+    if (!sel || !v) return [];
+    return v.lines.flatMap(ln => (ln.words || []).filter(w => sel.keys.includes(w.key)));
+  }
+  function select(w, ln) {
+    sel = w ? { key: w.key, keys: [w.key], lineKeys: (ln.words || []).map(x => x.key).filter(k => !isFixed(k)), line: false } : null;
+    syncBar();
+  }
+  function setLine(line) {
+    if (!sel || isFixed(sel.key)) return;
+    sel.line = line; sel.keys = line ? sel.lineKeys : [sel.key];
+    syncBar(); draw();
+  }
+  /** The bar shows what is selected and its current size and handwriting. */
+  function syncBar() {
+    const bar = $("wordBar");
+    bar.hidden = !sel;
+    if (!sel) return;
+    const fixed = isFixed(sel.key), e = state.edits.get(sel.key) || {};
+    bar.classList.toggle("fixed-word", fixed);
+    $("wbLabel").textContent = `“${(sel.line ? sel.keys : [sel.key]).map(wordText).join(" ")}”`;
+    $("wbWord").setAttribute("aria-pressed", !sel.line); $("wbLine").setAttribute("aria-pressed", sel.line);
+    $("wbSize").textContent = `${Math.round((e.size || 1) * 100)}%`;
+    const styles = new Set(sel.keys.map(k => (state.edits.get(k) || {}).style || ""));
+    $("wbStyle").value = styles.size === 1 ? [...styles][0] : "";
+  }
+  /** A move (mm, y down) cut short so the selected words stay on the paper. */
+  function fitMove(dx, dy) {
+    const v = cur(), ws = selected();
+    if (!v || !ws.length) return [0, 0];
+    const p = v.cfg.paper, [a, b, c, d] = G.extent(ws.map(w => [[w.box[0], w.box[1]], [w.box[2], w.box[3]]]));
+    return [Math.min(Math.max(dx, -a), p.width - c), Math.min(Math.max(dy, -b), p.height - d)];
+  }
+  function moveBy(dx, dy) {
+    if (!sel || isFixed(sel.key)) return;
+    [dx, dy] = fitMove(dx, dy);
+    if (dx || dy) changeEdits(sel.keys, e => ({ ...e, dx: (e.dx || 0) + dx, dy: (e.dy || 0) + dy }));
+  }
+  function resizeBy(step) {
+    if (!sel || isFixed(sel.key)) return;
+    changeEdits(sel.keys, e => ({ ...e, size: Math.min(Math.max(Math.round(((e.size || 1) + step) * 10) / 10, G.WORD_SIZE[0]), G.WORD_SIZE[1]) }));
+  }
+  { // the bar's handwriting list: the page's own, then every style by group
+    const box = $("wbStyle"), page = new Option("Page handwriting", "");
+    box.append(page);
+    let group = null;
+    for (const st of presets) {
+      if (!group || group.label !== st.group) { group = document.createElement("optgroup"); group.label = st.group; box.append(group); }
+      group.append(new Option(st.label, st.key));
+    }
+  }
+  const STEP = e => (e && e.shiftKey ? 5 : 0.5); // mm per press
+  $("wbLeft").onclick = e => moveBy(-STEP(e), 0); $("wbRight").onclick = e => moveBy(STEP(e), 0);
+  $("wbUp").onclick = e => moveBy(0, -STEP(e)); $("wbDown").onclick = e => moveBy(0, STEP(e));
+  $("wbSmaller").onclick = () => resizeBy(-0.1); $("wbBigger").onclick = () => resizeBy(0.1);
+  $("wbStyle").onchange = e => { const v = e.target.value; changeEdits(sel ? sel.keys : [], ed => ({ ...ed, style: v || undefined })); };
+  $("wbReset").onclick = () => changeEdits(sel ? sel.keys : [], () => null);
+  $("wbAgain").onclick = () => rewriteWords(selected().map(w => w.seed));
+  $("wbWord").onclick = () => setLine(false); $("wbLine").onclick = () => setLine(true);
+  $("wbClose").onclick = () => { select(null); draw(); };
+  $("resetEdits").onclick = () => { state.edits.clear(); keep(STORE.edits, {}); syncBar(); scheduleRender(0); };
+  document.addEventListener("keydown", e => {
+    if (!sel || e.altKey || e.ctrlKey || e.metaKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector("dialog[open]")) return;
+    const k = e.key, s = STEP(e), act = { ArrowLeft: () => moveBy(-s, 0), ArrowRight: () => moveBy(s, 0), ArrowUp: () => moveBy(0, -s),
+      ArrowDown: () => moveBy(0, s), "+": () => resizeBy(0.1), "=": () => resizeBy(0.1), "-": () => resizeBy(-0.1), Escape: () => { select(null); draw(); } }[k];
+    if (act) { e.preventDefault(); act(); }
+  });
   canvas.addEventListener("wheel", e => { e.preventDefault(); zoomAt(Math.pow(1.0015, -e.deltaY), e); }, { passive: false });
   function zoomAt(f, e) {
     const r = canvas.getBoundingClientRect(), mx = e ? e.clientX - r.left : r.width / 2, my = e ? e.clientY - r.top : r.height / 2;
@@ -824,7 +974,7 @@
     if (!state.view) return;
     state.page = Math.min(Math.max(state.page + d, 0), state.view.pages.length - 1);
     state.startLine = 1; $("startLine").value = 1; // a start line belongs to one page
-    draw(); updateSummary();
+    select(null); draw(); updateSummary();
   };
   $("prevPage").onclick = () => goPage(-1);
   $("nextPage").onclick = () => goPage(1);

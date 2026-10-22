@@ -37,7 +37,8 @@ and word gaps are never the same twice.
 - **Lined paper**: pick the ruling and every line of writing sits on a printed line, right of the margin line.
 - **Underlines and a second pen**: `_like this_` is underlined by hand, `*like this*` is written with a second pen after a pen change.
 - **Header and page numbers** at the top of every sheet, written afresh each time.
-- **Rewrite one word**: click it in the preview; the rest of the page keeps its handwriting.
+- **Edit any word or line**: click it in the preview to drag it, resize it, give it another handwriting or write it again.
+  The rest of the page stays as it is, and moved words are still checked against the paper and the pen's reach.
 - **Dry run** (the pen stays 8 mm above the paper) and **start again from line N** when a pen runs dry mid-page.
 - **Pen offset test**: print two marks, measure them with a ruler, and the app works out where your pen sits.
 - **Safety first**: every move is checked against your printer's bed before the file is saved (see [Safety](#safety)).

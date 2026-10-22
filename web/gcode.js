@@ -32,6 +32,7 @@
   const DRY_RUN_LIFT = 8; // a dry run writes this far above the writing height, so the pen never reaches the paper
   const MARGIN_LINE_GAP = 2; // ruled paper: writing starts this far right of the printed margin line
   const PEN2 = 2;         // stroke.pen for text marked *like this*: written after a pen change
+  const WORD_SIZE = [0.3, 4]; // a word's own size (wd.size), times the letter size
 
   // Motor "music" (Bambu M1006): each line plays three channels at once, A/B/L, C/D/M and E/F/N = MIDI note (0 = rest),
   // duration in 10 ms, volume 0-100. Only printers known to play it: officially the A1 and A1 mini; confirmed by users
@@ -297,7 +298,7 @@
         if (!word) continue;
         const n = (seen.get(word) || 0) + 1;
         seen.set(word, n);
-        const w = { word, seed: hash(`${pageSeed}|${word}|${n}`) };
+        const w = { word, key: `${word}|${n}`, seed: hash(`${pageSeed}|${word}|${n}`) }; // key: the same whatever the page seed
         // ALL-CAPS words: the model learned mostly lowercase and garbles them, but writes single capitals well,
         // so they are written letter by letter (punctuation stays with its letter: "YOU," -> Y, O, U,).
         // Numbers too: the model saw few digits and half-writes them in a run, but single digits come out clean.
@@ -316,7 +317,8 @@
    *  is written afresh, like a person writing it again. text: cleaned like the page text. */
   function headerWords(text, pageNumbers, seed, k) {
     const s = hash(`${seed}|header|${k}`);
-    return [text.trim() ? words(text.replace(/\n/g, " "), s).flat() : [], pageNumbers ? words(`Page ${k + 1}`, s).flat() : []];
+    const mark = ws => ws.map(w => ({ ...w, key: `header${k}:${w.key}` })); // never the same key as a word of the text
+    return [text.trim() ? mark(words(text.replace(/\n/g, " "), s).flat()) : [], pageNumbers ? mark(words(`Page ${k + 1}`, s).flat()) : []];
   }
   const isCaps = word => (word.match(/[A-Z]/g) || []).length >= 2 && !/[a-z]/.test(word);
   const LETTER_GAP = 0.18; // x-heights between block capitals
@@ -359,7 +361,9 @@
   /** Place words on the page. paragraphs: from words(); inkOf(w) -> strokes ([[x,y],...] in x-height units,
    *  baseline 0, y up) for that word; rng: {normal()}. Returns lines, each a list of strokes in page mm.
    *  A stroke written with the second pen has .pen = PEN2. Each line also has .baseline (mm from the top edge) and
-   *  .words: [{seed, box: [x0, y0, x1, y1]}], where each word landed (to click one in the preview). */
+   *  .words: [{seed, key, box: [x0, y0, x1, y1], s0, s1}], where each word landed and its strokes (to click one in the preview).
+   *  A word can carry its own changes: wd.size (times the letter size; wrapping and spacing follow) and wd.dx, wd.dy
+   *  (mm right/down from where it would land; the rest of the page stays where it was). */
   /** Single page: throws if the text doesn't fit. */
   function layout(paragraphs, inkOf, cfg, rng) { return layoutPages(paragraphs, inkOf, cfg, rng, 1)[0] || []; }
 
@@ -371,6 +375,7 @@
     if (right - areaLeft < 8 * xh || Math.min(bottom, reach(cfg, BED_INSET)[3]) - top < 4 * xh)
       throw new WriteError("Too little of the paper is on the build plate: drag the paper onto the plate.");
     const grid = lineGrid(cfg);
+    const [rl, rt, rr] = reach(cfg), moveArea = [Math.max(0, rl), Math.max(0, rt), Math.min(cfg.paper.width, rr), cfg.paper.height];
     // How a person writes on blank paper: the page leans a little, the left margin creeps sideways, each line
     // starts, slopes, bows and ends a little differently, gaps vary, size drifts. Scaled by wobble (0 = none).
     // On ruled paper the printed lines keep the writing level: far less up-and-down, and a line that has to move
@@ -408,13 +413,24 @@
     }
     /** A shaped word's strokes at x on this line, recorded in placed for underlines and word boxes. */
     function put(it, x, f, strokes, placed, drift) {
-      const s0 = strokes.length;
+      const s0 = strokes.length, u = f.lxh * it.size, { dx, dy } = it;
       for (const s of it.ink) {
-        const st = s.map(([sx, sy]) => { const px = x + sx * f.lxh; return [px, f.baseline(px) + drift * xh - sy * f.lxh]; });
+        const st = s.map(([sx, sy]) => { const px = x + sx * u; return [px + dx, f.baseline(px) + drift * xh - sy * u + dy]; });
         if (it.wd.pen) st.pen = it.wd.pen;
+        if (dx || dy) st.moved = true; // drawn where it was moved to, but the line is laid out as if it hadn't
         strokes.push(st);
       }
-      placed.push({ wd: it.wd, x0: x, x1: x + it.width, s0, s1: strokes.length, drift });
+      placed.push({ wd: it.wd, x0: x, x1: x + it.width, s0, s1: strokes.length, drift, size: it.size, dx, dy });
+    }
+    /** A word ready to place: its shape this time, its own size and move (checked: they may come from saved edits). */
+    function shaped(wd, lxh) {
+      const size = wd.size ?? 1, dx = wd.dx ?? 0, dy = wd.dy ?? 0, lim = cfg.paper.width + cfg.paper.height;
+      if (!(typeof size === "number" && size >= WORD_SIZE[0] && size <= WORD_SIZE[1]))
+        throw new WriteError(`"${wd.word}": a word's size must be ${WORD_SIZE[0] * 100}% to ${WORD_SIZE[1] * 100}%.`);
+      if (!(typeof dx === "number" && typeof dy === "number" && Math.abs(dx) <= lim && Math.abs(dy) <= lim))
+        throw new WriteError(`"${wd.word}" was moved off the paper: reset it.`);
+      const s = shapeWord(wd, inkOf, k, N);
+      return { wd, ink: s.ink, width: s.width * lxh * size, size, dx, dy };
     }
     /** One hand-drawn stroke under each run of _underlined_ words, just below the lowest baseline in the run. */
     function underline(strokes, placed, f) {
@@ -422,12 +438,26 @@
         if (!placed[a].wd.underline) continue;
         let b = a;
         while (b + 1 < placed.length && placed[b + 1].wd.underline) b++;
-        const x0 = Math.max(areaLeft, placed[a].x0 - 0.15 * f.lxh), x1 = Math.min(right, placed[b].x1 + 0.15 * f.lxh);
-        const drop = Math.max(...placed.slice(a, b + 1).map(p => p.drift)) * xh + 0.3 * f.lxh;
-        const e0 = N() * 0.06 * f.lxh * k, e1 = N() * 0.06 * f.lxh * k, n = Math.max(2, Math.ceil((x1 - x0) / (0.5 * xh)));
-        const st = Array.from({ length: n + 1 }, (_, j) => { const u = j / n, px = x0 + u * (x1 - x0); return [px, f.baseline(px) + drop + e0 + (e1 - e0) * u]; });
-        if (placed[a].wd.pen) st.pen = placed[a].wd.pen;
-        strokes.push(st);
+        const run = placed.slice(a, b + 1), u = f.lxh * Math.max(...run.map(p => p.size));
+        const x0 = Math.max(areaLeft, placed[a].x0 - 0.15 * u), x1 = Math.min(right, placed[b].x1 + 0.15 * u);
+        const drop = Math.max(...run.map(p => p.drift)) * xh + 0.3 * u;
+        const e0 = N() * 0.06 * u * k, e1 = N() * 0.06 * u * k;
+        // A moved word takes its piece of the line along (split halfway between words); the same random draws either
+        // way, so moving a word never changes the rest of the page.
+        for (let i = 0; i < run.length;) {
+          let j = i;
+          while (j + 1 < run.length && run[j + 1].dx === run[i].dx && run[j + 1].dy === run[i].dy) j++;
+          const sx0 = i ? (run[i - 1].x1 + run[i].x0) / 2 : x0, sx1 = j + 1 < run.length ? (run[j].x1 + run[j + 1].x0) / 2 : x1;
+          const n = Math.max(2, Math.ceil((sx1 - sx0) / (0.5 * xh))), { dx, dy } = run[i];
+          const st = Array.from({ length: n + 1 }, (_, q) => {
+            const px = sx0 + q / n * (sx1 - sx0), t = (px - x0) / (x1 - x0 || 1);
+            return [px + dx, f.baseline(px) + drop + e0 + (e1 - e0) * t + dy];
+          });
+          if (placed[a].wd.pen) st.pen = placed[a].wd.pen;
+          if (dx || dy) st.moved = true;
+          strokes.push(st);
+          i = j + 1;
+        }
         a = b;
       }
     }
@@ -436,19 +466,28 @@
      *  below the bottom of the writing area, so it belongs on the next sheet. */
     function finish(strokes, placed, f) {
       underline(strokes, placed, f);
-      const rise = top - extent(strokes)[1];
-      if (rise > 0) shift(strokes, snap(rise)); // a line sloping up must not climb out of the writing area
-      // A line that tilts, bows or drifts into the ink above (or a tall letter under a hanging g) moves down
-      // just enough to keep clear, like a person leaving room, instead of writing over it.
-      let clash = 0;
-      columns(strokes, (c, py) => {
-        for (let d = -near; d <= near; d++) { const fl = floor.get(c + d); if (fl !== undefined) clash = Math.max(clash, fl + clear - py); }
-      });
-      if (clash > 0) shift(strokes, snap(clash)); // later lines follow it down, so blank lines between paragraphs stay blank
-      if (extent(strokes)[3] > bottom) return false;
-      columns(strokes, (c, py) => floor.set(c, Math.max(floor.get(c) ?? py, py)));
+      // Moved words are drawn where the user put them; the line itself is laid out from the others.
+      const fixed = strokes.filter(s => !s.moved), moved = strokes.filter(s => s.moved);
+      if (fixed.length) {
+        const rise = top - extent(fixed)[1];
+        if (rise > 0) shift(strokes, snap(rise)); // a line sloping up must not climb out of the writing area
+        // A line that tilts, bows or drifts into the ink above (or a tall letter under a hanging g) moves down
+        // just enough to keep clear, like a person leaving room, instead of writing over it.
+        let clash = 0;
+        columns(fixed, (c, py) => {
+          for (let d = -near; d <= near; d++) { const fl = floor.get(c + d); if (fl !== undefined) clash = Math.max(clash, fl + clear - py); }
+        });
+        if (clash > 0) shift(strokes, snap(clash)); // later lines follow it down, so blank lines between paragraphs stay blank
+        if (extent(fixed)[3] > bottom) return false;
+        columns(fixed, (c, py) => floor.set(c, Math.max(floor.get(c) ?? py, py)));
+      }
+      if (moved.length) {
+        const [a, b, c, d] = extent(moved);
+        if (!(a >= moveArea[0] && c <= moveArea[2] && b >= moveArea[1] && d <= moveArea[3]))
+          throw new WriteError("A moved word would land off the paper or where the pen can't reach: move it back onto the page.");
+      }
       strokes.baseline = y;
-      strokes.words = placed.map(p => ({ seed: p.wd.seed, box: extent(strokes.slice(p.s0, p.s1)) }));
+      strokes.words = placed.map(p => ({ seed: p.wd.seed, key: p.wd.key, box: extent(strokes.slice(p.s0, p.s1)), s0: p.s0, s1: p.s1 }));
       lines.push(strokes);
       return true;
     }
@@ -457,7 +496,7 @@
       const hw = opts.header && opts.header(pages.length);
       if (!hw || !(hw[0].length + hw[1].length)) return;
       const f = lineFrame(), strokes = [], placed = [];
-      const shape = ws => ws.map(wd => { const s = shapeWord(wd, inkOf, k, N); return { wd, ink: s.ink, width: s.width * f.lxh }; });
+      const shape = ws => ws.map(wd => shaped(wd, f.lxh));
       const L = shape(hw[0]), R = shape(hw[1]);
       let x = f.left, xr = f.lineRight - R.reduce((sum, it) => sum + it.width, 0) - Math.max(0, R.length - 1) * w.word_spacing * f.lxh;
       L.forEach((it, j) => { if (j) x += wordGap(f.lxh); put(it, x, f, strokes, placed, 0); x += it.width; });
@@ -493,7 +532,7 @@
           if (wd.word.length > MAX_WORD)
             throw new WriteError(`The word "${wd.word.slice(0, 20)}..." is too long (${MAX_WORD} letters at most).`);
           // No two words come out the same size, slant or angle by hand: small per-word changes, scaled by wobble.
-          const s = shapeWord(wd, inkOf, k, N), it = { wd, ink: s.ink, width: s.width * f.lxh };
+          const it = shaped(wd, f.lxh);
           if (it.width > f.lineRight - f.left) throw new WriteError(`The word "${wd.word}" is wider than a line: use smaller letters.`);
           if (x + it.width > f.lineRight && x > f.left) break; // wrap
           i++;
@@ -676,5 +715,5 @@
   return { WriteError, SOUND_PRINTERS, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
     toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper, penRange,
-    lineGrid, headerWords, rulingLetters, PEN2, DRY_RUN_LIFT, MARGIN_LINE_GAP };
+    lineGrid, headerWords, rulingLetters, PEN2, DRY_RUN_LIFT, MARGIN_LINE_GAP, WORD_SIZE };
 });
