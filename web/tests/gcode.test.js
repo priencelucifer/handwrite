@@ -268,17 +268,18 @@ test("defaults: the Plotter holder's offset, and the paper where placePaper puts
 test("pen offset test: safe on every printer, and measuring it gives the offset back", () => {
   for (const model of Object.keys(G.PRINTERS).filter(m => G.PRINTERS[m])) {
     const s = withSet({ "printer.model": model, "printer.offset_x": 7, "printer.offset_y": -33 }); // the old offset must not matter
-    const gcode = G.offsetTest(s), bedY = G.resolve(s).printer.bed_y;
-    const cfg = G.resolve({ ...s, printer: { ...s.printer, offset_x: 0, offset_y: 0 }, paper: { ...s.paper, size: "A4", orientation: "portrait", x: 0, y: bedY - 297 } });
-    simulate(gcode, cfg); // A4 in the back-left corner, nozzle = pen
-    // XY moves: the pause position, then for each mark a travel to its start and one drawn move to its end
-    const xy = gcode.split("\n").filter(l => /^G[01] X/.test(l)).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number));
+    // the plate may reach past where the nozzle may go (pr.plate): the paper goes into the plate's own corner
+    const pr = G.resolve(s).printer, gcode = G.offsetTest(s), bedY = pr.bed_y, [gl, , , gb] = pr.plate, [X0, Y0] = pr.origin;
+    const cfg = G.resolve({ ...s, printer: { ...s.printer, offset_x: 0, offset_y: 0 }, paper: { ...s.paper, size: "A4", orientation: "portrait", x: -gl, y: bedY + gb - 297 } });
+    simulate(gcode, cfg); // A4 in the plate's back-left corner, nozzle = pen
+    // XY moves, back in bed coordinates: the pause position, then for each mark a travel to its start and one drawn move to its end
+    const xy = gcode.split("\n").filter(l => /^G[01] X/.test(l)).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number)).map(([x, y]) => [x - X0, y - Y0]);
     assert.strictEqual(xy.length, 5, model);
     const [, [x0, lineY], [x1, lineY2], [tickX, t0], [tickX2, t1]] = xy;
-    assert.ok(lineY === lineY2 && x1 - x0 > 50 && tickX === tickX2 && t0 - t1 === 20, `${model}: a horizontal line and a vertical mark`);
-    assert.ok(x0 > 0 && x1 < 210, `${model}: on the paper`);
+    assert.ok(lineY === lineY2 && x1 - x0 > 50 && tickX === tickX2 && Math.abs(t0 - t1 - 20) < 1e-9, `${model}: a horizontal line and a vertical mark`);
+    assert.ok(x0 > -gl && x1 < 210 - gl, `${model}: on the paper`);
     for (const [ox, oy] of [[0, 0], [-4.5, -38], [12, 25.5]]) { // a pen this far from the nozzle draws the marks here:
-      const fromTop = bedY - (lineY + oy), fromLeft = tickX + ox;
+      const fromTop = bedY + gb - (lineY + oy), fromLeft = tickX + gl + ox;
       assert.deepStrictEqual(G.offsetFromTest(s, fromLeft, fromTop), { offset_x: ox, offset_y: oy }, model);
     }
   }
@@ -326,7 +327,7 @@ test("automatic paper placement: writing starts at the top border where the pen 
           if (/Too much text/.test(e.message)) continue; throw new Error(`${where}: ${e.message}`); }
         try { for (const lines of pages) simulate(G.toGcode(G.planPasses(lines, cfg), cfg, ["t"]), cfg); } catch (e) {
           // shortcut: layout doesn't steer around the P1/X1 cutter corner; the final guard refuses instead (never unsafe)
-          if (cfg.printer.keepout && /Refusing a move/.test(e.message)) { refused++; continue; } throw new Error(`${where}: ${e.message}`); }
+          if (cfg.printer.keepouts.length && /Refusing a move/.test(e.message)) { refused++; continue; } throw new Error(`${where}: ${e.message}`); }
         checked++;
       }
   assert.ok(checked > 100 && refused <= 4, `${checked} setups checked, ${refused} refused for the cutter corner`);
@@ -377,6 +378,64 @@ test("a blank line between paragraphs stays blank when crowded lines get pushed 
 });
 
 const zLines = g => g.split("\n").filter(l => /^G1 Z/.test(l)).map(l => +l.match(/Z([\d.]+)/)[1]);
+
+test("every printer OrcaSlicer knows: a page is safe in its own coordinates, and its firmware gets G-code it reads", () => {
+  const ORCA = require("../printers.js");
+  // the data: sane rectangles, keep-outs inside the bed, the plate around the bed, known firmware
+  for (const list of Object.values(ORCA)) for (const [name, [x0, y0, x1, y1, z, fw, keep, plate]] of Object.entries(list)) {
+    assert.ok(x1 - x0 >= 50 && y1 - y0 >= 50 && x1 - x0 <= 1000 && y1 - y0 <= 1000 && z >= 50, name);
+    assert.ok(["klipper", "marlin", "marlin2", "reprapfirmware", "repetier"].includes(fw), `${name}: firmware ${fw}`);
+    for (const k of keep) assert.ok(k[0] >= x0 && k[1] >= y0 && k[2] <= x1 && k[3] <= y1 && k[2] > k[0] && k[3] > k[1], `${name}: keep-out`);
+    if (plate) assert.ok(plate[0] <= x0 && plate[1] <= y0 && plate[2] >= x1 && plate[3] >= y1, `${name}: plate`);
+  }
+  let made = 0, refused = 0;
+  for (const model of Object.keys(G.PRINTERS).filter(m => G.PRINTERS[m])) {
+    const s = withSet({ "printer.model": model, "paper.size": "A6" });
+    Object.assign(s.paper, G.placePaper(G.resolve(s)));
+    let out;
+    try { out = run(s, "Dear friend,\nA short note written on this printer.", 3); }
+    catch (e) { if (!(e instanceof G.WriteError)) throw e; refused++; continue; }
+    simulate(out.gcode, out.cfg); // own coordinates, keep-outs and dialect, from OrcaSlicer's data
+    const bambu = out.cfg.printer.dialect === "bambu";
+    assert.strictEqual(/^G21$/m.test(out.gcode), bambu, `${model}: G21 only for Bambu`);
+    assert.ok(out.gcode.includes(bambu ? "\nG4 S30\n" : "\nG4 P30000\n"), `${model}: 30 s pauses as ${bambu ? "G4 S30" : "G4 P30000 (Klipper ignores S)"}`);
+    made++;
+  }
+  assert.ok(made > 380 && refused <= 5, `pages made on ${made} printers, refused on ${refused}`);
+});
+
+test("a printer whose bed starts elsewhere gets the very same moves, shifted into its coordinates", () => {
+  // Flashforge Adventurer 5M: 220 x 220 mm from X-110 Y-110; the same page on a 220 x 220 Custom bed from X0 Y0
+  const text = "The same page on two printers", ff = withSet({ "printer.model": "Flashforge Adventurer 5M" });
+  const custom = withSet({ "printer.model": "Custom", "printer.bed_x": 220, "printer.bed_y": 220, "printer.bed_z": 220 });
+  for (const s of [ff, custom]) Object.assign(s.paper, { x: 36, y: 5 });
+  const a = run(ff, text, 9).gcode.split("\n"), b = run(custom, text, 9).gcode.split("\n");
+  assert.strictEqual(a.length, b.length);
+  let shifted = 0;
+  a.forEach((l, k) => {
+    const m = /^(G[01]) X(\S+) Y(\S+)(.*)$/.exec(l), n = /^(G[01]) X(\S+) Y(\S+)(.*)$/.exec(b[k]);
+    if (!m) return assert.ok(l === b[k] || (l.startsWith(";") && b[k].startsWith(";")), `line ${k}: ${l} / ${b[k]}`);
+    assert.ok(m[1] === n[1] && m[4] === n[4] && Math.abs(+m[2] - (+n[2] - 110)) < 1e-9 && Math.abs(+m[3] - (+n[3] - 110)) < 1e-9, `line ${k}: ${l} / ${b[k]}`);
+    shifted++;
+  });
+  assert.ok(shifted > 20);
+  assert.ok(a.some(l => /^G0 X-\d/.test(l)), "negative X written as such");
+});
+
+test("bed keep-outs from OrcaSlicer are never entered (Elegoo purge corner, Qidi corners)", () => {
+  for (const [model, corner] of [["Elegoo Centauri Carbon", "front-right"], ["Qidi X-Max 4", "front-left"]]) {
+    const pr = G.resolve(withSet({ "printer.model": model })).printer;
+    assert.ok(pr.keepouts.length > 0, model);
+    const s = withSet({ "printer.model": model, "paper.size": "A6", "printer.offset_x": 0, "printer.offset_y": 0 });
+    s.paper.x = corner === "front-left" ? 0 : pr.bed_x - 105; s.paper.y = 0; // the page's first letters over the keep-out
+    let refused = 0, made = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      try { const out = run(s, Array(12).fill("words written in the corner of the bed").join("\n"), seed); simulate(out.gcode, out.cfg); made++; }
+      catch (e) { if (!(e instanceof G.WriteError)) throw e; refused++; }
+    }
+    assert.ok(refused > 0, `${model}: writing over the keep-out is refused`);
+  }
+});
 
 test("the nozzle heater is switched off right after homing, and nothing ever heats", () => {
   for (const model of Object.keys(G.PRINTERS).filter(m => m !== "Custom")) {

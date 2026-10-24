@@ -1,4 +1,5 @@
-/* Page layout, pass planning and G-code for a Bambu Lab printer with a pen holder.
+/* Page layout, pass planning and G-code for a 3D printer with a pen holder (Bambu Lab, and the printers OrcaSlicer knows).
+ * Printer facts from OrcaSlicer: printers.js (HW_PRINTERS), loaded before this file.
  * Port of write.py (incl. the safety-audit fixes). Classic script: global HWGcode, or require() in Node.
  * Units: mm. Page coords: origin at the paper's top-left (the edge toward the BACK of the printer), y toward
  * the front. Bed coords: X right, Y toward the back, origin front-left. pen = nozzle + offset. */
@@ -10,17 +11,38 @@
 
   class WriteError extends Error {}
 
-  // [bed_x, bed_y, max Z, nozzle keep-out [x0, y0, x1, y1] or null]. P1/X1: front-left the toolhead presses
-  // the filament-cutter lever against the frame.
+  // [bed_x, bed_y, max Z, nozzle keep-outs [[x0, y0, x1, y1], ...], origin [x, y], dialect, plate]. Layout works in bed
+  // coordinates from 0 to bed_x / bed_y; origin is where that 0 is in the printer's own coordinates (added only when
+  // a coordinate is written). P1/X1: front-left the toolhead presses the filament-cutter lever against the frame.
+  // dialect "bambu": the plain G-code BambuPlot proved on the A1 (G4 S pauses, Bambu's tunes). "generic": G4 P
+  // pauses in ms (Klipper ignores G4 S) and no G21 (Klipper doesn't know it; every firmware here defaults to mm).
+  // plate: how far the plate reaches past where the nozzle may go [left, front, right, back] (exclusions at its edges,
+  // a second nozzle): the offset test's paper goes into the plate's own corner.
   const CUTTER = [0, 0, 18, 28];
   const PRINTERS = {
-    "Bambu Lab A1": [256, 256, 256, null],
-    "Bambu Lab A1 mini": [180, 180, 180, null],
-    "Bambu Lab P1P / P1S": [256, 256, 250, CUTTER],
-    "Bambu Lab P2S": [256, 256, 256, null],
-    "Bambu Lab X1 Carbon / X1E": [256, 256, 250, CUTTER],
-    "Custom": null,
+    "Bambu Lab A1": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0]],
+    "Bambu Lab A1 mini": [180, 180, 180, [], [0, 0], "bambu", [0, 0, 0, 0]],
+    "Bambu Lab P1P / P1S": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0]],
+    "Bambu Lab P2S": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0]],
+    "Bambu Lab X1 Carbon / X1E": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0]],
   };
+  const PRINTER_GROUPS = [["Bambu Lab", Object.keys(PRINTERS)]]; // vendor -> printer names, for the printer list
+  { // every other printer OrcaSlicer knows: [x0, y0, x1, y1, max Z, firmware, keep-outs], in its own coordinates
+    const orca = typeof HW_PRINTERS !== "undefined" ? HW_PRINTERS : typeof require === "function" ? require("./printers.js") : {};
+    for (const [vendor, list] of Object.entries(orca)) {
+      const names = [];
+      for (const [name, [x0, y0, x1, y1, z, , keep, plate = [x0, y0, x1, y1]]] of Object.entries(list)) {
+        if (Object.hasOwn(PRINTERS, name)) continue;
+        PRINTERS[name] = [x1 - x0, y1 - y0, Math.min(z, 1000) /* our moves stay low anyway */, keep.map(([a, b, c, d]) => [a - x0, b - y0, c - x0, d - y0]),
+          [x0, y0], "generic", [x0 - plate[0], y0 - plate[1], plate[2] - x1, plate[3] - y1]];
+        names.push(name);
+      }
+      const group = PRINTER_GROUPS.find(g => g[0] === vendor);
+      if (group) group[1].push(...names); else if (names.length) PRINTER_GROUPS.push([vendor, names]);
+    }
+    PRINTERS.Custom = null;
+    PRINTER_GROUPS.push(["Other", ["Custom"]]);
+  }
   const PAPERS = { "A4": [210, 297], "A5": [148, 210], "A6": [105, 148], "US Letter": [215.9, 279.4],
     "Card 4x6 in": [101.6, 152.4], "Custom": null };
   const BED_INSET = 3;    // text stays this far inside the plate edges
@@ -160,10 +182,10 @@
   };
   // Every number that reaches the G-code: [min, max]. Values must be real, finite numbers.
   const LIMITS = {
-    printer: { bed_x: [50, 400], bed_y: [50, 400], bed_z: [50, 400], offset_x: [-100, 100], offset_y: [-100, 100],
+    printer: { bed_x: [50, 1000], bed_y: [50, 1000], bed_z: [50, 1000], offset_x: [-100, 100], offset_y: [-100, 100],
       z_draw: [2, 200], z_lift: [3, 200], z_feed: [60, 1200], draw_feed: [60, 12000], travel_feed: [600, 12000],
       paper_pause_s: [5, 600], pen_pause_s: [5, 600], shift_pause_s: [5, 600], settle_ms: [0, 2000] },
-    paper: { x: [-600, 600], y: [-600, 600], width: [30, 600], height: [30, 600], margin: [0, 50], margin_y: [0, 80],
+    paper: { x: [-1000, 1000], y: [-1000, 1000], width: [30, 600], height: [30, 600], margin: [0, 50], margin_y: [0, 80],
       ruling: [0, 30], first_line: [0, 600], margin_line: [0, 300] },
     writing: { bias: [0, 2], wobble: [0, 2], x_height: [1, 20], line_spacing: [1, 100], word_spacing: [0.2, 5] },
   };
@@ -205,8 +227,8 @@
     const pr = cfg.printer, p = cfg.paper;
     if (!Object.hasOwn(PRINTERS, pr.model) || !Object.hasOwn(PAPERS, p.size))
       throw new WriteError(`Unknown printer ${JSON.stringify(pr.model)} or paper ${JSON.stringify(p.size)}`);
-    pr.keepout = null;
-    if (PRINTERS[pr.model]) [pr.bed_x, pr.bed_y, pr.bed_z, pr.keepout] = PRINTERS[pr.model];
+    pr.keepouts = []; pr.origin = [0, 0]; pr.dialect = "generic"; pr.plate = [0, 0, 0, 0];
+    if (PRINTERS[pr.model]) [pr.bed_x, pr.bed_y, pr.bed_z, pr.keepouts, pr.origin, pr.dialect, pr.plate] = PRINTERS[pr.model];
     if (PAPERS[p.size]) [p.width, p.height] = PAPERS[p.size];
     const [short, long] = [p.width, p.height].sort((a, b) => a - b);
     [p.width, p.height] = p.orientation === "landscape" ? [long, short] : [short, long];
@@ -619,19 +641,20 @@
     return passes;
   }
 
-  /** BambuPlot-style plain G-code (known to run on the A1) with timed pauses. Strokes marked .pen = PEN2 are written
+  /** BambuPlot-style plain G-code (known to run on the A1) with timed pauses, in the printer's dialect. Strokes marked .pen = PEN2 are written
    *  last, after a pen change. With printer.dry_run the pen is still clamped at the writing height, but every stroke
    *  is drawn DRY_RUN_LIFT mm higher, so the same file runs without touching the paper. */
   function toGcode(passes, cfg, header) {
-    const p = cfg.paper, pr = cfg.printer, ko = pr.keepout, dz = pr.dry_run ? DRY_RUN_LIFT : 0;
+    const p = cfg.paper, pr = cfg.printer, dz = pr.dry_run ? DRY_RUN_LIFT : 0, [ox, oy] = pr.origin;
     const f = v => v.toFixed(2), i = v => String(Math.round(v)); // pauses and feeds as whole numbers
     const xy = (pt, shift) => {
       const x = p.x + pt[0] - pr.offset_x, y = p.y + shift + p.height - pt[1] - pr.offset_y;
-      // Final guard on the exact numbers written: inside the bed, outside any keep-out (NaN fails too).
-      if (!(x >= 0 && x <= pr.bed_x && y >= 0 && y <= pr.bed_y) || (ko && x >= ko[0] && x <= ko[2] && y >= ko[1] && y <= ko[3]))
-        throw new WriteError(`Refusing a move to X${f(x)} Y${f(y)}: outside this printer's safe area. Move the paper or check the pen offset.`);
-      return `X${f(x)} Y${f(y)}`;
+      // Final guard on every move: inside the bed, outside every keep-out (NaN fails too). Then the printer's own coordinates.
+      if (!(x >= 0 && x <= pr.bed_x && y >= 0 && y <= pr.bed_y) || pr.keepouts.some(k => x >= k[0] && x <= k[2] && y >= k[1] && y <= k[3]))
+        throw new WriteError(`Refusing a move to X${f(x + ox)} Y${f(y + oy)}: outside this printer's safe area. Move the paper or check the pen offset.`);
+      return `X${f(x + ox)} Y${f(y + oy)}`;
     };
+    const wait = s => (pr.dialect === "bambu" ? `G4 S${i(s)}` : `G4 P${i(s * 1000)}`); // Klipper reads only P (ms)
     const z = (h, feed = pr.z_feed) => `G1 Z${f(h)} F${i(feed)}`;
     const up = z(pr.z_lift + dz), down = z(pr.z_draw + dz), touch = z(pr.z_draw); // touch: where a pen is clamped
     const settle = pr.settle_ms >= 1 ? [`G4 P${i(pr.settle_ms)}`] : [];
@@ -646,24 +669,24 @@
     // pen 1's strokes first, then pen 2's (planPasses allows a second pen only in a single pass)
     const order = ps => [...ps.strokes.filter(s => s.pen !== PEN2), ...ps.strokes.filter(s => s.pen === PEN2)];
     const firstPen2 = passes.length === 1 && passes[0].strokes.some(s => s.pen !== PEN2) ? passes[0].strokes.find(s => s.pen === PEN2) : null;
-    out.push("G90", "G21", ...sound("start"), "G28"); // always home: every move after this assumes a known position
+    out.push("G90", ...(pr.dialect === "bambu" ? ["G21"] : []), ...sound("start"), "G28"); // always home: every move after this assumes a known position
     out.push("M104 S0"); // nozzle heater off: nothing here needs heat, and the pen holder sits next to the hotend
     out.push(z(pr.z_draw + CLEARANCE), `G0 ${xy(order(passes[0])[0][0], 0)} ${travel}`,
-      "; place the paper: the first letter goes right under the pen holder", ...sound("pause"), `G4 S${i(pr.paper_pause_s)}`,
+      "; place the paper: the first letter goes right under the pen holder", ...sound("pause"), wait(pr.paper_pause_s),
       ...sound("resume"), touch, "; attach the pen: slide it down until it touches the paper, then clamp it", ...sound("pause"),
-      `G4 S${i(pr.pen_pause_s)}`, up, ...sound("resume")); // resume tune only once the pen is lifted off the paper
+      wait(pr.pen_pause_s), up, ...sound("resume")); // resume tune only once the pen is lifted off the paper
     passes.forEach((ps, k) => {
       out.push(`; PASS ${k + 1} of ${passes.length}: paper slid ${ps.shift} mm toward the back`);
       if (ps.hover) out.push(z(Math.max(pr.z_lift + dz, pr.z_draw + SLIDE_HOVER)), // clear of wet ink
         `G0 ${xy(ps.hover, ps.shift)} ${travel}`,
         `; slide the paper ${ps.shift - passes[k - 1].shift} mm toward the back until the last mark written is right under the pen`,
-        ...sound("pause"), `G4 S${i(pr.shift_pause_s)}`, ...sound("resume"), up);
+        ...sound("pause"), wait(pr.shift_pause_s), ...sound("resume"), up);
       for (const s of order(ps)) {
         // Pen change, like the start: head well up while pen 1 comes out, then down to the writing height for pen 2.
         // The only tune plays with the head up, never with a pen on the paper.
         if (s === firstPen2) out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), `G0 ${xy(s[0], ps.shift)} ${travel}`,
-          "; PEN CHANGE: take pen 1 out of the holder", ...sound("pause"), `G4 S${i(pr.pen_pause_s)}`,
-          touch, "; put pen 2 in: slide it down until it touches the paper, then clamp it", `G4 S${i(pr.pen_pause_s)}`, up, ...sound("resume"));
+          "; PEN CHANGE: take pen 1 out of the holder", ...sound("pause"), wait(pr.pen_pause_s),
+          touch, "; put pen 2 in: slide it down until it touches the paper, then clamp it", wait(pr.pen_pause_s), up, ...sound("resume"));
         out.push(`G0 ${xy(s[0], ps.shift)} ${travel}`, down, ...settle);
         const feed = Math.min(12000, pr.draw_feed * (0.85 + 0.3 * frac(++strokeNo))); // a hand's speed varies stroke to stroke
         for (let j = 1; j < s.length; j++) out.push(`G1 ${xy(s[j], ps.shift)}` + (j === 1 ? ` F${i(feed)}` : ""));
@@ -683,7 +706,7 @@
   function describe(cfg, seed) {
     const w = cfg.writing, pr = cfg.printer, p = cfg.paper;
     return [`handwrite: style=${w.style} bias=${w.bias} wobble=${w.wobble} x_height=${w.x_height} seed=${seed}`,
-      `ONLY for ${pr.model} (bed ${pr.bed_x} x ${pr.bed_y} mm), pen offset ${pr.offset_x},${pr.offset_y}`,
+      `ONLY for ${pr.model} (bed ${pr.bed_x} x ${pr.bed_y} mm${pr.origin[0] || pr.origin[1] ? ` from X${pr.origin[0]} Y${pr.origin[1]}` : ""}), pen offset ${pr.offset_x},${pr.offset_y}`,
       `paper ${p.size} ${p.orientation}, front-left corner at X${p.x} Y${p.y}`];
   }
 
@@ -692,11 +715,12 @@
   /** Pen-offset test: A4 portrait pushed into the plate's back-left corner. The nozzle draws a long line
    *  OFFSET_TEST_Y mm in front of the plate's back edge and a short mark across it at the plate's middle; where the
    *  pen really draws them gives the offset (offsetFromTest). Same heights, speeds, pauses and checks as writing.
-   *  shortcut: assumes the plate's back and left edges are at Y = bed_y and X = 0; re-measure if writing lands off. */
+   *  The paper goes into the plate's own corner (pr.plate: the plate may reach past where the nozzle may go).
+   *  shortcut: assumes the printer's profile matches its plate edges; re-measure if writing lands off. */
   function offsetTest(settings) {
     const pr = resolve(settings).printer, [width, height] = PAPERS.A4;
     const cfg = resolve({ ...settings, printer: { ...settings.printer, offset_x: 0, offset_y: 0, dry_run: false },
-      paper: { ...settings.paper, size: "A4", orientation: "portrait", x: 0, y: pr.bed_y - height } });
+      paper: { ...settings.paper, size: "A4", orientation: "portrait", x: -pr.plate[0], y: pr.bed_y + pr.plate[3] - height } });
     const { left: mid, top: Y } = offsetTestMarks(settings), half = Math.min(50, mid - BED_INSET);
     const marks = [[[mid - half, Y], [mid + half, Y]], [[mid, Y - 10], [mid, Y + 10]]];
     return toGcode(planPasses([marks], cfg), cfg, ["handwrite: pen offset test", ...describe(cfg, 0).slice(1),
@@ -712,7 +736,7 @@
     return { offset_x: round2(fromLeft - m.left), offset_y: round2(m.top - fromTop) };
   }
 
-  return { WriteError, SOUND_PRINTERS, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
+  return { WriteError, SOUND_PRINTERS, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PRINTER_GROUPS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
     toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper, penRange,
     lineGrid, headerWords, rulingLetters, PEN2, DRY_RUN_LIFT, MARGIN_LINE_GAP, WORD_SIZE };

@@ -423,8 +423,7 @@
     ctx.save(); plate(); ctx.clip(); // shade where the pen would be past the real plate's edges
     ctx.beginPath(); ctx.rect(X(dx), Y(by + dy), bx * s, by * s); ctx.rect(X(0), Y(by), bx * s, by * s);
     ctx.fillStyle = "rgba(150,140,125,.42)"; ctx.fill("evenodd"); ctx.restore();
-    if (pr.keepout) { // nozzle may not go here (P1/X1 filament cutter); shown where the pen would be
-      const [a, b, c, d] = pr.keepout;
+    for (const [a, b, c, d] of pr.keepouts) { // nozzle may not go here (e.g. P1/X1 filament cutter); shown where the pen would be
       ctx.fillStyle = "rgba(184,58,46,.35)";
       ctx.fillRect(X(a + pr.offset_x), Y(d + pr.offset_y), (c - a) * s, (d - b) * s);
     }
@@ -688,7 +687,11 @@
     const el = $(id); el.value = obj()[key];
     el.addEventListener("input", () => { if (el.value !== "" && Number.isFinite(+el.value)) { obj()[key] = +el.value; scheduleRender(delay); } });
   }
-  for (const m of Object.keys(G.PRINTERS)) $("printer").add(new Option(m, m));
+  for (const [vendor, names] of G.PRINTER_GROUPS) { // by maker: Bambu Lab first, then everything OrcaSlicer knows
+    const g = document.createElement("optgroup"); g.label = vendor;
+    for (const m of names) g.append(new Option(m, m));
+    $("printer").append(g);
+  }
   for (const m of Object.keys(G.PAPERS)) $("paper").add(new Option(m, m));
   $("printer").value = PR_().model; $("paper").value = P_().size;
   $("printer").onchange = () => { PR_().model = $("printer").value; centrePaper(); };

@@ -1,18 +1,31 @@
 // Independent G-code simulator: knows only physical facts, not gcode.js's maths. Throws on any violation.
 const assert = require("node:assert");
-// Independent physical facts: [bed_x, bed_y, max Z, keep-out or null]
+// Independent physical facts, in the printer's own coordinates: [x0, y0, x1, y1 (where the nozzle may go), max Z,
+// nozzle keep-outs, dialect]. Bambu Lab by hand; every other printer straight from OrcaSlicer's data (printers.js),
+// not from gcode.js's converted table, so the shift into the printer's coordinates is checked too.
 const FACTS = {
-  "Bambu Lab A1": [256, 256, 256, null], "Bambu Lab A1 mini": [180, 180, 180, null],
-  "Bambu Lab P1P / P1S": [256, 256, 250, [0, 0, 18, 28]], "Bambu Lab P2S": [256, 256, 256, null],
-  "Bambu Lab X1 Carbon / X1E": [256, 256, 250, [0, 0, 18, 28]],
+  "Bambu Lab A1": [0, 0, 256, 256, 256, [], "bambu"], "Bambu Lab A1 mini": [0, 0, 180, 180, 180, [], "bambu"],
+  "Bambu Lab P1P / P1S": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu"], "Bambu Lab P2S": [0, 0, 256, 256, 256, [], "bambu"],
+  "Bambu Lab X1 Carbon / X1E": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu"],
 };
+for (const list of Object.values(require("../printers.js")))
+  for (const [name, [x0, y0, x1, y1, z, , keep]] of Object.entries(list)) if (!FACTS[name]) FACTS[name] = [x0, y0, x1, y1, z, keep, "generic"];
 const LINE_OK = /^(;[^\n]*|G90|G21|G28|M104 S0|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
 
 /** Simulate a G-code file; throws on any violation. s: the settings it was made from (for z, paper, offsets). */
 function simulate(gcode, s) {
   const model = s.printer.model;
-  const [bx, by, bz, ko] = FACTS[model] || [s.printer.bed_x, s.printer.bed_y, s.printer.bed_z, null];
+  const [X0, Y0, X1, Y1, bz, keepouts, dialect] = FACTS[model] || (model === "Custom" ? [0, 0, s.printer.bed_x, s.printer.bed_y, s.printer.bed_z, [], "generic"] : []);
+  assert.ok(dialect, `unknown printer ${model}`);
   const { offset_x: ox, offset_y: oy } = s.printer;
+  // Pauses: Bambu's G4 S (seconds); everywhere else G4 P (ms), since Klipper ignores S and would not wait at all.
+  const pauses = [...gcode.matchAll(/^G4 ([SP])(\d+)$/gm)].map(m => [m[1], +m[2]]);
+  if (dialect === "generic") {
+    assert.ok(!/^G21$/m.test(gcode) && pauses.every(([u]) => u === "P"), `${model}: G21 or a G4 S in a file for this firmware`);
+    for (const sec of [s.printer.paper_pause_s, s.printer.pen_pause_s])
+      assert.ok(pauses.some(([, v]) => v === Math.round(sec) * 1000), `${model}: no ${sec} s pause (as G4 P${Math.round(sec) * 1000})`);
+  } else for (const sec of [s.printer.paper_pause_s, s.printer.pen_pause_s])
+    assert.ok(pauses.some(([u, v]) => u === "S" && v === Math.round(sec)), `${model}: no ${sec} s pause`);
   const zd = +s.printer.z_draw.toFixed(2), zl = +s.printer.z_lift.toFixed(2); // as written in the file
   const dry = s.printer.dry_run === true ? 8 : 0; // a dry run draws 8 mm above the writing height: the pen never touches
   const pw = s.paper.width, ph = s.paper.height; // already oriented by the caller
@@ -51,8 +64,8 @@ function simulate(gcode, s) {
     if ("X" in m) {
       x = m.X; y = m.Y;
       assert.ok(z !== null, `XY move before any Z move ${where}`);
-      assert.ok(x >= 0 && x <= bx && y >= 0 && y <= by, `nozzle off the bed ${where}`);
-      if (ko) assert.ok(!(x >= ko[0] && x <= ko[2] && y >= ko[1] && y <= ko[3]), `nozzle in keep-out ${where}`);
+      assert.ok(x >= X0 && x <= X1 && y >= Y0 && y <= Y1, `nozzle off the bed ${where}`);
+      for (const ko of keepouts) assert.ok(!(x >= ko[0] && x <= ko[2] && y >= ko[1] && y <= ko[3]), `nozzle in keep-out ${where}`);
       if (dry) assert.ok(z >= zd + dry - 1e-9, `dry run: a move with the pen near the paper ${where}`);
       if (line.startsWith("G0")) assert.ok(z >= zl + dry - 1e-9 || draws === 0, `travel with the pen down ${where}`);
       else {
@@ -60,8 +73,8 @@ function simulate(gcode, s) {
         draws++;
       }
       if (z <= zd + 1e-9) { // pen touches: must be over the plate AND on the paper (for this pass)
-        const px = x + ox, py = y + oy;
-        assert.ok(px >= 0 && px <= bx && py >= 0 && py <= by, `pen off the plate ${where}`);
+        const px = x - X0 + ox, py = y - Y0 + oy; // the paper's position is measured from the bed's front-left corner
+        assert.ok(px >= 0 && px <= X1 - X0 && py >= 0 && py <= Y1 - Y0, `pen off the plate ${where}`);
         const left = s.paper.x, front = s.paper.y + shift;
         assert.ok(px >= left - 1e-6 && px <= left + pw + 1e-6 && py >= front - 1e-6 && py <= front + ph + 1e-6, `pen off the paper ${where}`);
       }

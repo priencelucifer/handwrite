@@ -6,7 +6,8 @@ It opens in your web browser (Edge, Chrome, Firefox or Safari) and works offline
 Keep all the files together in one folder.
 
 1. Type your text and pick a handwriting style.
-2. Choose your printer and paper. Drag the paper on the build plate to where it will sit.
+2. Choose your printer (Bambu Lab, or any of 400+ printers from OrcaSlicer's list) and paper. Drag the paper on
+   the build plate to where it will sit.
 3. Using the "Plotter" pen holder by Elli (MakerWorld)? Its pen offset, X 1 and Y -25 mm, is the default: skip this step.
    Otherwise open "Printer settings" once and enter your pen offset (the BambuPlot "tool offset"), or measure it:
    "Save offset test G-code", push A4 paper into the top-left (far-left) corner of the plate, run the file, then type in how far

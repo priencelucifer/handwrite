@@ -5,7 +5,7 @@ from pathlib import Path
 
 WEB = Path(__file__).resolve().parents[1]
 RENAME = {"app.html": "Handwrite.html", "index.html": "Guide.html"}
-FILES = ["app.html", "index.html", "guide-app.png", "app.js", "engine.js", "gcode.js", "weights.js", "styles.js", "README.txt"]
+FILES = ["app.html", "index.html", "guide-app.png", "app.js", "engine.js", "gcode.js", "weights.js", "styles.js", "printers.js", "README.txt"]
 
 out = WEB.parent / "dist" / "Handwrite-web.zip"
 out.parent.mkdir(exist_ok=True)

@@ -4,14 +4,15 @@
 
 **Real-looking handwriting from your 3D printer.**
 
-Type some text, pick a handwriting, and get G-code that writes it with a pen on a Bambu Lab printer.
+Type some text, pick a handwriting, and get G-code that writes it with a pen on your 3D printer: Bambu Lab, Prusa,
+Creality, Voron and 400+ more.
 It runs in your browser, works offline, and needs no install.
 
 **Use it now: [handwrite.rickykashyap.top](https://handwrite.rickykashyap.top)**
 
 ![Tests](https://img.shields.io/badge/tests-31_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
-![Printers](https://img.shields.io/badge/printers-Bambu_Lab_A1_%7C_P1_%7C_P2S_%7C_X1-e08a00)
+![Printers](https://img.shields.io/badge/printers-Bambu_Lab_%2B_400%2B_from_OrcaSlicer-e08a00)
 
 <img src="docs/images/app.png" alt="Handwrite: text on the left, a handwritten page on the printer's build plate on the right" width="900">
 
@@ -87,11 +88,15 @@ default, so you can skip this. For any other holder:
 
 | Printers | Paper |
 |---|---|
-| Bambu Lab A1, A1 mini, P1P / P1S, P2S, X1 Carbon / X1E | A4, A5, A6, US Letter, 4×6 in card |
+| Bambu Lab A1, A1 mini, P1P / P1S, P2S, X1 Carbon / X1E (checked by hand) | A4, A5, A6, US Letter, 4×6 in card |
+| 400+ more from [OrcaSlicer](https://github.com/OrcaSlicer/OrcaSlicer)'s profiles: Prusa, Creality, Voron, Elegoo, Qidi, Anycubic, Sovol, … | |
 | Custom (any bed size) | Custom (any size), portrait or landscape |
 
-The G-code is plain and BambuPlot-style. It was developed on an A1; the other models use the same commands and
-bed sizes from Bambu's specs.
+The G-code is plain and BambuPlot-style. It was developed on an A1; the other Bambu models use the same commands and
+bed sizes from Bambu's specs. For every other printer, its printable area, height, bed keep-out areas and firmware come
+from OrcaSlicer's printer profiles (`web/tools/orca-printers.js` builds `web/printers.js` from them). Klipper printers get
+pauses as `G4 P` (milliseconds), which every firmware here reads, and no `G21`. Round (delta) beds, belt printers and
+printers that need their own file format are left out.
 
 ## Safety
 
@@ -169,6 +174,7 @@ The [`python/`](python/) folder holds the older desktop and command-line version
 - Inference ported from [tibordp/kurvengefahr](https://github.com/tibordp/kurvengefahr) (GPL-2.0).
 - G-code conventions from [Joep648/BambuPlot](https://github.com/Joep648/BambuPlot).
 - Start and finish tunes copied from the printer profiles in [Bambu Studio](https://github.com/bambulab/BambuStudio) (AGPL-3.0).
+- Printer bed sizes, heights, keep-out areas and firmware from [OrcaSlicer](https://github.com/OrcaSlicer/OrcaSlicer)'s printer profiles (AGPL-3.0).
 
 There is no license file yet. Because of the GPL-2.0 and AGPL-3.0 code and the academic-use training data, check them
 before sharing this beyond personal use.
