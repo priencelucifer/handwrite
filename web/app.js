@@ -687,11 +687,16 @@
     const el = $(id); el.value = obj()[key];
     el.addEventListener("input", () => { if (el.value !== "" && Number.isFinite(+el.value)) { obj()[key] = +el.value; scheduleRender(delay); } });
   }
-  for (const [vendor, names] of G.PRINTER_GROUPS) { // by maker: Bambu Lab first, then everything OrcaSlicer knows
-    const g = document.createElement("optgroup"); g.label = vendor;
-    for (const m of names) g.append(new Option(m, m));
-    $("printer").append(g);
+  // printer: the maker first (Bambu Lab, then everyone OrcaSlicer knows), then only that maker's printers
+  const makerOf = m => (G.PRINTER_GROUPS.find(([, names]) => names.includes(m)) || G.PRINTER_GROUPS[0])[0];
+  for (const [vendor] of G.PRINTER_GROUPS) $("printerMaker").add(new Option(vendor === "Other" ? "Other (custom size)" : vendor, vendor));
+  function fillPrinters(vendor) {
+    const sel = $("printer");
+    sel.textContent = "";
+    for (const m of G.PRINTER_GROUPS.find(g => g[0] === vendor)[1]) sel.add(new Option(m.startsWith(vendor + " ") ? m.slice(vendor.length + 1) : m, m));
   }
+  $("printerMaker").value = makerOf(PR_().model); fillPrinters($("printerMaker").value);
+  $("printerMaker").onchange = () => { fillPrinters($("printerMaker").value); $("printer").dispatchEvent(new Event("change")); }; // its first printer
   for (const m of Object.keys(G.PAPERS)) $("paper").add(new Option(m, m));
   $("printer").value = PR_().model; $("paper").value = P_().size;
   $("printer").onchange = () => { PR_().model = $("printer").value; centrePaper(); };
