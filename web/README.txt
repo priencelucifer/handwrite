@@ -27,6 +27,8 @@ Running the file:
 - Long pages (for example A4 on an A1): writing stops where the pen would leave the plate and the text
   continues on the next page. With "Slide the paper" ticked it pauses instead: the pen stops over the last
   thing it wrote; slide the paper toward the back until that mark is under the pen tip.
+- New printer? Save a reach check first (Printing > Save reach check) and run it with no pen and no paper: the head visits
+  the far corners of the page's writing so you can see the pen holder clears everything.
 - Do a dry run first (Printing > Dry run: the pen stays 8 mm above the paper), and stay with the printer the first time.
 - Pen ran out mid-page? Leave the paper taped down, fit a new pen, set Printing > Start at line and save again.
 

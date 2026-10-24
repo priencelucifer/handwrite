@@ -12,8 +12,9 @@ for (const list of Object.values(require("../printers.js")))
   for (const [name, [x0, y0, x1, y1, z, , keep]] of Object.entries(list)) if (!FACTS[name]) FACTS[name] = [x0, y0, x1, y1, z, keep, "generic"];
 const LINE_OK = /^(;[^\n]*|G90|G21|G28|M104 S0|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
 
-/** Simulate a G-code file; throws on any violation. s: the settings it was made from (for z, paper, offsets). */
-function simulate(gcode, s) {
+/** Simulate a G-code file; throws on any violation. s: the settings it was made from (for z, paper, offsets).
+ *  opts.reach: a reach check (no pen, no paper): nothing may be drawn and no paper or pen pause is needed. */
+function simulate(gcode, s, opts = {}) {
   const model = s.printer.model;
   const [X0, Y0, X1, Y1, bz, keepouts, dialect] = FACTS[model] || (model === "Custom" ? [0, 0, s.printer.bed_x, s.printer.bed_y, s.printer.bed_z, [], "generic"] : []);
   assert.ok(dialect, `unknown printer ${model}`);
@@ -22,9 +23,9 @@ function simulate(gcode, s) {
   const pauses = [...gcode.matchAll(/^G4 ([SP])(\d+)$/gm)].map(m => [m[1], +m[2]]);
   if (dialect === "generic") {
     assert.ok(!/^G21$/m.test(gcode) && pauses.every(([u]) => u === "P"), `${model}: G21 or a G4 S in a file for this firmware`);
-    for (const sec of [s.printer.paper_pause_s, s.printer.pen_pause_s])
+    if (!opts.reach) for (const sec of [s.printer.paper_pause_s, s.printer.pen_pause_s])
       assert.ok(pauses.some(([, v]) => v === Math.round(sec) * 1000), `${model}: no ${sec} s pause (as G4 P${Math.round(sec) * 1000})`);
-  } else for (const sec of [s.printer.paper_pause_s, s.printer.pen_pause_s])
+  } else if (!opts.reach) for (const sec of [s.printer.paper_pause_s, s.printer.pen_pause_s])
     assert.ok(pauses.some(([u, v]) => u === "S" && v === Math.round(sec)), `${model}: no ${sec} s pause`);
   const zd = +s.printer.z_draw.toFixed(2), zl = +s.printer.z_lift.toFixed(2); // as written in the file
   const dry = s.printer.dry_run === true ? 8 : 0; // a dry run draws 8 mm above the writing height: the pen never touches
@@ -81,6 +82,7 @@ function simulate(gcode, s) {
     }
   }
   assert.ok(homed, "never homed");
+  if (opts.reach) assert.strictEqual(draws, 0, "a reach check draws nothing");
   assert.ok("Z" in firstMotionAfterHome && firstMotionAfterHome.Z >= zd + 10, "first move after homing must lift");
   assert.ok(z >= zl, "file ends with the pen up");
   return draws;

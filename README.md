@@ -41,6 +41,8 @@ and word gaps are never the same twice.
 - **Edit any word or line**: click it in the preview to drag it, resize it, give it another handwriting or write it again.
   The rest of the page stays as it is, and moved words are still checked against the paper and the pen's reach.
 - **Dry run** (the pen stays 8 mm above the paper) and **start again from line N** when a pen runs dry mid-page.
+- **Reach check**: a file to run with no pen and no paper. The head visits the far corners of the page's writing at
+  pen-up height, slowly, so you can see the pen holder clears the bed clips, wiper and frame on a new printer.
 - **Pen offset test**: print two marks, measure them with a ruler, and the app works out where your pen sits.
 - **Safety first**: every move is checked against your printer's bed before the file is saved (see [Safety](#safety)).
 - **Printer sounds** (A1, A1 mini, P2S): Bambu's own start and finish tunes, plus a tune when it's time to place the paper or attach the pen.

@@ -396,6 +396,7 @@ test("every printer OrcaSlicer knows: a page is safe in its own coordinates, and
     try { out = run(s, "Dear friend,\nA short note written on this printer.", 3); }
     catch (e) { if (!(e instanceof G.WriteError)) throw e; refused++; continue; }
     simulate(out.gcode, out.cfg); // own coordinates, keep-outs and dialect, from OrcaSlicer's data
+    simulate(G.reachCheck(out.passes, out.cfg, ["t"]), out.cfg, { reach: true }); // and its reach check
     const bambu = out.cfg.printer.dialect === "bambu";
     assert.strictEqual(/^G21$/m.test(out.gcode), bambu, `${model}: G21 only for Bambu`);
     assert.ok(out.gcode.includes(bambu ? "\nG4 S30\n" : "\nG4 P30000\n"), `${model}: 30 s pauses as ${bambu ? "G4 S30" : "G4 P30000 (Klipper ignores S)"}`);
@@ -420,6 +421,29 @@ test("a printer whose bed starts elsewhere gets the very same moves, shifted int
   });
   assert.ok(shifted > 20);
   assert.ok(a.some(l => /^G0 X-\d/.test(l)), "negative X written as such");
+});
+
+test("reach check: no drawing, the written points nearest the corners at pen-up height, on every kind of printer", () => {
+  const text = "Dear friend,\nA page that reaches out to the corners of its writing area.\nThird line here.";
+  for (const model of ["Bambu Lab A1", "Bambu Lab P1P / P1S", "Voron 2.4 350", "Flashforge Adventurer 5M", "Elegoo Centauri Carbon", "Prusa MK4"]) {
+    const s = withSet({ "printer.model": model, "printer.dry_run": true }); // a dry run setting must not leak in
+    Object.assign(s.paper, G.placePaper(G.resolve(s)));
+    const page = run(s, text, 4), check = G.reachCheck(page.passes, page.cfg, ["t"]);
+    simulate(check, { ...s, printer: { ...page.cfg.printer, dry_run: false }, paper: page.cfg.paper }, { reach: true });
+    const g = check.split("\n"), pr = page.cfg.printer, bambu = pr.dialect === "bambu";
+    assert.match(check, /^G28\nM104 S0$/m, model);
+    assert.ok(!g.some(l => /^G1 X/.test(l)), `${model}: nothing drawn`);
+    const visits = g.filter(l => / F1500$/.test(l));
+    assert.strictEqual(visits.length, 4, model);
+    assert.strictEqual(g.filter(l => l === (bambu ? `G4 S${G.REACH_WAIT_S}` : `G4 P${G.REACH_WAIT_S * 1000}`)).length, 4, `${model}: a wait at each corner`);
+    // each corner is a point the page really writes (same coordinates as in the page file), visited at pen-up height
+    const written = new Set(page.gcode.split("\n").filter(l => /^G[01] X/.test(l)).map(l => l.match(/X\S+ Y\S+/)[0]));
+    for (const v of visits) assert.ok(written.has(v.match(/X\S+ Y\S+/)[0]), `${model}: ${v} is a written point`);
+    const zs = g.filter(l => /^G1 Z/.test(l)).map(l => +l.match(/Z(\S+)/)[1]);
+    assert.strictEqual(zs[1], +pr.z_lift.toFixed(2), `${model}: corners at pen-up height`);
+    const xs = visits.map(v => +v.match(/X(\S+)/)[1]), ys = visits.map(v => +v.match(/Y(\S+)/)[1]);
+    assert.ok(xs[0] < xs[1] && ys[0] > ys[3] && xs[3] < xs[2] && ys[1] > ys[2], `${model}: back left, back right, front right, front left`);
+  }
 });
 
 test("bed keep-outs from OrcaSlicer are never entered (Elegoo purge corner, Qidi corners)", () => {

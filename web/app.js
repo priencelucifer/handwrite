@@ -911,6 +911,26 @@
     $("savedWhere").textContent = `${where} Only run it on the ${v.cfg.printer.model}. Writing takes about ${t.dur} including the pauses (done around ${t.at} if you start now).`;
     showSteps({ cfg: v.cfg, passes }, from > 1 ? [`Leave the paper taped where it is. In the first pause the head stops over the first letter of line ${from}: check that it lines up.`] : []);
   };
+  // ---------- reach check: the head visits the far corners of this page's writing, no pen, no paper ----------
+  $("reachCheck").onclick = async () => {
+    const v = cur();
+    if (!v || state.error || state.busy) return;
+    let gcode;
+    try {
+      const cfg = G.resolve(state.settings); // the exact settings shown now, checked again
+      if (JSON.stringify(cfg) !== JSON.stringify(v.cfg)) { await render(); return $("reachCheck").click(); }
+      gcode = G.reachCheck(G.planPasses(v.lines, cfg), cfg, [...G.describe(cfg, state.seed), "reach check for this page: no pen, no paper"]);
+    } catch (e) { return fail(e); }
+    const where = await download(gcode, `reach-check-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.gcode`, "text/plain");
+    if (!where) return;
+    $("savedWhere").textContent = `${where} Only run it on the ${v.cfg.printer.model}.`;
+    $("savedSteps").textContent = "";
+    for (const s of ["Take the pen out of the holder and leave the plate empty. The printer homes first, and homing touches the nozzle to the plate.",
+      `Start the file. The head goes to the four corners of where this page will be written, at the height it travels at when writing, and waits ${G.REACH_WAIT_S} s at each.`,
+      "Watch the pen holder at each corner: it must clear the bed clips, the nozzle wiper and the frame. If anything comes close, stop the printer, then move the paper inward or check the pen offset.",
+      "All clear? Save the page and write it."]) { const li = document.createElement("li"); li.textContent = s; $("savedSteps").append(li); }
+    $("savedDlg").showModal();
+  };
   function showSteps(v, extra) {
     const pr = v.cfg.printer, steps = [...extra];
     if (state.dryRun) steps.unshift(`Dry run: the pen is clamped as usual, then every stroke is drawn ${G.DRY_RUN_LIFT} mm above the paper, so nothing gets written.`);

@@ -54,6 +54,7 @@
   const DRY_RUN_LIFT = 8; // a dry run writes this far above the writing height, so the pen never reaches the paper
   const MARGIN_LINE_GAP = 2; // ruled paper: writing starts this far right of the printed margin line
   const PEN2 = 2;         // stroke.pen for text marked *like this*: written after a pen change
+  const REACH_FEED = 1500, REACH_WAIT_S = 3; // reach check: slow enough to watch and stop, a pause at each corner
   const WORD_SIZE = [0.3, 4]; // a word's own size (wd.size), times the letter size
 
   // Motor "music" (Bambu M1006): each line plays three channels at once, A/B/L, C/D/M and E/F/N = MIDI note (0 = rest),
@@ -644,7 +645,7 @@
   /** BambuPlot-style plain G-code (known to run on the A1) with timed pauses, in the printer's dialect. Strokes marked .pen = PEN2 are written
    *  last, after a pen change. With printer.dry_run the pen is still clamped at the writing height, but every stroke
    *  is drawn DRY_RUN_LIFT mm higher, so the same file runs without touching the paper. */
-  function toGcode(passes, cfg, header) {
+  function toGcode(passes, cfg, header, opts = {}) {
     const p = cfg.paper, pr = cfg.printer, dz = pr.dry_run ? DRY_RUN_LIFT : 0, [ox, oy] = pr.origin;
     const f = v => v.toFixed(2), i = v => String(Math.round(v)); // pauses and feeds as whole numbers
     const xy = (pt, shift) => {
@@ -665,6 +666,21 @@
     const out = header.map(h => "; " + oneLine(h)); // a header can never add a command line
     if (dz) out.push(`; DRY RUN: the pen is clamped as usual, then every stroke is drawn ${DRY_RUN_LIFT} mm above the paper`);
     out.push("; BEFORE STARTING: take the pen out of the holder. Homing touches the nozzle to the plate.");
+    if (opts.reach) { // see reachCheck: the written points nearest the four corners, at pen-up height, nothing drawn
+      const pts = passes.flatMap(ps => ps.strokes.flatMap(s => s.map(pt => ({ pt, shift: ps.shift,
+        x: p.x + pt[0] - pr.offset_x, y: p.y + ps.shift + p.height - pt[1] - pr.offset_y }))));
+      if (!pts.length) throw new WriteError("Nothing to write.");
+      const xs = pts.map(q => q.x), ys = pts.map(q => q.y), [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+      const near = (cx, cy) => pts.reduce((b, q) => (Math.hypot(q.x - cx, q.y - cy) < Math.hypot(b.x - cx, b.y - cy) ? q : b));
+      const corners = [[x0, y1, "back left"], [x1, y1, "back right"], [x1, y0, "front right"], [x0, y0, "front left"]].map(([cx, cy, name]) => [near(cx, cy), name]);
+      out.push("; REACH CHECK, no paper: after homing the head visits the written points nearest the four corners of this page's",
+        `; writing, at pen-up height, slowly, and waits ${REACH_WAIT_S} s at each. Watch that the pen holder clears the bed clips, wiper and frame.`,
+        "G90", ...(pr.dialect === "bambu" ? ["G21"] : []), "G28", "M104 S0", z(pr.z_draw + CLEARANCE),
+        `G0 ${xy(corners[0][0].pt, corners[0][0].shift)} ${travel}`, z(pr.z_lift)); // every point through the same guard
+      for (const [q, name] of corners) out.push(`; ${name}`, `G0 ${xy(q.pt, q.shift)} F${REACH_FEED}`, wait(REACH_WAIT_S));
+      out.push(`G1 Z${f(pr.z_lift + 10)} F${i(pr.z_feed)}`);
+      return out.join("\n") + "\n";
+    }
     const sound = pr.sounds && SOUND_PRINTERS.has(pr.model) ? name => tune(pr.model, name) : () => [];
     // pen 1's strokes first, then pen 2's (planPasses allows a second pen only in a single pass)
     const order = ps => [...ps.strokes.filter(s => s.pen !== PEN2), ...ps.strokes.filter(s => s.pen === PEN2)];
@@ -696,6 +712,12 @@
     out.push(`G1 Z${f(pr.z_lift + 10)} F${i(pr.z_feed)}`, ...sound("finish"));
     return out.join("\n") + "\n";
   }
+
+  /** "Check the reach" for a page about to be written: with no pen and no paper, the head visits the written points
+   *  nearest the four corners of the page's writing at pen-up height (where it travels during the real run), slowly,
+   *  waiting at each, so the pen holder's clearance from bed clips, wipers and the frame can be seen first. Real written
+   *  points, not the box around them, so a corner never lands in a keep-out. Same homing, heater-off and guard. */
+  const reachCheck = (passes, cfg, header) => toGcode(passes, { ...cfg, printer: { ...cfg.printer, dry_run: false } }, header, { reach: true });
 
   /** What to do between passes, for the user. */
   function passNote(passes) {
@@ -738,6 +760,6 @@
 
   return { WriteError, SOUND_PRINTERS, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PRINTER_GROUPS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
-    toGcode, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper, penRange,
+    toGcode, reachCheck, REACH_WAIT_S, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper, penRange,
     lineGrid, headerWords, rulingLetters, PEN2, DRY_RUN_LIFT, MARGIN_LINE_GAP, WORD_SIZE };
 });
