@@ -96,7 +96,8 @@ default, so you can skip this. For any other holder:
 
 The G-code is plain and BambuPlot-style. It was developed on an A1; the other Bambu models use the same commands and
 bed sizes from Bambu's specs. For every other printer, its printable area, height, bed keep-out areas and firmware come
-from OrcaSlicer's printer profiles (`web/tools/orca-printers.js` builds `web/printers.js` from them). Klipper printers get
+from OrcaSlicer's printer profiles (`web/tools/orca-printers.js` builds `web/printers.js` from them, then
+`web/tools/printer-page.js` writes the [supported printers page](https://handwrite.rickykashyap.top/printers)). Klipper printers get
 pauses as `G4 P` (milliseconds), which every firmware here reads, and no `G21`. Round (delta) beds, belt printers and
 printers that need their own file format are left out.
 
