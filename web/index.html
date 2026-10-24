@@ -124,7 +124,7 @@
     --grain-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .9 0 0 0 0 .8 0 0 0 .045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   @media (prefers-color-scheme: dark) { :root { --grain: var(--grain-light); } }
-  @media (max-width: 1080px) { :root { --header-h: 100px; } }
+  @media (max-width: 1240px) { :root { --header-h: 100px; } }
   @media (max-width: 1024px) { :root { --gutter: 24px; } }
   @media (max-width: 600px) { :root { --gutter: 16px; } }
   @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
@@ -154,14 +154,14 @@
   .brand { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; color: var(--text); text-decoration: none; font: 400 22px/1 var(--font-display); letter-spacing: -.01em; }
   .brand svg { color: var(--accent); }
   .guide-nav { position: relative; display: flex; gap: 2px; margin-left: auto; }
-  .guide-nav a { position: relative; padding: 10px 12px; color: var(--text-2); font-size: 14.5px; line-height: 1.2; text-decoration: none; border-radius: var(--r-sm); transition: color var(--d1); }
+  .guide-nav a { position: relative; padding: 10px 12px; color: var(--text-2); font-size: 14.5px; line-height: 1.2; white-space: nowrap; text-decoration: none; border-radius: var(--r-sm); transition: color var(--d1); }
   .guide-nav a::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 3px; height: 2px; border-radius: 1px; background: var(--accent);
     transform: scaleX(0); transform-origin: left; transition: transform var(--d2) var(--e-out), opacity var(--d2); }
   .guide-nav a:hover, .guide-nav a[aria-current] { color: var(--text); }
   .guide-nav a:hover::after { transform: scaleX(1); opacity: .35; }
   .guide-nav a[aria-current]::after { transform: scaleX(1); opacity: 1; }
   .progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); opacity: .7; transform: scaleX(0); transform-origin: left; pointer-events: none; }
-  @media (max-width: 1080px) {
+  @media (max-width: 1240px) {
     .top-row { display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: 56px 44px; height: auto; gap: 0 12px; }
     .guide-nav { grid-column: 1 / -1; grid-row: 2; align-items: flex-start; gap: 6px; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) 4px;
       overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; scroll-padding-inline: var(--gutter); overscroll-behavior-x: contain;
@@ -628,6 +628,15 @@
   .edit-list p { margin: 0; color: var(--text-2); font-size: 15px; }
   #edit .note { margin-top: 36px; }
 
+  /* supported printers */
+  .printer-makers { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .printer-makers a { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r-md); color: var(--text); text-decoration: none; transition: border-color var(--d2), transform var(--d2) var(--e-out); }
+  .printer-makers a:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .printer-makers b { font: 400 19px/1.25 var(--font-display); }
+  .printer-makers span { font: 12.5px var(--font-mono); color: var(--text-3); }
+  .printers-more { margin: 24px 0 0; }
+
   .extras { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
   @media (max-width: 1023px) { .extras { grid-template-columns: repeat(2, minmax(0,1fr)); } }
   @media (max-width: 639px) { .extras { grid-template-columns: minmax(0,1fr); } }
@@ -712,7 +721,7 @@
       Handwrite
     </a>
     <nav class="guide-nav" aria-label="Guide">
-      <a href="#how">How it works</a><a href="#edit">Edit words</a><a href="#holder">Pen holder</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#more">Extras</a><a href="#faq">FAQ</a>
+      <a href="#how">How it works</a><a href="#edit">Edit words</a><a href="#holder">Pen holder</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#more">Extras</a><a href="#printers">Printers</a><a href="#faq">FAQ</a>
     </nav>
     <a class="btn primary small" href="app.html">Open the app</a>
   </div>
@@ -1234,6 +1243,34 @@
     </div>
   </section>
 
+<!--PRINTERS-->
+  <section class="block" id="printers">
+    <div class="wrap">
+      <div class="sec-head" data-stagger>
+        <p class="kicker">Supported printers</p>
+        <h2>Works with 404 printers</h2>
+        <p class="intro">Bambu Lab, and every printer OrcaSlicer knows with a rectangular bed, each with its own writing area, keep-out areas
+          and firmware. Among them: Bambu Lab A1, P1P / P1S and X1 Carbon / X1E, Prusa MK4, MINI and CORE One, Creality Ender-3 V3, Ender-3 Neo and K1, Anycubic Kobra Neo, Kobra 2 and Kobra 3, Elegoo Centauri Carbon and Neptune 4, Voron 2.4 350 and Trident 300, Qidi Q1 Pro, Sovol SV06 and SV07, Flashforge Adventurer 5M and Artillery Sidewinder X2.</p>
+      </div>
+      <ul class="printer-makers" data-stagger>
+        <li><a href="printers.html#bambu-lab"><b>Bambu Lab</b><span>11 printers</span></a></li>
+        <li><a href="printers.html#creality"><b>Creality</b><span>57 printers</span></a></li>
+        <li><a href="printers.html#prusa"><b>Prusa</b><span>18 printers</span></a></li>
+        <li><a href="printers.html#anycubic"><b>Anycubic</b><span>20 printers</span></a></li>
+        <li><a href="printers.html#elegoo"><b>Elegoo</b><span>18 printers</span></a></li>
+        <li><a href="printers.html#voron"><b>Voron</b><span>8 printers</span></a></li>
+        <li><a href="printers.html#qidi"><b>Qidi</b><span>12 printers</span></a></li>
+        <li><a href="printers.html#sovol"><b>Sovol</b><span>13 printers</span></a></li>
+        <li><a href="printers.html#flashforge"><b>Flashforge</b><span>9 printers</span></a></li>
+        <li><a href="printers.html#artillery"><b>Artillery</b><span>9 printers</span></a></li>
+        <li><a href="printers.html#snapmaker"><b>Snapmaker</b><span>19 printers</span></a></li>
+        <li><a href="printers.html#ratrig"><b>Ratrig</b><span>15 printers</span></a></li>
+      </ul>
+      <p class="printers-more"><a class="btn" href="printers.html">See all 404 printers and find yours →</a></p>
+    </div>
+  </section>
+<!--/PRINTERS-->
+
   <section class="block" id="faq">
     <div class="wrap faq-grid">
       <div class="faq-head" data-stagger>
@@ -1248,7 +1285,7 @@
       <details><summary>Some characters are missing</summary><p>The model knows letters, digits and <code>! " # ' ( ) , - . : ; ?</code>. Accents are dropped (é becomes e), capital Q, X and Z are written lowercase, and anything else is skipped. The app lists what it skipped under the text box.</p></details>
       <details><summary>The nozzle shows a temperature</summary><p>The G-code never heats anything, and it switches the nozzle heater off right after homing. Any heat you still see is left over from a print and cools down by itself. If your pen holder is printed in PLA, keep it away from the hotend.</p></details>
       <details><summary>Can I move a word, or make one line bigger?</summary><p>Yes. Click the word in the preview: a bar opens under it to move it (drag it or use the arrow keys), make it bigger or smaller, give it another handwriting or write it again. Switch the bar to <span class="ui">Whole line</span> to change its whole line. See <a href="#edit">Edit any word or line</a>.</p></details>
-      <details><summary>Which printers does it work with?</summary><p>Bambu Lab printers (A1, A1 mini, P1P / P1S, P2S and X1, checked by hand; it was built on an A1), and every printer OrcaSlicer knows that has a rectangular bed: Prusa, Creality, Voron, Elegoo, Qidi, Anycubic, Sovol and many more, over 400 in all. Each one's bed size, keep-out areas and firmware come from OrcaSlicer's printer profiles, and Klipper printers get pauses written the way Klipper reads them. Round (delta) and belt printers aren't supported. On a printer for the first time, save a <span class="ui">reach check</span> and a <span class="ui">dry run</span> before using ink: the data comes from OrcaSlicer, and only you can see how the pen holder fits. For any other printer, pick <span class="ui">Custom</span> and enter its bed size.</p></details>
+      <details><summary>Which printers does it work with?</summary><p>Bambu Lab printers (A1, A1 mini, P1P / P1S, P2S and X1, checked by hand; it was built on an A1), and every printer OrcaSlicer knows that has a rectangular bed: Prusa, Creality, Voron, Elegoo, Qidi, Anycubic, Sovol and many more, over 400 in all. Each one's bed size, keep-out areas and firmware come from OrcaSlicer's printer profiles, and Klipper printers get pauses written the way Klipper reads them. Round (delta) and belt printers aren't supported. On a printer for the first time, save a <span class="ui">reach check</span> and a <span class="ui">dry run</span> before using ink: the data comes from OrcaSlicer, and only you can see how the pen holder fits. See the <a href="printers.html">full list of supported printers</a>. For any other printer, pick <span class="ui">Custom</span> and enter its bed size.</p></details>
       <details><summary>Is the G-code safe for my printer?</summary><p>Every setting is range-checked, and every move in the file is checked against the chosen printer's bed (and the P1/X1 filament-cutter corner) before it is saved. If anything is unsafe, the app refuses to save and says why. Only run a file on the printer named at the top of it, and do a dry run first.</p></details>
       </div>
     </div>
