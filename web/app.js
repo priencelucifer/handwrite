@@ -3,7 +3,7 @@
 (() => {
   "use strict";
   const E = HWEngine, G = HWGcode, $ = id => document.getElementById(id);
-  const STORE = { settings: "hw.settings", text: "hw.text", seed: "hw.seed", edits: "hw.edits", toured: "hw.toured", tips: "hw.tips" };
+  const STORE = { settings: "hw.settings", text: "hw.text", seed: "hw.seed", edits: "hw.edits", toured: "hw.toured", tips: "hw.tips", more: "hw.more" };
   const load = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
   const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage off: settings last this session */ } };
 
@@ -68,6 +68,7 @@
   }
   /** Change the edits of these word keys: f(edit) returns the new edit; empty ones are dropped. */
   function changeEdits(keys, f) {
+    remember();
     for (const k of keys) { const e = cleanEdit(f({ ...state.edits.get(k) })); if (e) state.edits.set(k, e); else state.edits.delete(k); }
     keep(STORE.edits, Object.fromEntries(state.edits));
     syncBar(); scheduleRender(0);
@@ -241,7 +242,7 @@
     } catch { /* resolve below reports it */ }
     keep(STORE.settings, state.settings); keep(STORE.text, state.text); keep(STORE.seed, state.seed);
     let cfg;
-    try { cfg = G.resolve(state.settings); } catch (e) { return fail(e, "Printer settings problem: "); }
+    try { cfg = G.resolve(state.settings); } catch (e) { return fail(e); } // says which setting, and quickFix may offer the fix
     const style = styleOf(cfg.writing.style);
     if (!style) return fail(new Error("That handwriting style is gone. Pick another one."));
     const { clean, dropped } = E.cleanText(state.text, MARKS), head = E.cleanText(cfg.writing.header, MARKS);
@@ -339,6 +340,9 @@
   function updateSummary() {
     $("error").hidden = !state.error;
     $("error").textContent = state.error;
+    const fix = state.error && quickFix(state.error);
+    if (fix) { const b = document.createElement("button"); b.type = "button"; b.className = "fix"; b.textContent = fix[0]; b.onclick = fix[1]; $("error").append(b); }
+    syncMore();
     const v = cur(), n = state.view ? state.view.pages.length : 0;
     $("pager").hidden = n < 2; $("saveAll").hidden = n < 2;
     const tags = [state.dryRun && "dry run", v && startLine(v) > 1 && `from line ${startLine(v)}`].filter(Boolean).join(", ");
@@ -572,6 +576,7 @@
   canvas.addEventListener("pointerleave", () => { if (hover && !drag) { hover = null; draw(); } });
   /** Write these words again: each gets the next fresh seed, the rest of the page keeps its handwriting. */
   function rewriteWords(seeds) {
+    remember();
     for (const seed of seeds) {
       const orig = seedOrigin.get(seed) ?? seed;
       state.rerolls.set(orig, (state.rerolls.get(orig) || 0) + 1);
@@ -645,7 +650,7 @@
   $("wbAgain").onclick = () => rewriteWords(selected().map(w => w.seed));
   $("wbWord").onclick = () => setLine(false); $("wbLine").onclick = () => setLine(true);
   $("wbClose").onclick = () => { select(null); draw(); };
-  $("resetEdits").onclick = () => { state.edits.clear(); keep(STORE.edits, {}); syncBar(); scheduleRender(0); };
+  $("resetEdits").onclick = () => { remember(); state.edits.clear(); keep(STORE.edits, {}); syncBar(); scheduleRender(0); };
   document.addEventListener("keydown", e => {
     if (!sel || e.altKey || e.ctrlKey || e.metaKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector("dialog[open]")) return;
     const k = e.key, s = STEP(e), act = { ArrowLeft: () => moveBy(-s, 0), ArrowRight: () => moveBy(s, 0), ArrowUp: () => moveBy(0, -s),
@@ -921,6 +926,67 @@
     $("savedWhere").textContent = `${where} Only run it on the ${v.cfg.printer.model}. Writing takes about ${t.dur} including the pauses (done around ${t.at} if you start now).`;
     showSteps({ cfg: v.cfg, passes }, from > 1 ? [`Leave the paper taped where it is. In the first pause the head stops over the first letter of line ${from}: check that it lines up.`] : []);
   };
+  // ---------- ergonomics: what's changed is visible, errors come with a fix, every word change can be undone ----------
+  /** "More options" summaries: what's inside, or (accent) which of its settings differ from the defaults. */
+  function syncMore() {
+    const D = G.DEFAULT_SETTINGS, w = W_(), p = P_(), pr = PR_(), on = (cond, name) => (cond ? [name] : []);
+    const sets = {
+      moreHand: [["line wobble, word and line spacing"], [...on(w.wobble !== D.writing.wobble, "line wobble"), ...on(w.word_spacing !== D.writing.word_spacing, "word spacing"),
+        ...on(w.line_spacing !== D.writing.line_spacing, "line spacing")]],
+      morePage: [["borders, lined paper, header, page numbers"], [...on(p.margin !== D.paper.margin || p.margin_y !== D.paper.margin_y, "borders"),
+        ...on(p.ruling > 0, `lined paper ${p.ruling} mm`), ...on(!!(w.header || "").trim(), "header"), ...on(w.page_numbers, "page numbers"),
+        ...on(pr.sounds === false && G.SOUND_PRINTERS.has(pr.model), "sounds off"), ...on(p.slide, "long pages")]],
+      morePrint: [["dry run, start again from a line, reach check"], [...on(state.dryRun, "dry run"), ...on(state.startLine > 1, `from line ${state.startLine}`)]],
+    };
+    for (const [id, [[inside], changed]] of Object.entries(sets)) {
+      const el = $(id + "Sum");
+      el.textContent = changed.length ? `Changed: ${changed.join(", ")}` : inside;
+      el.classList.toggle("changed", changed.length > 0);
+    }
+  }
+  { // each "More options" stays open or closed as you left it
+    const open = load(STORE.more, {}) || {};
+    for (const d of document.querySelectorAll("details.more")) {
+      if (open[d.id]) d.open = true;
+      d.addEventListener("toggle", () => { const o = load(STORE.more, {}) || {}; o[d.id] = d.open; keep(STORE.more, o); });
+    }
+  }
+  /** An error that has an obvious fix gets a button that does it: [label, action], or null. */
+  const setInput = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event("input")); };
+  function quickFix(msg) {
+    const xh = W_().x_height, smaller = Math.max(1, Math.round(xh * 0.85 * 10) / 10), m = /use ([\d.]+) mm letters or smaller/.exec(msg);
+    if (m) return [`Use ${m[1]} mm letters`, () => setInput("xh", m[1])];
+    if (/Line spacing is too small/.test(msg)) { const v = Math.ceil(xh * 1.6 * 2) / 2; return [`Set line spacing to ${v} mm`, () => setInput("lineSpacing", v)]; }
+    if (/moved word|was moved off the paper/.test(msg)) return ["Put moved words back", () => changeEdits([...state.edits.keys()], e => ({ ...e, dx: 0, dy: 0 }))];
+    if (/turn on sliding the paper/.test(msg)) return ["Turn on long pages", () => { $("slide").checked = true; $("slide").dispatchEvent(new Event("change")); }];
+    if (/drag the paper|paper is on the build plate/.test(msg)) return ["Place paper automatically", () => centrePaper()];
+    if (/smaller letters|wider than a line|doesn't fit/i.test(msg) && smaller < xh) return [`Use ${smaller} mm letters`, () => setInput("xh", smaller)];
+    return null;
+  }
+  // undo / redo for word changes and rewrites (the text box keeps its own undo)
+  const history = { undo: [], redo: [] };
+  const snapshot = () => ({ edits: new Map([...state.edits].map(([k, e]) => [k, { ...e }])), rerolls: new Map(state.rerolls) });
+  function remember() { history.undo.push(snapshot()); if (history.undo.length > 100) history.undo.shift(); history.redo.length = 0; $("wbUndo").hidden = false; }
+  function travel(from, to) {
+    if (!from.length) return;
+    to.push(snapshot());
+    const s = from.pop();
+    state.edits = s.edits; state.rerolls = s.rerolls;
+    keep(STORE.edits, Object.fromEntries(state.edits));
+    $("wbUndo").hidden = !history.undo.length;
+    syncBar(); scheduleRender(0);
+  }
+  const undo = () => travel(history.undo, history.redo), redo = () => travel(history.redo, history.undo);
+  $("wbUndo").onclick = undo;
+  document.addEventListener("keydown", e => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "s") { e.preventDefault(); if (!$("save").disabled) $("save").click(); return; } // save the G-code, not the web page
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector("dialog[open]")) return;
+    if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
+  });
+
   // ---------- guidance: a first-visit tour, one-time tips, and the menu ----------
   const TOUR = [ // [what to light up, title, text]
     ["#text", "Type your note", "Write or paste what you want written. The page on the right updates as you type."],

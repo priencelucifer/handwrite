@@ -147,6 +147,24 @@
   }
   @media (max-width: 420px) { .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
 
+  /* "More options": the rest of a card's settings, on request. The summary names what's inside, or what's been changed */
+  .more { margin-top: 12px; border-top: 1px dashed var(--line); }
+  .more > summary { display: flex; align-items: baseline; gap: 10px; min-height: 44px; padding: 13px 0 6px; cursor: pointer; list-style: none; }
+  .more > summary::-webkit-details-marker { display: none; }
+  .more > summary::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-right: 1.5px solid var(--text-2); border-bottom: 1.5px solid var(--text-2);
+    transform: translateY(-2px) rotate(-45deg); transition: transform var(--d2) var(--e-out); }
+  .more[open] > summary::before { transform: translateY(-3px) rotate(45deg); }
+  .more > summary:hover .more-t { color: var(--accent); }
+  .more-t { flex: none; font-weight: 600; font-size: 14px; color: var(--text); }
+  .more-s { min-width: 0; font-size: 12.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .more-s.changed { color: var(--accent); font-weight: 500; }
+  .more-s.changed::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
+  .card > .more:first-of-type:is(:first-child, h2 + .more) { margin-top: 0; border-top: 0; }
+  #error .fix { flex: none; margin-left: auto; padding: 4px 12px; border: 0; border-radius: var(--r-pill); background: var(--surface); color: var(--text);
+    font: 600 13px var(--font-sans); cursor: pointer; white-space: nowrap; }
+  #error .fix:hover { filter: brightness(.95); }
+  @media (prefers-color-scheme: dark) { #error .fix { background: var(--danger); color: var(--danger-soft); } }
+
   /* menu (hamburger) */
   .menu-wrap { position: relative; }
   .appbar .menu-toggle { width: 40px; height: 40px; padding: 0; }
@@ -515,7 +533,7 @@
         <textarea id="text" spellcheck="true" aria-label="Text to write" placeholder="Type or paste what you want written"></textarea>
         <p class="hint" id="capacity" role="status"></p>
         <p class="hint warn" id="skipped" hidden></p>
-        <p class="hint">Marks: <code>_underline these words_</code> · <code>*second pen*</code> (the printer pauses to swap pens).</p>
+        <p class="hint">Tip: <code>_underline_</code> words, or write them with a <code>*second pen*</code> (the printer pauses to swap pens).</p>
         <p class="hint" id="editsNote" hidden><span id="editsCount"></span> <button type="button" class="linkish" id="resetEdits">Reset all</button></p>
       </section>
       <section class="card">
@@ -523,15 +541,19 @@
         <div class="styles" id="styles" role="group" aria-label="Handwriting style"></div>
         <div class="row"><label for="bias">Neatness</label>
           <div class="slider"><input type="range" id="bias" min="0" max="2" step="0.05"><output for="bias"></output></div></div>
-        <div class="row"><label for="wobble">Line wobble</label>
-          <div class="slider"><input type="range" id="wobble" min="0" max="2" step="0.05"><output for="wobble"></output></div></div>
-        <div class="row"><label for="wordSpacing" title="Average gap between words, in letter heights. Each gap still varies a little; more with line wobble.">Word spacing</label>
-          <div class="slider"><input type="range" id="wordSpacing" min="0.4" max="3" step="0.05"><output for="wordSpacing"></output></div></div>
         <div class="row"><label for="xh">Letter size</label>
           <div class="unit" data-unit="mm"><input type="number" id="xh" min="1" max="20" step="0.1"></div></div>
-        <div class="row"><label for="lineSpacing" title="Average distance from one line to the next. Each line still varies a little; more with line wobble.">Line spacing</label>
-          <div class="unit" data-unit="mm"><input type="number" id="lineSpacing" min="1" max="100" step="0.5"></div></div>
-        <p class="hint">Spacing is an average: every gap still varies a little like real handwriting, more with higher line wobble.</p>
+        <details class="more" id="moreHand"><summary><span class="more-t">More options</span><span class="more-s" id="moreHandSum"></span></summary>
+          <div class="more-body">
+          <div class="row"><label for="wobble">Line wobble</label>
+            <div class="slider"><input type="range" id="wobble" min="0" max="2" step="0.05"><output for="wobble"></output></div></div>
+          <div class="row"><label for="wordSpacing" title="Average gap between words, in letter heights. Each gap still varies a little; more with line wobble.">Word spacing</label>
+            <div class="slider"><input type="range" id="wordSpacing" min="0.4" max="3" step="0.05"><output for="wordSpacing"></output></div></div>
+          <div class="row"><label for="lineSpacing" title="Average distance from one line to the next. Each line still varies a little; more with line wobble.">Line spacing</label>
+            <div class="unit" data-unit="mm"><input type="number" id="lineSpacing" min="1" max="100" step="0.5"></div></div>
+          <p class="hint">Spacing is an average: every gap still varies a little like real handwriting, more with higher line wobble.</p>
+          </div>
+        </details>
       </section>
       <section class="card">
         <h2>Page</h2>
@@ -540,39 +562,47 @@
         <div class="row"><label for="paper">Paper</label><select id="paper"></select></div>
         <div class="row"><label>Orientation</label>
           <div class="seg" role="group" aria-label="Orientation"><button type="button" id="portrait">Portrait</button><button type="button" id="landscape">Landscape</button></div></div>
-        <div class="row"><label>Border</label>
-          <div class="borders">
-            <label class="unit" data-unit="mm" title="Left and right border"><span aria-hidden="true">↔</span><input type="number" id="margin" min="0" max="50" step="1" aria-label="Left and right border in mm"></label>
-            <label class="unit" data-unit="mm" title="Top and bottom border"><span aria-hidden="true">↕</span><input type="number" id="marginY" min="0" max="80" step="1" aria-label="Top and bottom border in mm"></label>
-          </div></div>
-        <div class="row"><label for="ruling">Lines</label><select id="ruling"></select></div>
-        <div class="row" id="ruledRow" hidden><label title="Measure your paper with a ruler">Measured</label>
-          <div class="borders">
-            <label class="unit" data-unit="mm" title="From the paper's top edge down to the first printed line"><span aria-hidden="true">↓</span><input type="number" id="firstLine" min="0" max="600" step="0.5" aria-label="First printed line: mm from the paper's top edge"></label>
-            <label class="unit" data-unit="mm" title="From the paper's left edge to the margin line (0 if there is none)"><span aria-hidden="true">→</span><input type="number" id="marginLine" min="0" max="300" step="0.5" aria-label="Margin line: mm from the paper's left edge, 0 if none"></label>
-          </div></div>
-        <div class="row"><label for="header">Header</label><input type="text" id="header" maxlength="60" placeholder="e.g. your name and the date"></div>
-        <div class="row toggle"><label for="pageNumbers">Page numbers</label><input type="checkbox" id="pageNumbers"><p class="hint">“Page 1”, “Page 2”… at the top right</p></div>
-        <div class="row toggle"><label for="sounds">Printer sounds</label><input type="checkbox" id="sounds"><p class="hint" id="soundsNote">Bambu's own start and finish tunes, plus a tune at each pause</p></div>
-        <div class="row toggle"><label for="slide">Long pages</label><input type="checkbox" id="slide"><p class="hint">Slide the paper back mid-page to write the part the pen can't reach. Off: the text continues on the next page.</p></div>
         <p class="hint">Drag the paper on the build plate to where it will sit. Scroll to zoom.</p>
         <button type="button" class="btn place" id="placePaper" title="Put the paper where the pen reaches, so writing starts at the top border">Place paper automatically</button>
+        <details class="more" id="morePage"><summary><span class="more-t">More options</span><span class="more-s" id="morePageSum"></span></summary>
+          <div class="more-body">
+          <div class="row"><label>Border</label>
+            <div class="borders">
+              <label class="unit" data-unit="mm" title="Left and right border"><span aria-hidden="true">↔</span><input type="number" id="margin" min="0" max="50" step="1" aria-label="Left and right border in mm"></label>
+              <label class="unit" data-unit="mm" title="Top and bottom border"><span aria-hidden="true">↕</span><input type="number" id="marginY" min="0" max="80" step="1" aria-label="Top and bottom border in mm"></label>
+            </div></div>
+          <div class="row"><label for="ruling">Lines</label><select id="ruling"></select></div>
+          <div class="row" id="ruledRow" hidden><label title="Measure your paper with a ruler">Measured</label>
+            <div class="borders">
+              <label class="unit" data-unit="mm" title="From the paper's top edge down to the first printed line"><span aria-hidden="true">↓</span><input type="number" id="firstLine" min="0" max="600" step="0.5" aria-label="First printed line: mm from the paper's top edge"></label>
+              <label class="unit" data-unit="mm" title="From the paper's left edge to the margin line (0 if there is none)"><span aria-hidden="true">→</span><input type="number" id="marginLine" min="0" max="300" step="0.5" aria-label="Margin line: mm from the paper's left edge, 0 if none"></label>
+            </div></div>
+          <div class="row"><label for="header">Header</label><input type="text" id="header" maxlength="60" placeholder="e.g. your name and the date"></div>
+          <div class="row toggle"><label for="pageNumbers">Page numbers</label><input type="checkbox" id="pageNumbers"><p class="hint">“Page 1”, “Page 2”… at the top right</p></div>
+          <div class="row toggle"><label for="sounds">Printer sounds</label><input type="checkbox" id="sounds"><p class="hint" id="soundsNote">Bambu's own start and finish tunes, plus a tune at each pause</p></div>
+          <div class="row toggle"><label for="slide">Long pages</label><input type="checkbox" id="slide"><p class="hint">Slide the paper back mid-page to write the part the pen can't reach. Off: the text continues on the next page.</p></div>
+          </div>
+        </details>
       </section>
 
       <section class="card">
         <h2>Printing</h2>
-        <div class="row toggle"><label for="dryRun">Dry run</label><input type="checkbox" id="dryRun"><p class="hint">The pen stays 8 mm above the paper: test a run without ink</p></div>
-        <div class="row"><label for="startLine">Start at line</label><input type="number" id="startLine" min="1" step="1" value="1"></div>
-        <p class="hint">Pen ran out, or the run stopped? Leave the paper where it is and save this page again from the line it stopped on.
-          To change or rewrite one word, click it on the page.</p>
-        <button class="btn wide" id="reachCheck" type="button">Save reach check</button>
-        <p class="hint">First time on this printer? With no pen and no paper, the head visits the far corners of this page's writing
-          at pen-up height and waits at each, so you can see the pen holder clears the bed clips, wiper and frame.</p>
+        <details class="more" id="morePrint"><summary><span class="more-t">Options</span><span class="more-s" id="morePrintSum"></span></summary>
+          <div class="more-body">
+          <div class="row toggle"><label for="dryRun">Dry run</label><input type="checkbox" id="dryRun"><p class="hint">The pen stays 8 mm above the paper: test a run without ink</p></div>
+          <div class="row"><label for="startLine">Start at line</label><input type="number" id="startLine" min="1" step="1" value="1"></div>
+          <p class="hint">Pen ran out, or the run stopped? Leave the paper where it is and save this page again from the line it stopped on.
+            To change or rewrite one word, click it on the page.</p>
+          <button class="btn wide" id="reachCheck" type="button">Save reach check</button>
+          <p class="hint">First time on this printer? With no pen and no paper, the head visits the far corners of this page's writing
+            at pen-up height and waits at each, so you can see the pen holder clears the bed clips, wiper and frame.</p>
+          </div>
+        </details>
       </section>
     </div>
     <div class="actions">
-      <button class="btn" id="reroll" type="button" title="New random handwriting and layout"><span class="spin" aria-hidden="true">↻</span> New version</button>
-      <button class="btn primary" id="save" type="button" disabled>Save G-code</button>
+      <button class="btn" id="reroll" type="button" title="Write the whole page again with fresh handwriting (your word changes stay)"><span class="spin" aria-hidden="true">↻</span> New version</button>
+      <button class="btn primary" id="save" type="button" title="Save G-code (Ctrl+S)" disabled>Save G-code</button>
       <button class="btn" id="saveAll" type="button" hidden disabled>Save all pages</button>
     </div>
   </aside>
@@ -604,8 +634,9 @@
         <select id="wbStyle" class="wb-edit" aria-label="Handwriting for the selection"></select>
         <button class="btn small" id="wbAgain" type="button">↻ Write again</button>
         <button class="btn small ghost wb-edit" id="wbReset" type="button">Reset</button>
+        <button class="btn small ghost" id="wbUndo" type="button" title="Undo (Ctrl+Z)" hidden>Undo</button>
       </div>
-      <p class="wb-tip wb-edit">Drag it, or use the arrow keys: 0.5 mm a press, 5 mm with Shift.</p>
+      <p class="wb-tip wb-edit">Drag it, or use the arrow keys: 0.5 mm a press, 5 mm with Shift. Ctrl+Z undoes.</p>
     </div>
     <div class="tip-toast" id="tipToast" role="status" hidden><span id="tipText"></span><button type="button" id="tipClose" aria-label="Dismiss tip">✕</button></div>
     <div class="info">
