@@ -147,6 +147,36 @@
   }
   @media (max-width: 420px) { .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
 
+  /* menu (hamburger) */
+  .menu-wrap { position: relative; }
+  .appbar .menu-toggle { width: 40px; height: 40px; padding: 0; }
+  .app-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; display: grid; min-width: 230px; padding: 6px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh-3); animation: in8 var(--d2) var(--e-out); }
+  .app-menu a, .app-menu button { display: flex; align-items: center; min-height: 42px; padding: 0 12px; border: 0; border-radius: var(--r-sm);
+    background: none; color: var(--text); font: 500 14.5px var(--font-sans); text-decoration: none; text-align: left; cursor: pointer; }
+  .app-menu a:hover, .app-menu button:hover { background: var(--surface-2); }
+
+  /* first-visit tour: a spotlight on one part of the app and a card that says what it's for */
+  .coach-spot { position: fixed; z-index: 90; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(20,16,10,.48), 0 0 0 2px var(--accent);
+    pointer-events: none; transition: left var(--d3) var(--e-out), top var(--d3) var(--e-out), width var(--d3) var(--e-out), height var(--d3) var(--e-out); }
+  .coach { position: fixed; z-index: 91; width: min(340px, calc(100vw - 24px)); padding: 18px 18px 14px; background: var(--surface); color: var(--text);
+    border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-3); transition: left var(--d3) var(--e-out), top var(--d3) var(--e-out); }
+  .coach-step { margin: 0 0 6px; font: 600 11.5px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  .coach h3 { margin: 0 0 6px; font: 400 22px/1.25 var(--font-display); }
+  .coach p.coach-text { margin: 0 0 14px; color: var(--text-2); font-size: 14.5px; line-height: 1.55; }
+  .coach-btns { display: flex; align-items: center; gap: 8px; }
+  .coach-btns .spacer { flex: 1; }
+  @media (prefers-reduced-motion: reduce) { .coach-spot, .coach { transition: none; } }
+
+  /* one-time tips, at the moment they matter */
+  .tip-toast { position: absolute; z-index: 4; top: 60px; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-start; gap: 10px;
+    width: max-content; max-width: min(460px, calc(100% - 24px)); padding: 12px 12px 12px 16px; background: var(--band-ink, #1A2650); color: #F4EFE6;
+    border-radius: var(--r-md); box-shadow: var(--sh-3); font-size: 14px; line-height: 1.5; animation: tip-in var(--d3) var(--e-out); }
+  @keyframes tip-in { from { opacity: 0; transform: translate(-50%, -6px); } }
+  .tip-toast::before { content: "💡"; flex: none; }
+  .tip-toast button { flex: none; width: 28px; height: 28px; margin: -4px -2px 0 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+  .tip-toast button:hover { background: rgba(255,255,255,.12); }
+
   /* status pill: app.js sets className to "pill", "pill busy" or "pill err", and --p while writing */
   .pill { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 44vw;
     padding: 6px 12px 6px 10px; border-radius: var(--r-pill); background: var(--surface-2); border: 1px solid var(--line);
@@ -465,8 +495,17 @@
   </h1>
   <div class="spacer"></div>
   <span class="pill" id="status" role="status"><span class="dot"></span><span id="statusText">Starting…</span></span>
-  <a class="btn ghost" href="index.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM8 7h7"/></svg><span class="lbl">How to use</span></a>
   <button class="btn" id="openSettings" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="lbl">Printer settings</span></button>
+  <div class="menu-wrap">
+    <button class="btn ghost menu-toggle" id="appMenuBtn" type="button" aria-label="Menu" aria-haspopup="true" aria-expanded="false" aria-controls="appMenu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <div class="app-menu" id="appMenu" role="menu" hidden>
+      <a role="menuitem" href="index.html">How to use</a>
+      <a role="menuitem" href="printers.html">Supported printers</a>
+      <button role="menuitem" type="button" id="tourAgain">Show the tour again</button>
+    </div>
+  </div>
 </header>
 <main>
   <aside>
@@ -568,6 +607,7 @@
       </div>
       <p class="wb-tip wb-edit">Drag it, or use the arrow keys: 0.5 mm a press, 5 mm with Shift.</p>
     </div>
+    <div class="tip-toast" id="tipToast" role="status" hidden><span id="tipText"></span><button type="button" id="tipClose" aria-label="Dismiss tip">✕</button></div>
     <div class="info">
       <div class="chip legend"><span><i class="k-edge"></i>plate edge</span><span><i class="k-area"></i>writing area</span><span><i class="k-slide"></i>paper slide</span><span class="tip">click a word to move, resize or restyle it</span></div>
       <div class="chip" id="summary" hidden></div>
@@ -583,6 +623,15 @@
     <footer><span class="msg" id="settingsMsg"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="settingsSave" value="save">Save</button></footer>
   </form>
 </dialog>
+
+<div class="coach-spot" id="coachSpot" hidden></div>
+<div class="coach" id="coach" role="dialog" aria-labelledby="coachTitle" aria-describedby="coachText" hidden>
+  <p class="coach-step" id="coachStep"></p>
+  <h3 id="coachTitle"></h3>
+  <p class="coach-text" id="coachText"></p>
+  <div class="coach-btns"><button class="btn small ghost" id="coachSkip" type="button">Skip tour</button><span class="spacer"></span>
+    <button class="btn small" id="coachBack" type="button">Back</button><button class="btn small primary" id="coachNext" type="button">Next</button></div>
+</div>
 
 <dialog id="savedDlg">
   <form method="dialog" class="dlg">

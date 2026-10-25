@@ -123,10 +123,16 @@
   .bar { display: flex; align-items: center; gap: 16px; height: 64px; }
   .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font: 400 22px var(--font-display); }
   .brand svg { color: var(--accent); }
-  .bar nav { margin-left: auto; display: flex; gap: 20px; }
-  .bar nav a { color: var(--text-2); text-decoration: none; font-size: 15px; }
-  .bar nav a:hover { color: var(--text); }
-  @media (max-width: 640px) { .bar nav { display: none; } .bar .btn { margin-left: auto; } }
+  .top-cta { margin-left: auto; }
+  .menu-wrap { position: relative; }
+  .menu-btn { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-strong); border-radius: var(--r-pill);
+    background: var(--surface); color: var(--text); cursor: pointer; }
+  .menu-btn:hover { background: var(--surface-2); }
+  .site-menu { position: absolute; right: 0; top: calc(100% + 8px); display: grid; min-width: 220px; padding: 6px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh-3); }
+  .site-menu a { display: flex; align-items: center; min-height: 42px; padding: 0 12px; border-radius: var(--r-sm); color: var(--text); text-decoration: none; font-size: 15px; }
+  .site-menu a:hover { background: var(--surface-2); }
+  .js .site-menu:not(.open) { display: none; }
   .intro { padding: 56px 0 24px; }
   .kicker { margin: 0 0 10px; font: 650 12px/1 var(--font-sans); letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
   h1 { margin: 0 0 16px; font: 400 clamp(34px, 5vw, 56px)/1.08 var(--font-display-xl); letter-spacing: -.01em; }
@@ -159,8 +165,14 @@
 <header class="top">
   <div class="wrap bar">
     <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Handwrite</a>
-    <nav aria-label="Site"><a href="index.html">How to use</a><a href="index.html#edit">Edit words</a><a href="index.html#faq">FAQ</a></nav>
-    <a class="btn primary small" href="app.html">Open the app</a>
+    <a class="btn primary small top-cta" href="app.html">Open the app</a>
+    <div class="menu-wrap">
+      <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="siteMenu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <nav class="site-menu" id="siteMenu" aria-label="Site"><a href="index.html">How to use</a><a href="index.html#edit">Edit words</a>
+        <a href="index.html#guide">The guide</a><a href="index.html#faq">FAQ</a><a href="app.html">Open the app</a></nav>
+    </div>
   </div>
 </header>
 <main>
@@ -966,6 +978,15 @@
 </footer>
 <script>
 "use strict";
+// menu: the hamburger opens the site's links (without this script they simply show)
+(() => {
+  document.documentElement.classList.add("js");
+  const btn = document.getElementById("menuBtn"), menu = document.getElementById("siteMenu");
+  const set = open => { menu.classList.toggle("open", open); btn.setAttribute("aria-expanded", open); };
+  btn.addEventListener("click", e => { e.stopPropagation(); set(!menu.classList.contains("open")); });
+  document.addEventListener("click", e => { if (!e.target.closest(".menu-wrap")) set(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") set(false); });
+})();
 // find a printer: filters the list as you type (the full list is in the page without this)
 (() => {
   const q = document.getElementById("q"), hits = document.getElementById("hits"), none = document.getElementById("none");

@@ -3,7 +3,7 @@
 (() => {
   "use strict";
   const E = HWEngine, G = HWGcode, $ = id => document.getElementById(id);
-  const STORE = { settings: "hw.settings", text: "hw.text", seed: "hw.seed", edits: "hw.edits" };
+  const STORE = { settings: "hw.settings", text: "hw.text", seed: "hw.seed", edits: "hw.edits", toured: "hw.toured", tips: "hw.tips" };
   const load = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
   const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage off: settings last this session */ } };
 
@@ -314,6 +314,8 @@
     setBusy(false, "Ready");
     if (sel && !selected().length) select(null); // its words are gone (text changed) or on another page
     draw(); updateSummary(); syncBar();
+    if (!load(STORE.toured, false)) startTour(); // first visit: show what each part is for, once the page is there
+    else if (pages.length > 1) tipOnce("pages", `Your text runs onto ${pages.length} pages. Use the arrows above the preview to see each one, and Save all pages to get them all.`);
   }
 
   /** The page on screen: {cfg, lines, passes}, or null. */
@@ -699,7 +701,10 @@
   $("printerMaker").onchange = () => { fillPrinters($("printerMaker").value); $("printer").dispatchEvent(new Event("change")); }; // its first printer
   for (const m of Object.keys(G.PAPERS)) $("paper").add(new Option(m, m));
   $("printer").value = PR_().model; $("paper").value = P_().size;
-  $("printer").onchange = () => { PR_().model = $("printer").value; centrePaper(); };
+  $("printer").onchange = () => {
+    PR_().model = $("printer").value; centrePaper();
+    tipOnce(`printer:${PR_().model}`, "New printer? Before using ink, run the offset test (Printer settings) and save a reach check (Printing): no pen, no paper, just a look at where the head goes.");
+  };
   $("paper").onchange = () => { P_().size = $("paper").value; centrePaper(); };
   $("placePaper").onclick = centrePaper;
   for (const o of ["portrait", "landscape"]) $(o).onclick = () => { P_().orientation = o; syncOrientation(); centrePaper(); };
@@ -916,6 +921,72 @@
     $("savedWhere").textContent = `${where} Only run it on the ${v.cfg.printer.model}. Writing takes about ${t.dur} including the pauses (done around ${t.at} if you start now).`;
     showSteps({ cfg: v.cfg, passes }, from > 1 ? [`Leave the paper taped where it is. In the first pause the head stops over the first letter of line ${from}: check that it lines up.`] : []);
   };
+  // ---------- guidance: a first-visit tour, one-time tips, and the menu ----------
+  const TOUR = [ // [what to light up, title, text]
+    ["#text", "Type your note", "Write or paste what you want written. The page on the right updates as you type."],
+    ["#styles", "Pick a handwriting", "Every style is written live by the model, so no two letters are the same. Try a few."],
+    ["#printerMaker", "Choose your printer and paper", "Pick the maker, then your printer, then the paper. The preview shows where the paper sits on the plate."],
+    ["#plate", "Check your page", "This is your page on the build plate. Drag the paper to move it, and click any word to move it, resize it or change its handwriting."],
+    ["#save", "Save and print", "Happy with it? Save the G-code. The app then walks you through printing it, one step at a time."],
+  ];
+  let tourAt = -1;
+  const tourTarget = sel => { const t = document.querySelector(sel); return t.closest(".card") || t.closest(".stage") || t; };
+  function startTour(at = 0) {
+    if (document.querySelector("dialog[open]")) return;
+    tourAt = at; $("coachSpot").hidden = $("coach").hidden = false; $("tipToast").hidden = true;
+    showTourStep();
+    $("coachNext").focus({ preventScroll: true });
+  }
+  function endTour() {
+    if (tourAt < 0) return;
+    tourAt = -1; $("coachSpot").hidden = $("coach").hidden = true;
+    keep(STORE.toured, true);
+  }
+  function showTourStep() {
+    const [sel, title, text] = TOUR[tourAt], target = tourTarget(sel);
+    $("coachStep").textContent = `${tourAt + 1} of ${TOUR.length}`; $("coachTitle").textContent = title; $("coachText").textContent = text;
+    $("coachBack").hidden = tourAt === 0; $("coachNext").textContent = tourAt === TOUR.length - 1 ? "Let's go" : "Next";
+    if (target.closest(".scroll") || innerWidth <= 860) target.scrollIntoView({ block: "center", behavior: "instant" });
+    placeTour();
+  }
+  function placeTour() { // the spotlight around the part, the card beside it (right, below or above), all on screen
+    if (tourAt < 0) return;
+    const r = tourTarget(TOUR[tourAt][0]).getBoundingClientRect(), pad = 6, spot = $("coachSpot"), card = $("coach");
+    const box = { l: Math.max(4, r.left - pad), t: Math.max(4, r.top - pad), r: Math.min(innerWidth - 4, r.right + pad), b: Math.min(innerHeight - 4, r.bottom + pad) };
+    Object.assign(spot.style, { left: `${box.l}px`, top: `${box.t}px`, width: `${box.r - box.l}px`, height: `${box.b - box.t}px` });
+    const cw = card.offsetWidth, ch = card.offsetHeight, gap = 14, fit = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+    let x, y;
+    if (box.r + gap + cw <= innerWidth - 12) { x = box.r + gap; y = fit(box.t, 12, innerHeight - ch - 12); }
+    else if (box.b + gap + ch <= innerHeight - 12) { x = fit(box.l, 12, innerWidth - cw - 12); y = box.b + gap; }
+    else if (box.t - gap - ch >= 12) { x = fit(box.l, 12, innerWidth - cw - 12); y = box.t - gap - ch; }
+    else { x = fit((innerWidth - cw) / 2, 12, innerWidth - cw - 12); y = innerHeight - ch - 12; } // big part: the card over its bottom
+    card.style.left = `${x}px`; card.style.top = `${y}px`;
+  }
+  $("coachNext").onclick = () => { if (tourAt >= TOUR.length - 1) return endTour(); tourAt++; showTourStep(); };
+  $("coachBack").onclick = () => { if (tourAt > 0) { tourAt--; showTourStep(); } };
+  $("coachSkip").onclick = endTour;
+  addEventListener("resize", placeTour);
+  document.addEventListener("scroll", placeTour, true);
+  document.addEventListener("keydown", e => { if (tourAt >= 0 && e.key === "Escape") { e.stopImmediatePropagation(); endTour(); } }, true);
+
+  /** A tip shown once ever (remembered in this browser), at the moment it matters; not during the tour. */
+  let tipTimer = 0;
+  function tipOnce(key, text) {
+    const seen = load(STORE.tips, {});
+    if (tourAt >= 0 || !load(STORE.toured, false) || (seen && seen[key])) return;
+    keep(STORE.tips, { ...(seen && typeof seen === "object" ? seen : {}), [key]: true });
+    $("tipText").textContent = text; $("tipToast").hidden = false;
+    clearTimeout(tipTimer); tipTimer = setTimeout(() => { $("tipToast").hidden = true; }, 12000);
+  }
+  $("tipClose").onclick = () => { clearTimeout(tipTimer); $("tipToast").hidden = true; };
+
+  // the menu: how to use, supported printers, the tour again
+  const setMenu = open => { $("appMenu").hidden = !open; $("appMenuBtn").setAttribute("aria-expanded", open); if (open) $("appMenu").querySelector("a, button").focus(); };
+  $("appMenuBtn").onclick = e => { e.stopPropagation(); setMenu($("appMenu").hidden); };
+  document.addEventListener("click", e => { if (!$("appMenu").hidden && !e.target.closest(".menu-wrap")) setMenu(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("appMenu").hidden) { setMenu(false); $("appMenuBtn").focus(); } });
+  $("tourAgain").onclick = () => { setMenu(false); select(null); draw(); startTour(); };
+
   // ---------- reach check: the head visits the far corners of this page's writing, no pen, no paper ----------
   $("reachCheck").onclick = async () => {
     const v = cur();
