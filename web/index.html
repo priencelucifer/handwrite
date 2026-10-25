@@ -223,7 +223,7 @@
   @media (max-width: 1000px) { .hero { grid-template-columns: minmax(0,1fr); gap: 40px; min-height: 0; padding-block: 40px 64px; } }
   @media (max-width: 600px) { .hero .cta { flex-direction: column; } .hero .cta .btn { width: 100%; } }
 
-  /* hero machine: a Bambu Lab A1 from above */
+  /* hero machine: a printer from above (the bed stays put, the head moves) */
   .machine { margin: 0; min-width: 0; animation: rise16 1000ms var(--e-out) 200ms both; }
   .m-win { border-radius: var(--r-lg); overflow: hidden; background: var(--chamber); border: 1px solid var(--chamber-edge); box-shadow: var(--sh-3); contain: layout paint; }
   .m-bar { display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 6px 0 16px; border-bottom: 1px solid var(--chamber-line);
@@ -557,8 +557,8 @@
   #print[data-stage="1"] .s1, #print[data-stage="2"] .s2, #print[data-stage="3"] .s3, #print[data-stage="4"] .s4 { opacity: 1; transition: opacity .4s .2s; }
   #print[data-stage="4"] .head-x { animation: bob .4s var(--e-in-out) infinite alternate; }   /* pen lifts and lowers for every stroke */
   @keyframes bob { to { transform: translateY(-4px); } }
-  #print[data-stage="4"] .bed-g { transform: translateX(24px); animation: bedstep 4.8s var(--e-in-out) .4s both; }
-  @keyframes bedstep { 0%,10% { transform: translateX(0); } 22%,45% { transform: translateX(8px); } 57%,80% { transform: translateX(16px); } 92%,100% { transform: translateX(24px); } }
+  #print[data-stage="4"] .head-y { transform: translate(-24px, 8px); animation: headstep 4.8s var(--e-in-out) .4s both; } /* the head moves across, the bed stays put */
+  @keyframes headstep { 0%,10% { transform: translate(0, 8px); } 22%,45% { transform: translate(-8px, 8px); } 57%,80% { transform: translate(-16px, 8px); } 92%,100% { transform: translate(-24px, 8px); } }
   #print .inset .ink { stroke-width: 1.4; }
   #print .inset-bg { fill: var(--sheet); stroke: var(--line); }
   #print[data-stage="4"] .inset .draw { stroke-dashoffset: 0; transition: stroke-dashoffset .35s linear; }
@@ -783,10 +783,10 @@
           </button>
         </div>
         <svg id="machine" viewBox="0 0 640 480" preserveAspectRatio="xMidYMid slice" role="img"
-          aria-label="Animation: a Bambu Lab A1, seen from above, writes 'Dear friend, this letter was written by my 3D printer.' with a pen."><g id="heroInk" class="ink"></g></svg>
+          aria-label="Animation: a 3D printer, seen from above, writes 'Dear friend, this letter was written by my 3D printer.' with a pen."><g id="heroInk" class="ink"></g></svg>
         <ol class="m-code" id="heroCode" aria-hidden="true"></ol>
       </div>
-      <figcaption>Bambu Lab A1 seen from above, 6× speed</figcaption>
+      <figcaption>Seen from above, 6× speed</figcaption>
     </figure>
   </div>
 
@@ -874,7 +874,7 @@
           <li><b class="n">1</b><span><b>Text.</b> Type or paste what you want written. Characters the model can't write are listed under it.</span></li>
           <li><b class="n">2</b><span><b>Handwriting.</b> Click a style to use it.</span></li>
           <li><b class="n">3</b><span><b>Neatness and letter size.</b> Line wobble and spacing are under <span class="ui">More options</span> just below. <a href="#settings">What each one does</a>.</span></li>
-          <li><b class="n">4</b><span><b>Build-plate preview.</b> The page as it will be written. Drag the paper, scroll to zoom, click a word to move, resize or restyle it.</span></li>
+          <li><b class="n">4</b><span><b>Build-plate preview.</b> The page as it will be written. Drag the paper, scroll to zoom, click a word to move, resize or restyle it. On a phone, the full-screen button zooms onto the paper.</span></li>
           <li><b class="n">5</b><span><b>New version / Save G-code.</b> New version rewrites the same text with fresh handwriting. Save G-code makes the file.</span></li>
           <li><b class="n">6</b><span><b>Printer settings.</b> The pen offset, pen heights, pauses and speeds.</span></li>
           <li><b class="n">7</b><span><b>Time estimate.</b> How long the page takes, including the pauses.</span></li>
@@ -1103,7 +1103,7 @@
               <g id="insetInk" transform="translate(412 12)"></g>
             </g>
           </svg>
-          <p class="fig-cap">Bambu Lab A1 shown: its bed moves front to back, the head moves across.</p>
+          <p class="fig-cap">Seen from the side: the head moves and lifts the pen between strokes; the bed stays put.</p>
           <button type="button" class="stepper-toggle" aria-label="Pause animation" hidden>
             <svg class="i-pause" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="8.5" y="2" width="3" height="10" rx="1" fill="currentColor"/></svg>
             <svg class="i-play" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.2v9.6L12 7z" fill="currentColor"/></svg>
@@ -1569,15 +1569,15 @@ if (!reduce && "IntersectionObserver" in window) {
   }
 })();
 
-// hero: a Bambu Lab A1 seen from above writes the note. Bed slides front/back, head crosses left/right,
+// hero: a printer seen from above writes the note. The bed stays put; the gantry carries the head front/back and the head crosses left/right;
 // the pen sits 25 mm in front of the nozzle (the Plotter default offset X 1, Y -25), G-code as gcode.js writes it.
 (() => {
   const svg = $("machine"), inkG = $("heroInk"), fig = svg && svg.closest(".machine"), btn = $("heroToggle");
   if (!svg || !inkG || !fig || !STROKES || !STROKES.hero) return;
-  const S = 2.4, X0 = 320 - 128 * S, GY = 170, OFF = { x: 1, y: -25 }, PX = { x: 23, y: 60, w: 210, h: 148 }; // px/mm, nozzle screen line, A5 landscape
+  const S = 2.4, X0 = 320 - 128 * S, GY = 170, BY = 600, OFF = { x: 1, y: -25 }, PX = { x: 23, y: 60, w: 210, h: 148 }; // px/mm, head's own line, bed Y=0 on screen, A5 landscape
   const K = 170 / (STROKES.hero.w + 8), IX = PX.x + 20, IY = PX.y + PX.h - 14; // mm per STROKES unit, ink origin on the bed
   // bed (mm, y toward the back): plate, grid, edge, taped sheet, ink
-  const bed = el("g", {}, svg), bedIn = el("g", { transform: `scale(${S} ${-S})` }, bed);
+  const bed = el("g", { transform: `translate(${X0} ${BY})` }, svg), bedIn = el("g", { transform: `scale(${S} ${-S})` }, bed);
   el("rect", { x: 0, y: 0, width: 256, height: 256, rx: 3, fill: "var(--plate)" }, bedIn);
   let minor = "", major = "";
   for (let v = 10; v < 256; v += 10) { const d = `M${v} 0V256M0 ${v}H256`; if (v % 50) minor += d; else major += d; }
@@ -1640,7 +1640,7 @@ if (!reduce && "IntersectionObserver" in window) {
   let wasDown = null;
   function pose(x, y, z) { // x, y = pen point on the bed (mm)
     const nx = x - OFF.x, ny = y - OFF.y, up = Math.min(1, Math.max(0, (z - Z.draw) / 2)), down = z <= Z.draw + .01;
-    bed.setAttribute("transform", `translate(${X0} ${GY + S * ny})`);
+    gan.setAttribute("transform", `translate(0 ${BY - S * ny - GY})`); // the gantry (beam + head) moves; the bed doesn't
     head.setAttribute("transform", `translate(${X0 + S * nx} ${GY})`);
     ring.setAttribute("transform", `scale(${1 + .12 * up + .01 * Math.max(0, z - 12)})`); tip.setAttribute("opacity", 1 - up * .7);
     set(dX, f2(nx)); set(dY, f2(ny)); set(dZ, f2(z));

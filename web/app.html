@@ -125,6 +125,16 @@
     background: var(--bg-band) radial-gradient(circle, rgba(60,45,20,.10) 1px, transparent 1.5px) 0 0 / 24px 24px; }
   @media (prefers-color-scheme: dark) { .stage { background: #0D0C0A radial-gradient(circle, rgba(255,240,220,.05) 1px, transparent 1.5px) 0 0 / 24px 24px; } }
   #plate { width: 100%; height: 100%; display: block; touch-action: none; }
+  /* full screen: the preview over everything (the page behind it doesn't scroll) */
+  .stage.full { position: fixed; inset: 0; z-index: 70; display: block; height: 100dvh; }
+  .stage.full #plate { height: 100%; }
+  html.stage-full, html.stage-full body { overflow: hidden; }
+  #zoomFull .i-close, .stage.full #zoomFull .i-open { display: none; }
+  .stage.full #zoomFull .i-close { display: block; }
+  #zoomFull { padding: 0 10px; }
+  .stage.full .info { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 0; }
+  .stage.full .pager { top: auto; bottom: 16px; }
+  @media (max-width: 860px) { .stage.full .legend, .stage.full #summary { display: none; } } /* on a phone, all of the screen for the page */
 
   /* ---------- top bar ---------- */
   .appbar { position: relative; z-index: 10; display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; height: 56px; padding: 0 16px;
@@ -617,6 +627,10 @@
       <button class="btn small" id="zoomOut" type="button" aria-label="Zoom out">−</button>
       <button class="btn small" id="zoomIn" type="button" aria-label="Zoom in">+</button>
       <button class="btn small" id="zoomFit" type="button">Fit</button>
+      <button class="btn small" id="zoomFull" type="button" aria-label="Full screen" aria-pressed="false" title="Full screen">
+        <svg class="i-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <svg class="i-close" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
     <div class="wordbar" id="wordBar" role="toolbar" aria-label="Change the selected word" hidden>
       <div class="wb-head">

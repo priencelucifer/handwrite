@@ -493,7 +493,9 @@
     if (big && (big[3] - big[1]) * s > 24 && (big[2] - big[0]) * s > 120) // at its top edge, clear of the chips at the bottom
       label("pen can't reach", pX((big[0] + big[2]) / 2), pY(big[1]) + 19, css("--muted"), "center");
     label(`${pr.model} · plate ${bx} × ${by} mm`, 14, 22, css("--muted"), "left");
-    label("FRONT OF PRINTER", X(dx + bx / 2), Math.min(Y(dy) + 22, H - 58), css("--muted"), "center"); // just under the plate, above the chips
+    const full = canvas.closest(".stage").classList.contains("full"), fy = Y(dy) + 22;
+    if (!full || fy <= H - 12) // just under the plate, above the chips; zoomed onto the paper in full screen, only if the front edge shows
+      label("FRONT OF PRINTER", X(dx + bx / 2), full ? fy : Math.min(fy, H - 58), css("--muted"), "center");
   }
   /** The word bar sits just under the selection (above it when there's no room), inside the preview. */
   function placeBar(x0, y0, x1, y1, W, H) {
@@ -539,7 +541,7 @@
       return draw();
     }
     drag = e.button === 0 && onPaper(e) ? { kind: "paper", start: toBed(e), x: p.x, y: p.y, sx: e.clientX, sy: e.clientY, moved: false }
-      : { kind: "pan", sx: e.clientX, sy: e.clientY, px: view.panX, py: view.panY, moved: false };
+      : { kind: "bg", sx: e.clientX, sy: e.clientY, moved: false }; // beside the paper: the plate stays put (a click deselects)
   });
   canvas.addEventListener("pointermove", e => {
     if (!drag) {
@@ -550,13 +552,13 @@
     }
     if (drag.kind === "none") return;
     if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return; // still a click, not a drag
-    canvas.style.cursor = drag.kind === "word" ? "move" : "grabbing";
+    canvas.style.cursor = drag.kind === "word" ? "move" : drag.kind === "bg" ? "default" : "grabbing";
     if (drag.kind === "word") { // mm on the page (y down), kept on the paper; drawn live, laid out when let go
       const [x, y] = toBed(e);
       drag.moved = true; drag.delta = fitMove(x - drag.start[0], drag.start[1] - y);
       return draw();
     }
-    if (drag.kind === "pan") { drag.moved = true; view.panX = drag.px + e.clientX - drag.sx; view.panY = drag.py + e.clientY - drag.sy; return draw(); }
+    if (drag.kind === "bg") { drag.moved = true; return; }
     drag.moved = true; hover = null;
     const cfg = plateCfg(); if (!cfg) return;
     const [x, y] = toBed(e), p = state.settings.paper, pr = cfg.printer;
@@ -571,7 +573,7 @@
     if (!d) return;
     if (d.kind === "word" && d.moved) return moveBy(...d.delta);
     if (d.kind === "paper" && d.moved) return scheduleRender(0);
-    if ((d.kind === "paper" || d.kind === "pan") && !d.moved && sel) { select(null); draw(); } // a click beside the words: done
+    if ((d.kind === "paper" || d.kind === "bg") && !d.moved && sel) { select(null); draw(); } // a click beside the words: done
   });
   canvas.addEventListener("pointerleave", () => { if (hover && !drag) { hover = null; draw(); } });
   /** Write these words again: each gets the next fresh seed, the rest of the page keeps its handwriting. */
@@ -673,7 +675,36 @@
   new ResizeObserver(() => draw()).observe(canvas);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw()); // paper + labels follow the theme
   $("zoomIn").onclick = () => zoomAt(1.5); $("zoomOut").onclick = () => zoomAt(1 / 1.5);
-  $("zoomFit").onclick = () => { Object.assign(view, { zoom: 1, panX: 0, panY: 0 }); draw(); };
+  $("zoomFit").onclick = () => { if (stageEl.classList.contains("full")) return focusPaper(); Object.assign(view, { zoom: 1, panX: 0, panY: 0 }); draw(); };
+
+  // full screen: the plate over the whole screen, zoomed onto the paper, so the words are easy to read on a phone
+  const stageEl = canvas.closest(".stage");
+  /** Zoom so the paper fills the view, centred on it. */
+  function focusPaper() {
+    const cfg = plateCfg(); if (!cfg) return;
+    const W = canvas.clientWidth, H = canvas.clientHeight, pr = cfg.printer, p = cfg.paper, bx = pr.bed_x, by = pr.bed_y;
+    const base = Math.min(W / (bx * 1.35), H / (by * 1.35)), fit = Math.min(W / (p.width * 1.08), (H - 24) / (p.height * 1.08));
+    const zoom = Math.min(Math.max(fit / base, 1), 14), s = base * zoom, cx = p.x + p.width / 2, cy = p.y + p.height / 2;
+    Object.assign(view, { zoom, panX: W / 2 - ((W - bx * s) / 2 - pr.offset_x * s + cx * s), panY: H / 2 - ((H - by * s) / 2 + pr.offset_y * s + (by - cy) * s) });
+    draw();
+  }
+  function setFull(on) {
+    if (stageEl.classList.contains("full") === on) return;
+    stageEl.classList.toggle("full", on); document.documentElement.classList.toggle("stage-full", on);
+    $("zoomFull").setAttribute("aria-pressed", on); $("zoomFull").setAttribute("aria-label", on ? "Close full screen" : "Full screen");
+    if (on) {
+      window.history.pushState({ full: true }, ""); // the phone's Back button closes it
+      if (stageEl.requestFullscreen && matchMedia("(pointer: coarse)").matches) stageEl.requestFullscreen().catch(() => {}); // hides the browser bars where allowed
+    } else {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (window.history.state && window.history.state.full) window.history.back();
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => (on ? focusPaper() : (Object.assign(view, { zoom: 1, panX: 0, panY: 0 }), draw()))));
+  }
+  $("zoomFull").onclick = () => setFull(!stageEl.classList.contains("full"));
+  addEventListener("popstate", () => setFull(false));
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && stageEl.classList.contains("full")) setFull(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !e.defaultPrevented && stageEl.classList.contains("full")) setFull(false); });
 
   // ---------- controls ----------
   const W_ = () => state.settings.writing, P_ = () => state.settings.paper, PR_ = () => state.settings.printer;
@@ -964,19 +995,19 @@
     return null;
   }
   // undo / redo for word changes and rewrites (the text box keeps its own undo)
-  const history = { undo: [], redo: [] };
+  const undoStack = { undo: [], redo: [] }; // not `history`: that's the browser's
   const snapshot = () => ({ edits: new Map([...state.edits].map(([k, e]) => [k, { ...e }])), rerolls: new Map(state.rerolls) });
-  function remember() { history.undo.push(snapshot()); if (history.undo.length > 100) history.undo.shift(); history.redo.length = 0; $("wbUndo").hidden = false; }
+  function remember() { undoStack.undo.push(snapshot()); if (undoStack.undo.length > 100) undoStack.undo.shift(); undoStack.redo.length = 0; $("wbUndo").hidden = false; }
   function travel(from, to) {
     if (!from.length) return;
     to.push(snapshot());
     const s = from.pop();
     state.edits = s.edits; state.rerolls = s.rerolls;
     keep(STORE.edits, Object.fromEntries(state.edits));
-    $("wbUndo").hidden = !history.undo.length;
+    $("wbUndo").hidden = !undoStack.undo.length;
     syncBar(); scheduleRender(0);
   }
-  const undo = () => travel(history.undo, history.redo), redo = () => travel(history.redo, history.undo);
+  const undo = () => travel(undoStack.undo, undoStack.redo), redo = () => travel(undoStack.redo, undoStack.undo);
   $("wbUndo").onclick = undo;
   document.addEventListener("keydown", e => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
