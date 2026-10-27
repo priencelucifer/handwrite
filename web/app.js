@@ -191,8 +191,8 @@
   const inkCache = new Map(); // `${style}|${bias}|${seed}|${word}` -> strokes in x-height units
   const inkKey = (style, bias, w) => `${style}|${bias}|${w.seed}|${w.word}`;
   const MARKS = "_*"; // _underline_ and *second pen*: kept through cleanText, read by G.words
-  /** The text as the handwriting reads it: the symbols the layout draws itself kept; code's tabs as 4-space indents. */
-  const source = () => E.cleanText(state.settings.writing.code ? state.text.replace(/\t/g, "    ") : state.text, MARKS + G.GLYPH_CHARS);
+  /** The text as the handwriting reads it: the symbols the layout draws itself kept; tabs as 4-space indents. */
+  const source = () => E.cleanText(state.text.replace(/\t/g, "    "), MARKS + G.GLYPH_CHARS);
   const seedOrigin = new Map(); // seed of a rewritten word -> its original seed (state.rerolls is keyed by that)
   /** Words clicked to be written again get a fresh seed per click; the layout reports the new seed. */
   function rerolled(list) {
@@ -869,7 +869,7 @@
   $("text").value = state.text;
   $("text").addEventListener("input", e => {
     state.text = e.target.value; scheduleRender();
-    if (!W_().code && (state.text.match(/^\s*(#include|#define|import |def |class |public |int main)|[;{}]\s*$/gm) || []).length >= 3)
+    if (!W_().code && (state.text.match(/^\s*(#include|#define|import |from \S+ import|def |class |public |int main|library\(|function\b)|<-|[;{}(]\s*$/gm) || []).length >= 3)
       tipOnce("code", "Writing code? Turn on Code under the text box: every line and indent stays as typed, and _ and * are written as they are.");
   });
   /** Code: the text box shows indents in a fixed-width font, without spelling marks; the markup tip doesn't apply. */

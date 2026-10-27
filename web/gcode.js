@@ -339,9 +339,25 @@
     "Q": [ring(0.55, 0.95, 0.52, 0.95, 100, 370), [[0.62, 0.4], [1.1, -0.12]]], // an O begun at the top, and its tail
     "X": [[[0.04, 1.92], [0.96, 0.0]], [[0.94, 1.92], [0.0, 0.02]]],
     "Z": [[[0.06, 1.9], [0.98, 1.93, 1], [0.04, 0.02, 1], [1.02, 0.0]]],
+    // digits: the model saw few and garbles them (85 -> &5). Their y is a share of the digit's height (FIGURE_HEIGHT).
+    "0": [ring(0.42, 0.5, 0.4, 0.5, 95, 368)],
+    "1": [[[0.06, 0.8], [0.34, 1.0, 1], [0.3, 0.0]]],
+    "2": [[[0.04, 0.75], [0.2, 0.95], [0.45, 1.0], [0.66, 0.88], [0.68, 0.68], [0.5, 0.45], [0.02, 0.02, 1], [0.8, 0.03]]],
+    "3": [[[0.04, 0.85], [0.3, 1.0], [0.58, 0.95], [0.66, 0.78], [0.52, 0.6], [0.26, 0.53, 1], [0.58, 0.47], [0.72, 0.28], [0.6, 0.06], [0.32, 0.0], [0.02, 0.1]]],
+    "4": [[[0.5, 1.0], [0.04, 0.34, 1], [0.86, 0.34]], [[0.66, 0.7], [0.62, 0.0]]],
+    "5": [[[0.66, 1.0], [0.14, 0.98, 1], [0.08, 0.56, 1], [0.38, 0.62], [0.66, 0.52], [0.74, 0.28], [0.58, 0.05], [0.3, 0.0], [0.04, 0.1]]],
+    "6": [[[0.6, 1.0], [0.3, 0.8], [0.1, 0.45], [0.12, 0.13], [0.38, 0.0], [0.64, 0.1], [0.68, 0.32], [0.46, 0.48], [0.18, 0.4], [0.1, 0.28]]],
+    "7": [[[0.02, 0.98], [0.76, 1.0, 1], [0.48, 0.5], [0.3, 0.0]]],
+    "8": [[[0.62, 0.86], [0.4, 1.0], [0.14, 0.92], [0.16, 0.66], [0.42, 0.52], [0.68, 0.36], [0.64, 0.08], [0.38, 0.0], [0.08, 0.1], [0.12, 0.34],
+      [0.4, 0.52], [0.62, 0.68], [0.64, 0.86]]],
+    "9": [[[0.64, 0.82], [0.44, 1.0], [0.16, 0.94], [0.08, 0.74], [0.26, 0.58], [0.56, 0.62], [0.68, 0.84, 1], [0.64, 0.4], [0.56, 0.0]]],
   };
   const GLYPH_CHARS = Object.keys(GLYPHS).join("");
   const GLYPH_SPLIT = new RegExp(`([${GLYPH_CHARS.replace(/[\\\]\[^-]/g, "\\$&")}])`);
+  const FIGURE_HEIGHT = 0.82, FIGURE_WIDTH = 1.35; // digits: a little lower than the hand's tall letters, and as drawn, wider
+  // points are drawn too where they stand on their own, as beside a drawn digit (3.14, 7:30, 85,)
+  Object.assign(GLYPHS, { ".": [[[0.02, 0.04], [0.1, 0.13], [0.17, 0.04], [0.07, -0.01]]], ",": [[[0.1, 0.12], [0.1, 0.0], [0.0, -0.28]]],
+    ":": [[[0.02, 0.68], [0.1, 0.77], [0.17, 0.68], [0.07, 0.63]], [[0.02, 0.04], [0.1, 0.13], [0.17, 0.04], [0.07, -0.01]]], ";": [[[0.06, 0.68], [0.14, 0.77], [0.21, 0.68], [0.11, 0.63]], [[0.12, 0.12], [0.12, 0.0], [0.02, -0.28]]] });
   const HAND = { slant: 0.1, asc: 2.1 }; // a typical hand, when the page has no written words to measure
 
   /** Seeded standard-normal numbers (mulberry32, Box-Muller): a drawn symbol looks the same each time for its seed. */
@@ -374,7 +390,8 @@
   /** A drawn symbol's strokes, like a written word's: x-height units, baseline 0, y up, starting at x = 0.
    *  hand: {slant, asc} of the page's writing (handOf); k: wobble (0 = drawn exactly as designed). */
   function glyph(ch, seed, hand = HAND, k = 1) {
-    const N = normals(seed), j = 0.03 * k, band = y => y <= 1 ? y : 1 + (y - 1) * (hand.asc - 1);
+    const fig = /[0-9]/.test(ch), wide = fig ? FIGURE_WIDTH : 1, N = normals(seed), j = 0.03 * k;
+    const band = fig ? y => y * FIGURE_HEIGHT * hand.asc : y => y <= 1 ? y : 1 + (y - 1) * (hand.asc - 1);
     const sc = clip(1 + N() * 0.05 * k, 0.88, 1.12), sh = hand.slant + clip(N() * 0.04 * k, -0.1, 0.1);
     const rot = clip(N() * 0.025 * k, -0.06, 0.06), lift = clip(N() * 0.03 * k, -0.08, 0.08), cr = Math.cos(rot), sr = Math.sin(rot);
     const out = GLYPHS[ch].map(st => {
@@ -384,7 +401,7 @@
         if (i && end(i - 1) && end(i) && Math.hypot(p[0] - st[i - 1][0], p[1] - st[i - 1][1]) > 0.5) pts.push([(p[0] + st[i - 1][0]) / 2, (p[1] + st[i - 1][1]) / 2]);
         pts.push(p);
       });
-      const moved = pts.map(([x, y, c]) => [x + N() * j, band(y) + N() * j, c]), line = [];
+      const moved = pts.map(([x, y, c]) => [x * wide + N() * j, band(y) + N() * j, c]), line = [];
       for (let a = 0, b = 1; b < moved.length; b++) // smooth from corner to corner
         if (moved[b][2] || b === moved.length - 1) { line.push(...spline(moved.slice(a, b + 1), 0.04).slice(line.length ? 1 : 0)); a = b; }
       return line.map(([x, y]) => { const u = (x + sh * y) * sc, v = y * sc + lift; return [u * cr - v * sr, u * sr + v * cr]; });
@@ -415,15 +432,14 @@
   }
   /** How a word is written: [the word] or pieces of it, each written on its own and set side by side. Drawn symbols
    *  go one by one. ALL-CAPS runs go letter by letter: the model learned mostly lowercase and garbles them, but writes
-   *  single capitals well (punctuation stays with its letter: "YOU," -> Y, O, U,). Digits go one at a time: it saw few
-   *  and half-writes them in a run ("4th" -> 4, th; "7:30" -> 7:, 3, 0). In code a long name is cut after its last
+   *  single capitals well (punctuation stays with its letter: "YOU," -> Y, O, U,). Digits are drawn symbols, and so is
+   *  a point standing on its own between them ("7:30" -> 7, :, 3, 0). In code a long name is cut after its last
    *  punctuation that fits (else at the limit), as the model writes MAX_WORD letters at most. */
   function pieces(word, code) {
     const out = [];
     for (const run of word.split(GLYPH_SPLIT).filter(Boolean)) {
-      if (GLYPHS[run]) { out.push(run); continue; }
-      const parts = isCaps(run) ? run.match(/[^A-Z0-9]*[A-Z0-9][^A-Z0-9]*/g)
-        : /[0-9]/.test(run) && run.length > 1 ? run.match(/[^A-Za-z0-9]*[0-9][^A-Za-z0-9]*|[^0-9]+/g) : [run];
+      if (GLYPHS[run] || /^[.,:;]+$/.test(run)) { out.push(...run); continue; }
+      const parts = isCaps(run) ? run.match(/[^A-Z]*[A-Z][^A-Z]*/g) : [run];
       for (let part of parts) {
         while (code && part.length > MAX_WORD) {
           const cut = Math.max(...Array.from(part.slice(0, MAX_WORD), (c, i) => /[A-Za-z0-9]/.test(c) ? 0 : i + 1)) || MAX_WORD;
@@ -440,8 +456,8 @@
    *  how often it already appeared, so editing one word keeps the rest of the page's handwriting.
    *  Markup (kept by cleanText(text, "_*")): _like this_ is underlined, *like this* is written with a second pen;
    *  each runs to its closing mark or the end of the line. Words get underline: true / pen: PEN2.
-   *  code: the text is a program: no markup (_ and * are written), and each line keeps its indent (para.indent, in
-   *  spaces; the layout indents it and its run-on lines). */
+   *  A line that starts with spaces is indented by them (para.indent). code: the text is a program: no markup (_ and *
+   *  are written), and a line's run-on lines are indented 4 spaces more (para.runOn). */
   function words(text, pageSeed, code = false) {
     const seen = new Map();
     return text.split("\n").map(para => {
@@ -466,7 +482,9 @@
         if (p) w.pen = PEN2;
         out.push(w);
       }
-      if (code) out.indent = para.length - para.trimStart().length;
+      const indent = para.length - para.trimStart().length;
+      if (code) Object.assign(out, { indent, runOn: indent + 4 });
+      else if (indent) out.indent = indent; // typed text: the line starts further in, the lines it runs on to don't
       return out;
     });
   }
@@ -685,8 +703,9 @@
           continue;
         }
         let x = f.left, drift = 0;
-        // code keeps its indents (at most half a line); a line too long for the paper runs on one step further in
-        if (para.indent !== undefined) x += Math.min((para.indent + (lineStart ? 4 : 0)) * INDENT * f.lxh, 0.5 * (f.lineRight - f.left));
+        // indents (at most half a line); in code a line too long for the paper runs on one step further in
+        const indent = lineStart ? para.runOn : para.indent;
+        if (indent) x += Math.min(indent * INDENT * f.lxh, 0.5 * (f.lineRight - f.left));
         const x0 = x, strokes = [], placed = [];
         while (i < para.length) {
           const wd = para[i];

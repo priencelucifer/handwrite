@@ -195,12 +195,16 @@ test("ALL-CAPS words are written letter by letter; other words stay whole", () =
   const [[hello, the, i, ok, num, usa]] = G.words("HELLO, The I OK 2024 U.S.A.", 3);
   assert.deepStrictEqual(hello.parts.map(p => p.word), ["H", "E", "L", "L", "O,"]);
   assert.ok(!the.parts && !i.parts);
-  assert.deepStrictEqual(num.parts.map(p => p.word), ["2", "0", "2", "4"]); // digits one at a time too
+  assert.deepStrictEqual(num.parts.map(p => p.word), ["2", "0", "2", "4"]); // digits one at a time too, drawn
+  assert.ok(num.parts.every(p => p.glyph));
   const [[th, time, pi, one]] = G.words("4th 7:30 3.14 5", 1);
   assert.deepStrictEqual(th.parts.map(p => p.word), ["4", "th"]);
-  assert.deepStrictEqual(time.parts.map(p => p.word), ["7:", "3", "0"]);
-  assert.deepStrictEqual(pi.parts.map(p => p.word), ["3.", "1", "4"]);
-  assert.ok(!one.parts); // a single digit is already one piece
+  assert.deepStrictEqual(time.parts.map(p => p.word), ["7", ":", "3", "0"]);
+  assert.deepStrictEqual(pi.parts.map(p => p.word), ["3", ".", "1", "4"]);
+  assert.ok(time.parts.every(p => p.glyph) && pi.parts.every(p => p.glyph) && !th.parts[1].glyph); // a point between digits is drawn too
+  assert.ok(!one.parts && one.glyph); // a single digit is already one piece
+  const [[end, hi]] = G.words("end. Hi,", 1);
+  assert.ok(!end.parts && !end.glyph && !hi.parts && !hi.glyph); // a point after a letter stays with the word
   assert.deepStrictEqual(ok.parts.map(p => p.word), ["O", "K"]);
   assert.deepStrictEqual(usa.parts.map(p => p.word), ["U.", "S.", "A."]);
   assert.strictEqual(new Set(hello.parts.map(p => p.seed)).size, 5); // each letter its own variation
@@ -215,7 +219,7 @@ test("ALL-CAPS words are written letter by letter; other words stay whole", () =
 test("code: symbols the model can't write are drawn pieces; long names are cut; ALL-CAPS and digits as before", () => {
   assert.deepStrictEqual(G.pieces("#include<stdio.h>", true), ["#", "include", "<", "stdio.h", ">"]);
   assert.deepStrictEqual(G.pieces("MAX_SIZE", true), ["M", "A", "X", "_", "S", "I", "Z", "E"]);
-  assert.deepStrictEqual(G.pieces("x+=10;", false), ["x", "+", "=", "1", "0;"]);
+  assert.deepStrictEqual(G.pieces("x+=10;", false), ["x", "+", "=", "1", "0", ";"]);
   const long = 'System.out.println("Hello,World!");', cut = G.pieces(long, true);
   assert.ok(cut.every(p => p.length <= G.MAX_WORD) && cut.join("") === long && cut.length === 2, JSON.stringify(cut));
   assert.deepStrictEqual(G.pieces(long, false), [long]); // outside code a word that long stays a word (and is refused)
@@ -236,12 +240,13 @@ test("code: symbols the model can't write are drawn pieces; long names are cut; 
   const [[brace, eq]] = G.words("{ ==", 1, true);
   assert.ok(brace.glyph && !brace.parts && eq.parts.every(p => p.glyph)); // nothing here for the model to write
   assert.deepStrictEqual(G.words("a\n    b\n\n  c", 1, true).map(p => p.indent), [0, 4, 0, 2]);
-  assert.strictEqual(G.words("    b", 1)[0].indent, undefined); // plain text has no indents
+  assert.deepStrictEqual(G.words("a\n    b", 1).map(p => [p.indent, p.runOn]), [[undefined, undefined], [4, undefined]]); // typed text: the first line only
+  assert.deepStrictEqual(G.words("\tb", 1)[0].indent, 1); // (the app makes tabs 4 spaces)
 });
 
 test("drawn symbols: pen paths in the hand's height and slant, a little different each time, exact with no wobble", () => {
   const hand = { slant: 0.1, asc: 2.1 };
-  for (const ch of G.GLYPH_CHARS) {
+  for (const ch of G.GLYPH_CHARS + ".,:;") {
     const g = G.glyph(ch, 7, hand), pts = g.flat(), xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     assert.ok(g.length >= 1 && g.every(st => st.length >= 2) && pts.every(p => p.every(Number.isFinite)), ch);
     assert.ok(Math.abs(Math.min(...xs)) < 1e-9 && Math.max(...xs) < 1.8 && Math.min(...ys) > -1 && Math.max(...ys) < 2.6, `${ch}: ${[Math.max(...xs), Math.min(...ys), Math.max(...ys)]}`);
@@ -272,6 +277,11 @@ test("code keeps every line's indent, and a line too long for the paper runs on 
   assert.ok(Math.abs(left(lines[4]) - left(lines[0]) - 12 * 0.55 * xh) < 1e-6); // the run-on line
   const right = G.writingArea(cfg)[2];
   assert.ok(lines.every(l => l.every(s => s.every(p => p[0] <= right + 1e-6)))); // and nothing past the right border
+  // typed text (code off) keeps a line's indent too, but its run-on lines go back to the margin
+  const plain = G.resolve(withSet({ "writing.wobble": 0 }));
+  const pl = G.layout(G.words("int main() {\n    " + Array(30).fill("x").join(" "), 1), ink, plain, mulberry(1));
+  assert.ok(pl.length >= 3 && Math.abs(left(pl[1]) - left(pl[0]) - 4 * 0.55 * xh) < 1e-6 && Math.abs(left(pl[2]) - left(pl[0])) < 1e-6,
+    pl.map(left).join(" "));
 });
 
 test("long text continues on further pages: nothing lost or doubled, every page safe", () => {

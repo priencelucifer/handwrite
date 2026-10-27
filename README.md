@@ -38,8 +38,8 @@ and word gaps are never the same twice.
 - **Lined paper**: pick the ruling and every line of writing sits on a printed line, right of the margin line.
 - **Underlines and a second pen**: `_like this_` is underlined by hand, `*like this*` is written with a second pen after a pen change.
   A `*` or `_` on its own, as in `5 * 3`, is simply written.
-- **Code for programming assignments**: turn on **Code** and every line and indent stays as typed. Symbols the model
-  never learned (`# < > { } [ ] = + * / _ & |` and more) are drawn by hand in the page's own slant and size.
+- **Code for programming assignments**: turn on **Code** and every line and indent stays as typed. Digits and the symbols the
+  model never learned (`# < > { } [ ] = + * / _ & |` and more) are drawn by hand in the page's own slant and size.
 - **Header and page numbers** at the top of every sheet, written afresh each time.
 - **Edit any word or line**: click it in the preview to drag it, resize it, give it another handwriting or write it again, or add
   words after it (or a line under it).
@@ -170,7 +170,7 @@ The [`python/`](python/) folder holds the older desktop and command-line version
 
 ## Limits
 
-- The model writes letters, digits and `! " ' ( ) , - . : ; ?`; the app draws `# < > { } [ ] = + * / \ % & | ^ ~ _ @ $` and
+- The model writes letters and `! " ' ( ) , - . : ; ?`; the app draws digits, `# < > { } [ ] = + * / \ % & | ^ ~ _ @ $` and
   capital Q, X and Z itself. Accents are dropped (é becomes e), and other characters are skipped. The app lists any it
   skipped.
 - A word occasionally comes out garbled. Click **New version** to write the page again.
