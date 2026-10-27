@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Handwrite: handwriting G-code for Bambu Lab, Prusa, Creality & 400+ printers</title>
-<meta name="description" content="Free handwriting G-code for Bambu Lab, Prusa, Creality, Voron and 400+ other 3D printers with a pen holder. Type text and your printer writes it by hand.">
+<meta name="description" content="Free handwriting G-code for Bambu Lab, Prusa, Creality, Voron and 400+ 3D printers with a pen holder. Type text or code and your printer writes it by hand.">
 <link rel="canonical" href="https://handwrite.rickykashyap.top/">
 <meta name="author" content="Ricky Kashyap">
 <meta name="theme-color" content="#3b5bdb">
@@ -12,14 +12,14 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Handwrite">
 <meta property="og:title" content="Handwrite: handwriting G-code for Bambu Lab, Prusa, Creality & 400+ printers">
-<meta property="og:description" content="Free handwriting G-code for Bambu Lab, Prusa, Creality, Voron and 400+ other 3D printers with a pen holder. Type text and your printer writes it by hand.">
+<meta property="og:description" content="Free handwriting G-code for Bambu Lab, Prusa, Creality, Voron and 400+ 3D printers with a pen holder. Type text or code and your printer writes it by hand.">
 <meta property="og:url" content="https://handwrite.rickykashyap.top/">
 <meta property="og:image" content="https://handwrite.rickykashyap.top/guide-app.png">
 <meta property="og:image:width" content="1500">
 <meta property="og:image:height" content="1000">
 <meta property="og:image:alt" content="The Handwrite app with a handwritten page on the build-plate preview">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Handwrite", "url": "https://handwrite.rickykashyap.top/app", "description": "Free handwriting G-code for Bambu Lab, Prusa, Creality, Voron and 400+ other 3D printers with a pen holder. Type text and your printer writes it by hand.", "image": "https://handwrite.rickykashyap.top/guide-app.png", "applicationCategory": "DesignApplication", "operatingSystem": "Any (runs in a web browser)", "browserRequirements": "Requires JavaScript and WebAssembly", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "sameAs": ["https://github.com/priencelucifer/handwrite"], "author": {"@type": "Person", "name": "Ricky Kashyap", "url": "https://www.linkedin.com/in/ricky-kashyap-7b776723a", "sameAs": ["https://www.linkedin.com/in/ricky-kashyap-7b776723a", "https://github.com/priencelucifer"]}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Handwrite", "url": "https://handwrite.rickykashyap.top/app", "description": "Free handwriting G-code for Bambu Lab, Prusa, Creality, Voron and 400+ 3D printers with a pen holder. Type text or code and your printer writes it by hand.", "image": "https://handwrite.rickykashyap.top/guide-app.png", "applicationCategory": "DesignApplication", "operatingSystem": "Any (runs in a web browser)", "browserRequirements": "Requires JavaScript and WebAssembly", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "sameAs": ["https://github.com/priencelucifer/handwrite"], "author": {"@type": "Person", "name": "Ricky Kashyap", "url": "https://www.linkedin.com/in/ricky-kashyap-7b776723a", "sameAs": ["https://www.linkedin.com/in/ricky-kashyap-7b776723a", "https://github.com/priencelucifer"]}}</script>
 <style>
   /* ---------- 1. shared tokens (same block in app.html) ---------- */
   :root {
@@ -664,6 +664,10 @@
   @media (max-width: 639px) { .extras { grid-template-columns: minmax(0,1fr); } }
   .extras svg { display: block; width: 100%; height: auto; margin: 0 0 16px; background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-sm); }
   .extras p { margin: 0; color: var(--text-2); font-size: 15.5px; }
+  .extras .wide { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap: 0 28px; align-content: center; } /* the featured one: picture beside the words */
+  .extras .wide svg { grid-row: span 2; margin: 0; }
+  .extras .wide h3 { align-self: end; }
+  @media (max-width: 639px) { .extras .wide { display: block; } .extras .wide svg { margin: 0 0 16px; } }
   .ex-hl { fill: color-mix(in srgb, var(--sheet-accent) 14%, transparent); stroke: var(--sheet-accent); }
   .ex-drop, .ex-head, .ex-body, .ex-arrow { transform-box: fill-box; }
   .ex-word, .ex-row { transform-box: fill-box; transform-origin: left center; }
@@ -1212,7 +1216,7 @@
     </div>
   </section>
 
-  <section class="block" id="more" data-fold="Lined paper, underlines, a second pen, headers, page numbers, dry runs and more.">
+  <section class="block" id="more" data-fold="Code for programming assignments, lined paper, underlines, a second pen, headers, page numbers and more.">
     <div class="wrap">
       <div class="sec-head" data-stagger>
         <p class="kicker">More you can do</p>
@@ -1220,6 +1224,23 @@
         <p class="intro">Small things that save a page, or make it look more like your own notebook.</p>
       </div>
       <div class="extras" data-stagger>
+        <div class="card wide">
+          <svg viewBox="0 0 220 110" aria-hidden="true">
+            <g fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".85">
+              <path d="M22 9l-3 13M28 9l-3 13M16 13.5h14M15 18.5h14"/>
+              <path d="M112 29q-4 0-4 4v3q0 3-4 3.5q4 .5 4 3.5v3q0 4 4 4"/>
+              <path d="M17 86q4 0 4 4v3q0 3 4 3.5q-4 .5-4 3.5v3q0 4-4 4"/>
+            </g>
+            <g fill="var(--ink)" opacity=".8">
+              <rect x="36" y="11" width="74" height="8" rx="3"/>
+              <rect x="16" y="35" width="32" height="8" rx="3"/><rect x="54" y="35" width="44" height="8" rx="3"/>
+              <rect x="40" y="55" width="28" height="8" rx="3"/><rect x="74" y="55" width="60" height="8" rx="3"/>
+              <rect x="64" y="75" width="50" height="8" rx="3"/><rect x="120" y="75" width="30" height="8" rx="3"/>
+            </g>
+          </svg>
+          <h3>Code, for programming assignments</h3>
+          <p>Paste your program and turn on <span class="ui">Code</span> under the text box. Every line and indent stays as typed, and the symbols the handwriting model never learned, like <code># &lt; &gt; { } [ ] = + * / _ &amp; |</code>, are drawn by hand in the page's own slant and size, a little differently each time. A line too long for the paper carries on one step further in.</p>
+        </div>
         <div class="card">
           <svg viewBox="0 0 220 110" aria-hidden="true">
             <path d="M0 34H220M0 56H220M0 78H220M0 100H220" stroke="rgba(90,140,220,.5)"/><path d="M36 0V110" stroke="rgba(220,80,80,.65)"/>
@@ -1323,7 +1344,8 @@
       <details><summary>Not all of my text is on the page</summary><p>It continues on the next page. Use the arrows above the preview to see each page and <span class="ui">Save all pages</span> to get them all. For one long A4 page instead, tick <span class="ui">Long pages</span> and slide the paper when asked.</p></details>
       <details><summary>A word looks garbled or has a stray mark</summary><p>The model occasionally slips. Click that word in the preview and choose <span class="ui">Write again</span>, or <span class="ui">New version</span> for the whole page. Raising <span class="ui">Neatness</span> a little also helps.</p></details>
       <details><summary>The pen ran out halfway down the page</summary><p>Leave the paper taped where it is. Fit a new pen, set <span class="ui">Printing → Start at line</span> to the line it stopped on and save again: the new file writes from that line on, starting over its first letter.</p></details>
-      <details><summary>Some characters are missing</summary><p>The model knows letters, digits and <code>! " # ' ( ) , - . : ; ?</code>. Accents are dropped (é becomes e), capital Q, X and Z are written lowercase, and anything else is skipped. The app lists what it skipped under the text box.</p></details>
+      <details><summary>Some characters are missing</summary><p>The model writes letters, digits and <code>! " ' ( ) , - . : ; ?</code>, and the app draws <code># &lt; &gt; { } [ ] = + * / \ % &amp; | ^ ~ _ @ $</code> and capital X and Z by hand in the same slant and size. Accents are dropped (é becomes e), capital Q is written lowercase, and anything else, such as other alphabets or emoji, is skipped. The app lists what it skipped under the text box.</p></details>
+      <details><summary>Can it write code for a programming assignment?</summary><p>Yes: C, C++, Java, Python and the rest. Paste the program and turn on <span class="ui">Code</span> under the text box. Every line and indent stays as typed, <code>_</code> and <code>*</code> are written instead of underlining, and symbols like <code>#include &lt;stdio.h&gt;</code>, braces and operators are drawn by hand to match the handwriting. A line too long for the paper carries on one step further in. See <a href="#more">Code, for programming assignments</a>.</p></details>
       <details><summary>The nozzle shows a temperature</summary><p>The G-code never heats anything, and it switches the nozzle heater off right after homing. Any heat you still see is left over from a print and cools down by itself. If your pen holder is printed in PLA, keep it away from the hotend.</p></details>
       <details><summary>Can I move a word, or make one line bigger?</summary><p>Yes. Click the word in the preview: a bar opens under it to move it (drag it or use the arrow keys), make it bigger or smaller, give it another handwriting or write it again. Switch the bar to <span class="ui">Whole line</span> to change its whole line. See <a href="#edit">Edit any word or line</a>.</p></details>
       <details><summary>Which printers does it work with?</summary><p>Bambu Lab printers (A1, A1 mini, P1P / P1S, P2S and X1, checked by hand; it was built on an A1), and every printer OrcaSlicer knows that has a rectangular bed: Prusa, Creality, Voron, Elegoo, Qidi, Anycubic, Sovol and many more, over 400 in all. Each one's bed size, keep-out areas and firmware come from OrcaSlicer's printer profiles, and Klipper printers get pauses written the way Klipper reads them. Round (delta) and belt printers aren't supported. On a printer for the first time, save a <span class="ui">reach check</span> and a <span class="ui">dry run</span> before using ink: the data comes from OrcaSlicer, and only you can see how the pen holder fits. See the <a href="printers.html">full list of supported printers</a>. For any other printer, pick <span class="ui">Custom</span> and enter its bed size.</p></details>

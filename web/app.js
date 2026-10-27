@@ -191,6 +191,8 @@
   const inkCache = new Map(); // `${style}|${bias}|${seed}|${word}` -> strokes in x-height units
   const inkKey = (style, bias, w) => `${style}|${bias}|${w.seed}|${w.word}`;
   const MARKS = "_*"; // _underline_ and *second pen*: kept through cleanText, read by G.words
+  /** The text as the handwriting reads it: the symbols the layout draws itself kept; code's tabs as 4-space indents. */
+  const source = () => E.cleanText(state.settings.writing.code ? state.text.replace(/\t/g, "    ") : state.text, MARKS + G.GLYPH_CHARS);
   const seedOrigin = new Map(); // seed of a rewritten word -> its original seed (state.rerolls is keyed by that)
   /** Words clicked to be written again get a fresh seed per click; the layout reports the new seed. */
   function rerolled(list) {
@@ -212,7 +214,7 @@
   function updateCapacity() {
     let cfg;
     try { cfg = G.resolve(state.settings); } catch { $("capacity").textContent = ""; return null; }
-    const paras = G.words(E.cleanText(state.text, MARKS).clean, state.seed), n = paras.flat().length;
+    const paras = G.words(source().clean, state.seed, state.settings.writing.code === true), n = paras.flat().length;
     const cap = G.capacity(cfg, charWidth(cfg.writing.style), paras);
     cap.pages = Math.max(1, Math.ceil(cap.needed / Math.max(1, cap.lines)));
     const over = n > 0 && cap.pages > G.MAX_PAGES;
@@ -245,11 +247,11 @@
     try { cfg = G.resolve(state.settings); } catch (e) { return fail(e); } // says which setting, and quickFix may offer the fix
     const style = styleOf(cfg.writing.style);
     if (!style) return fail(new Error("That handwriting style is gone. Pick another one."));
-    const { clean, dropped } = E.cleanText(state.text, MARKS), head = E.cleanText(cfg.writing.header, MARKS);
+    const { clean, dropped } = source(), head = E.cleanText(cfg.writing.header, MARKS + G.GLYPH_CHARS);
     for (const c of head.dropped) dropped.add(c);
     $("skipped").hidden = !dropped.size;
     $("skipped").textContent = dropped.size ? `Skipped characters the handwriting can't write: ${[...dropped].join(" ")}` : "";
-    const paras = applyEdits(G.words(clean, state.seed)), all = rerolled(paras.flat());
+    const paras = applyEdits(G.words(clean, state.seed, cfg.writing.code)), all = rerolled(paras.flat());
     const changed = all.filter(w => state.edits.has(w.key)).length;
     $("editsNote").hidden = !changed;
     $("editsCount").textContent = `${changed} word${changed === 1 ? "" : "s"} changed in the preview.`;
@@ -258,12 +260,12 @@
     if (cap && cap.pages > G.MAX_PAGES * 1.2)
       return fail(new G.WriteError(`Too much text: it needs about ${cap.pages} pages (${G.MAX_PAGES} at most). Shorten it, use smaller letters or bigger paper.`));
     if (!all.length) { state.view = null; state.error = ""; setBusy(false, "Type some text"); draw(); return updateSummary(); }
-    const long = all.find(w => w.word.length > G.MAX_WORD);
+    const long = all.find(w => (w.parts || [w]).some(p => !p.glyph && p.word.length > G.MAX_WORD));
     if (long) return fail(new Error(`The word "${long.word.slice(0, 20)}…" is too long (${G.MAX_WORD} letters at most).`));
 
     const bias = cfg.writing.bias;
     const keyOf = w => inkKey(w.style || style.key, bias, w); // a word can have its own handwriting
-    const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !inkCache.has(keyOf(w))).map(w => [keyOf(w), w])).values()];
+    const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !w.glyph && !inkCache.has(keyOf(w))).map(w => [keyOf(w), w])).values()]; // drawn symbols need no model
     /** Have the workers write these words into inkCache. False if this render was replaced or failed (fail() shown). */
     const generate = async list => {
       if (!list.length) return true;
@@ -820,7 +822,15 @@
   // ---------- controls ----------
   const W_ = () => state.settings.writing, P_ = () => state.settings.paper, PR_ = () => state.settings.printer;
   $("text").value = state.text;
-  $("text").addEventListener("input", e => { state.text = e.target.value; scheduleRender(); });
+  $("text").addEventListener("input", e => {
+    state.text = e.target.value; scheduleRender();
+    if (!W_().code && (state.text.match(/^\s*(#include|#define|import |def |class |public |int main)|[;{}]\s*$/gm) || []).length >= 3)
+      tipOnce("code", "Writing code? Turn on Code under the text box: every line and indent stays as typed, and _ and * are written as they are.");
+  });
+  /** Code: the text box shows indents in a fixed-width font, without spelling marks; the markup tip doesn't apply. */
+  const syncCode = () => { const on = W_().code === true; $("codeMode").checked = on; $("text").classList.toggle("code", on); $("text").spellcheck = !on; $("markupTip").hidden = on; };
+  syncCode();
+  $("codeMode").onchange = () => { W_().code = $("codeMode").checked; if (W_().code) $("tipToast").hidden = true; syncCode(); scheduleRender(0); }; // the tip said to do this
   for (const [id, key] of [["bias", "bias"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"]]) {
     const el = $(id), out = el.nextElementSibling;
     el.value = W_()[key]; out.textContent = (+el.value).toFixed(2);

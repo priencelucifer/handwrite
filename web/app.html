@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Handwrite app: make handwriting G-code for your 3D printer</title>
-<meta name="description" content="Write text in realistic handwriting and save G-code for Bambu Lab, Prusa, Creality, Voron and 400+ printers with a pen holder: 45 styles, lined paper. Free.">
+<meta name="description" content="Write text or code in realistic handwriting and save G-code for Bambu Lab, Prusa, Creality, Voron and 400+ pen-holder printers: 45 styles, lined paper. Free.">
 <link rel="canonical" href="https://handwrite.rickykashyap.top/app">
 <meta name="author" content="Ricky Kashyap">
 <meta name="theme-color" content="#3b5bdb">
@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Handwrite">
 <meta property="og:title" content="Handwrite app: make handwriting G-code for your 3D printer">
-<meta property="og:description" content="Write text in realistic handwriting and save G-code for Bambu Lab, Prusa, Creality, Voron and 400+ printers with a pen holder: 45 styles, lined paper. Free.">
+<meta property="og:description" content="Write text or code in realistic handwriting and save G-code for Bambu Lab, Prusa, Creality, Voron and 400+ pen-holder printers: 45 styles, lined paper. Free.">
 <meta property="og:url" content="https://handwrite.rickykashyap.top/app">
 <meta property="og:image" content="https://handwrite.rickykashyap.top/guide-app.png">
 <meta property="og:image:width" content="1500">
@@ -251,6 +251,7 @@
   #text::placeholder { color: #6B6255; }
   #text:hover { border-color: var(--text-3); }
   #text:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft); }
+  #text.code { font-family: var(--font-mono); tab-size: 4; white-space: pre; overflow-x: auto; } /* code: indents line up, lines don't wrap */
 
   .hint { color: var(--text-2); font-size: 12.5px; line-height: 1.5; margin: 8px 0 0; }
   .warn { color: var(--danger); }
@@ -571,9 +572,10 @@
       <section class="card">
         <h2>Text <span id="count" class="count"></span></h2>
         <textarea id="text" spellcheck="true" aria-label="Text to write" placeholder="Type or paste what you want written"></textarea>
+        <div class="row toggle"><label for="codeMode">Code</label><input type="checkbox" id="codeMode"><p class="hint">For programs: every line and indent as typed, and symbols like <code># &lt; &gt; { } = + * / _</code> written by hand</p></div>
         <p class="hint" id="capacity" role="status"></p>
         <p class="hint warn" id="skipped" hidden></p>
-        <p class="hint">Tip: <code>_underline_</code> words, or write them with a <code>*second pen*</code> (the printer pauses to swap pens).</p>
+        <p class="hint" id="markupTip">Tip: <code>_underline_</code> words, or write them with a <code>*second pen*</code> (the printer pauses to swap pens).</p>
         <p class="hint" id="editsNote" hidden><span id="editsCount"></span> <button type="button" class="linkish" id="resetEdits">Reset all</button></p>
       </section>
       <section class="card">

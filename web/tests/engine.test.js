@@ -59,6 +59,12 @@ test("cleanText matches clean_text", () => {
   }
 });
 
+test("cleanText keeps the characters asked for exactly as typed (drawn symbols, markup)", () => {
+  assert.deepEqual(E.cleanText("MAX <Zoo>\t_a_").clean, "MAx zoo a");
+  assert.deepEqual(E.cleanText("MAX <Zoo>\t_a_", "XZ<>_").clean, "MAX <Zoo> _a_");
+  assert.deepEqual([...E.cleanText("a{b}", "{").dropped], ["}"]);
+});
+
 test("align and denoise match model.py", () => {
   const a = FIX.arrays; // fixtures keep 8 significant digits
   assert.ok(maxDiff(E.align(Float64Array.from(a.align_in)), a.align_out) < 1e-6);

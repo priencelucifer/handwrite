@@ -24,7 +24,7 @@ const mulberry = seed => { let a = seed | 0; const random = () => { a = (a + 0x6
 function run(settings, text, seed, edit) {
   const cfg = G.resolve(settings);
   const rng = mulberry(seed);
-  const paras = G.words(text, seed);
+  const paras = G.words(text, seed, G.resolve(settings).writing.code);
   if (edit) edit(paras.flat(), rng); // word changes made in the preview: size, move
   const lines = G.layout(paras, fakeInk(rng), cfg, rng);
   const passes = G.planPasses(lines, cfg);
@@ -138,7 +138,9 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
   const rng = mulberry(12345), pick = a => a[Math.floor(rng.random() * a.length)], U = (a, b) => a + rng.random() * (b - a);
   const models = Object.keys(G.PRINTERS), papers = Object.keys(G.PAPERS);
   const vocab = "the quick brown fox jumps over a lazy dog and writes letters home to friends each day HELLO, NASA OK I _the fox_ *dog day* _*both*_".split(" ");
-  const tally = { ok: 0, refused: 0, edited: 0 };
+  // code: drawn symbols, ALL-CAPS names with drawn X and Z, and (in code mode) indents and names longer than a word
+  const code = "#include <stdio.h> int main() { } a[i] = b * c / d; x_y && || != >= <= += -> @d $v ~a ^b \\n %d MAX_SIZE ZERO {x} [0]".split(" ");
+  const tally = { ok: 0, refused: 0, edited: 0, code: 0 };
   for (let c = 0; c < 4000; c++) {
     const s = structuredClone(G.DEFAULT_SETTINGS);
     s.printer.model = pick(models);
@@ -152,8 +154,10 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     s.printer.z_lift = s.printer.z_draw + U(0.9, 12);
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
-    const text = Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () =>
-      Array.from({ length: Math.floor(rng.random() * 25) }, () => pick(vocab)).join(" ")).join("\n");
+    s.writing.code = rng.random() < 0.35;
+    const words = s.writing.code ? [...vocab, ...code, ...code, 'System.out.println("Hello,World!");'] : rng.random() < 0.5 ? vocab : [...vocab, ...code];
+    const text = Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () => " ".repeat(s.writing.code ? Math.floor(rng.random() * 17) : 0) +
+      Array.from({ length: Math.floor(rng.random() * 25) }, () => pick(words)).join(" ")).join("\n");
     // words edited in the preview: some bigger or smaller, some moved anywhere (on or off the page)
     const edit = rng.random() < 0.4 ? (ws, r) => { for (const w of ws) if (r.random() < 0.3) {
       if (r.random() < 0.5) w.size = 0.3 + r.random() * 3.7;
@@ -170,10 +174,11 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     catch (e) { throw new Error(`case ${c} UNSAFE: ${e.message}\n${JSON.stringify(s)}\n${JSON.stringify(text)}`); }
     tally.ok++;
     if (edit) tally.edited++;
+    if (s.writing.code) tally.code++;
   }
   test.diagnostic?.(`fuzz: ${tally.ok} files simulated safely, ${tally.refused} setups refused`);
-  console.log(`fuzz: ${tally.ok} files simulated safely (${tally.edited} with edited words), ${tally.refused} setups refused`);
-  assert.ok(tally.ok > 500 && tally.edited > 100, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
+  console.log(`fuzz: ${tally.ok} files simulated safely (${tally.edited} with edited words, ${tally.code} code), ${tally.refused} setups refused`);
+  assert.ok(tally.ok > 500 && tally.edited > 100 && tally.code > 150, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
 });
 
 test("page capacity estimate: plausible, grows with paper, counts paragraph lines", () => {
@@ -205,6 +210,61 @@ test("ALL-CAPS words are written letter by letter; other words stay whole", () =
   const [line] = G.layout(G.words("OK", 1), ink, cfg, mulberry(1));
   const starts = line.map(s => s[0][0]);
   assert.ok(starts[1] > starts[0] + 0.7 * cfg.writing.x_height, JSON.stringify(starts));
+});
+
+test("code: symbols the model can't write are drawn pieces; long names are cut; ALL-CAPS and digits as before", () => {
+  assert.deepStrictEqual(G.pieces("#include<stdio.h>", true), ["#", "include", "<", "stdio.h", ">"]);
+  assert.deepStrictEqual(G.pieces("MAX_SIZE", true), ["M", "A", "X", "_", "S", "I", "Z", "E"]);
+  assert.deepStrictEqual(G.pieces("x+=10;", false), ["x", "+", "=", "1", "0;"]);
+  const long = 'System.out.println("Hello,World!");', cut = G.pieces(long, true);
+  assert.ok(cut.every(p => p.length <= G.MAX_WORD) && cut.join("") === long && cut.length === 2, JSON.stringify(cut));
+  assert.deepStrictEqual(G.pieces(long, false), [long]); // outside code a word that long stays a word (and is refused)
+  // in code _ and * are written; outside code they still mark underline and the second pen
+  const [[xy, star]] = G.words("x_y *p", 1, true);
+  assert.deepStrictEqual(xy.parts.map(p => [p.word, !!p.glyph]), [["x", false], ["_", true], ["y", false]]);
+  assert.deepStrictEqual(star.parts.map(p => p.word), ["*", "p"]);
+  assert.ok(!xy.underline && !star.pen);
+  const [[fox]] = G.words("_fox_", 1);
+  assert.ok(fox.underline && fox.word === "fox");
+  const [[brace, eq]] = G.words("{ ==", 1, true);
+  assert.ok(brace.glyph && !brace.parts && eq.parts.every(p => p.glyph)); // nothing here for the model to write
+  assert.deepStrictEqual(G.words("a\n    b\n\n  c", 1, true).map(p => p.indent), [0, 4, 0, 2]);
+  assert.strictEqual(G.words("    b", 1)[0].indent, undefined); // plain text has no indents
+});
+
+test("drawn symbols: pen paths in the hand's height and slant, a little different each time, exact with no wobble", () => {
+  const hand = { slant: 0.1, asc: 2.1 };
+  for (const ch of G.GLYPH_CHARS) {
+    const g = G.glyph(ch, 7, hand), pts = g.flat(), xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    assert.ok(g.length >= 1 && g.every(st => st.length >= 2) && pts.every(p => p.every(Number.isFinite)), ch);
+    assert.ok(Math.abs(Math.min(...xs)) < 1e-9 && Math.max(...xs) < 1.8 && Math.min(...ys) > -1 && Math.max(...ys) < 2.6, `${ch}: ${[Math.max(...xs), Math.min(...ys), Math.max(...ys)]}`);
+    assert.deepStrictEqual(G.glyph(ch, 7, hand), g); // the same symbol for the same seed
+    assert.notDeepStrictEqual(G.glyph(ch, 8, hand), g); // but no two written alike
+    assert.deepStrictEqual(G.glyph(ch, 7, hand, 0), G.glyph(ch, 8, hand, 0)); // wobble 0: as designed
+  }
+  const bar = h => { const [st] = G.glyph("|", 1, h, 0); return { top: st[0], bottom: st[st.length - 1] }; };
+  const tall = bar({ slant: 0, asc: 2.5 }), short = bar({ slant: 0, asc: 1.8 }), lean = bar({ slant: 0.3, asc: 2.1 });
+  assert.ok(Math.abs(tall.top[1] - (1 + 0.9 * 1.5)) < 1e-9 && Math.abs(short.top[1] - (1 + 0.9 * 0.8)) < 1e-9); // as tall as the hand's tall letters
+  const designed = 0.02 / 2.45; // "|" itself leans a hair: 0.02 over its height
+  assert.ok(Math.abs((lean.top[0] - lean.bottom[0]) / (lean.top[1] - lean.bottom[1]) - 0.3 - designed) < 0.02); // and leans like the hand
+  // the hand is measured on the page's written words: their lean, and how tall their tall letters are
+  const leaning = () => [[[0, 0], [0.2, 1], [0.44, 2.2]], [[0.5, 0], [0.7, 1]]];
+  const h = G.handOf(G.words("hello world the tall bold", 1), leaning);
+  assert.ok(Math.abs(h.slant - 0.2) < 1e-9 && Math.abs(h.asc - 2.2) < 1e-9, JSON.stringify(h));
+  assert.deepStrictEqual(G.handOf([[]], leaning), { slant: 0.1, asc: 2.1 }); // nothing written: a typical hand
+});
+
+test("code keeps every line's indent, and a line too long for the paper runs on one step further in", () => {
+  const cfg = G.resolve(withSet({ "writing.wobble": 0, "writing.code": true })), xh = cfg.writing.x_height;
+  const ink = ({ word }) => [[[0, 0], [0.6 * word.length, 1]]];
+  const left = l => Math.min(...l.flat().map(p => p[0]));
+  const lines = G.layout(G.words("int main() {\n    return 0;\n}\n        " + Array(30).fill("x").join(" "), 1, true), ink, cfg, mulberry(1));
+  assert.ok(Math.abs(left(lines[1]) - left(lines[0]) - 4 * 0.55 * xh) < 1e-6, `${left(lines[0])} ${left(lines[1])}`);
+  assert.ok(Math.abs(left(lines[2]) - left(lines[0])) < 1e-6);
+  assert.ok(lines.length >= 5 && Math.abs(left(lines[3]) - left(lines[0]) - 8 * 0.55 * xh) < 1e-6);
+  assert.ok(Math.abs(left(lines[4]) - left(lines[0]) - 12 * 0.55 * xh) < 1e-6); // the run-on line
+  const right = G.writingArea(cfg)[2];
+  assert.ok(lines.every(l => l.every(s => s.every(p => p[0] <= right + 1e-6)))); // and nothing past the right border
 });
 
 test("long text continues on further pages: nothing lost or doubled, every page safe", () => {
