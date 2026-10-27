@@ -180,7 +180,7 @@
     paper: { size: "A5", orientation: "portrait", x: 55, y: 10, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
       ruling: 0, first_line: 20, margin_line: 0 },
     writing: { style: "s:neat-1", bias: 1.8, wobble: 1, x_height: 2.8, line_spacing: 8, word_spacing: 1, header: "", page_numbers: false,
-      code: false }, // code: the text is a program (words(): lines and indents kept, _ and * written)
+      code: false, indent: 0.55 }, // code: the text is a program (words(): _ and * written); indent: x-heights per space a line starts with
   };
   // Every number that reaches the G-code: [min, max]. Values must be real, finite numbers.
   const LIMITS = {
@@ -189,7 +189,7 @@
       paper_pause_s: [5, 600], pen_pause_s: [5, 600], shift_pause_s: [5, 600], settle_ms: [0, 2000] },
     paper: { x: [-1000, 1000], y: [-1000, 1000], width: [30, 600], height: [30, 600], margin: [0, 50], margin_y: [0, 80],
       ruling: [0, 30], first_line: [0, 600], margin_line: [0, 300] },
-    writing: { bias: [0, 2], wobble: [0, 2], x_height: [1, 20], line_spacing: [1, 100], word_spacing: [0.2, 5] },
+    writing: { bias: [0, 2], wobble: [0, 2], x_height: [1, 20], line_spacing: [1, 100], word_spacing: [0.2, 5], indent: [0, 1.5] },
   };
 
   /** Refuse any setting that could put an unsafe or garbled command into the G-code. */
@@ -341,11 +341,11 @@
     "Z": [[[0.06, 1.9], [0.98, 1.93, 1], [0.04, 0.02, 1], [1.02, 0.0]]],
     // digits: the model saw few and garbles them (85 -> &5). Their y is a share of the digit's height (FIGURE_HEIGHT).
     "0": [ring(0.42, 0.5, 0.4, 0.5, 95, 368)],
-    "1": [[[0.06, 0.8], [0.34, 1.0, 1], [0.3, 0.0]]],
+    "1": [[[0.12, 0.84], [0.34, 1.0, 1], [0.3, 0.0]]],
     "2": [[[0.04, 0.75], [0.2, 0.95], [0.45, 1.0], [0.66, 0.88], [0.68, 0.68], [0.5, 0.45], [0.02, 0.02, 1], [0.8, 0.03]]],
     "3": [[[0.04, 0.85], [0.3, 1.0], [0.58, 0.95], [0.66, 0.78], [0.52, 0.6], [0.26, 0.53, 1], [0.58, 0.47], [0.72, 0.28], [0.6, 0.06], [0.32, 0.0], [0.02, 0.1]]],
     "4": [[[0.5, 1.0], [0.04, 0.34, 1], [0.86, 0.34]], [[0.66, 0.7], [0.62, 0.0]]],
-    "5": [[[0.66, 1.0], [0.14, 0.98, 1], [0.08, 0.56, 1], [0.38, 0.62], [0.66, 0.52], [0.74, 0.28], [0.58, 0.05], [0.3, 0.0], [0.04, 0.1]]],
+    "5": [[[0.14, 0.98], [0.09, 0.56, 1], [0.38, 0.62], [0.66, 0.52], [0.74, 0.28], [0.58, 0.05], [0.3, 0.0], [0.04, 0.1]], [[0.15, 0.99], [0.7, 1.01]]],
     "6": [[[0.6, 1.0], [0.3, 0.8], [0.1, 0.45], [0.12, 0.13], [0.38, 0.0], [0.64, 0.1], [0.68, 0.32], [0.46, 0.48], [0.18, 0.4], [0.1, 0.28]]],
     "7": [[[0.02, 0.98], [0.76, 1.0, 1], [0.48, 0.5], [0.3, 0.0]]],
     "8": [[[0.62, 0.86], [0.4, 1.0], [0.14, 0.92], [0.16, 0.66], [0.42, 0.52], [0.68, 0.36], [0.64, 0.08], [0.38, 0.0], [0.08, 0.1], [0.12, 0.34],
@@ -355,10 +355,13 @@
   const GLYPH_CHARS = Object.keys(GLYPHS).join("");
   const GLYPH_SPLIT = new RegExp(`([${GLYPH_CHARS.replace(/[\\\]\[^-]/g, "\\$&")}])`);
   const FIGURE_HEIGHT = 0.82, FIGURE_WIDTH = 1.35; // digits: a little lower than the hand's tall letters, and as drawn, wider
-  // points are drawn too where they stand on their own, as beside a drawn digit (3.14, 7:30, 85,)
-  Object.assign(GLYPHS, { ".": [[[0.02, 0.04], [0.1, 0.13], [0.17, 0.04], [0.07, -0.01]]], ",": [[[0.1, 0.12], [0.1, 0.0], [0.0, -0.28]]],
+  // drawn too where they stand on their own: points beside a drawn digit (3.14, 7:30, 85,), and x (x = 12, x[i]), which
+  // the model writes alone as a stray tick
+  Object.assign(GLYPHS, { "x": [[[0.04, 1.0], [0.74, 0.0]], [[0.72, 1.0], [0.02, 0.02]]],
+    ".": [[[0.02, 0.04], [0.1, 0.13], [0.17, 0.04], [0.07, -0.01]]], ",": [[[0.1, 0.14], [0.15, 0.04], [0.11, -0.12], [0.0, -0.32]]],
     ":": [[[0.02, 0.68], [0.1, 0.77], [0.17, 0.68], [0.07, 0.63]], [[0.02, 0.04], [0.1, 0.13], [0.17, 0.04], [0.07, -0.01]]], ";": [[[0.06, 0.68], [0.14, 0.77], [0.21, 0.68], [0.11, 0.63]], [[0.12, 0.12], [0.12, 0.0], [0.02, -0.28]]] });
   const HAND = { slant: 0.1, asc: 2.1 }; // a typical hand, when the page has no written words to measure
+  const size = st => st.reduce((n, p, i) => n + (i && Math.hypot(p[0] - st[i - 1][0], p[1] - st[i - 1][1])), 0); // a stroke's length
 
   /** Seeded standard-normal numbers (mulberry32, Box-Muller): a drawn symbol looks the same each time for its seed. */
   function normals(seed) {
@@ -390,21 +393,35 @@
   /** A drawn symbol's strokes, like a written word's: x-height units, baseline 0, y up, starting at x = 0.
    *  hand: {slant, asc} of the page's writing (handOf); k: wobble (0 = drawn exactly as designed). */
   function glyph(ch, seed, hand = HAND, k = 1) {
-    const fig = /[0-9]/.test(ch), wide = fig ? FIGURE_WIDTH : 1, N = normals(seed), j = 0.03 * k;
+    const fig = /[0-9]/.test(ch), wide = fig ? FIGURE_WIDTH : 1, N = normals(seed);
     const band = fig ? y => y * FIGURE_HEIGHT * hand.asc : y => y <= 1 ? y : 1 + (y - 1) * (hand.asc - 1);
-    const sc = clip(1 + N() * 0.05 * k, 0.88, 1.12), sh = hand.slant + clip(N() * 0.04 * k, -0.1, 0.1);
-    const rot = clip(N() * 0.025 * k, -0.06, 0.06), lift = clip(N() * 0.03 * k, -0.08, 0.08), cr = Math.cos(rot), sr = Math.sin(rot);
-    const out = GLYPHS[ch].map(st => {
+    const all = GLYPHS[ch].flat(), y0 = Math.min(...all.map(p => p[1])), h = Math.max(...all.map(p => p[1])) - y0 || 1;
+    const scale = (a, b) => k * clip(Math.hypot((Math.max(...a) - Math.min(...a)) * wide, band(Math.max(...b)) - band(Math.min(...b))) / 1.7, 0.3, 1.2);
+    const z = scale(all.map(p => p[0]), all.map(p => p[1])); // a small symbol (=, x, a point) wavers less than a tall digit
+    // no two written alike: width and height, lean, angle and place on the line; where the middle falls (the waist of
+    // an 8, the bar of a 4), whether the top comes out wider than the bottom, and how the middle bows sideways
+    const sx = clip(1 + N() * 0.08 * k, 0.82, 1.18), sy = clip(1 + N() * 0.07 * k, 0.86, 1.14), sh = hand.slant + clip(N() * 0.07 * k, -0.15, 0.15);
+    const rot = clip(N() * 0.04 * k, -0.09, 0.09), lift = clip(N() * 0.05 * k, -0.12, 0.12), cr = Math.cos(rot), sr = Math.sin(rot);
+    const waist = clip(N() * 0.08 * k, -0.16, 0.16), flare = clip(N() * 0.2 * k, -0.4, 0.4), bow = clip(N() * 0.05 * z, -0.1, 0.1);
+    const mid = (Math.min(...all.map(p => p[0])) + Math.max(...all.map(p => p[0]))) / 2;
+    const warp = ([x, y, c]) => { const t = (y - y0) / h; return [x + flare * (x - mid) * (t - 0.5) + bow * h * Math.sin(Math.PI * t), y + waist * h * 4 * t * (1 - t), c]; };
+    const out = GLYPHS[ch].map((st, si) => {
       // a straight line by hand is never quite straight: a midpoint in each long one lets it bend a little
       const end = i => i === 0 || i === st.length - 1 || st[i][2], pts = [];
       st.forEach((p, i) => {
         if (i && end(i - 1) && end(i) && Math.hypot(p[0] - st[i - 1][0], p[1] - st[i - 1][1]) > 0.5) pts.push([(p[0] + st[i - 1][0]) / 2, (p[1] + st[i - 1][1]) / 2]);
         pts.push(p);
       });
-      const moved = pts.map(([x, y, c]) => [x * wide + N() * j, band(y) + N() * j, c]), line = [];
+      const ox = si ? N() * 0.05 * z : 0, oy = si ? N() * 0.05 * z : 0; // the pen put down again never lands quite where it should
+      const zs = scale(st.map(p => p[0]), st.map(p => p[1])), j = 0.05 * zs; // and a small stroke (the rings of a %) wavers less
+      const moved = pts.map(warp).map(([x, y, c]) => [x * wide + N() * j + ox, band(y) + N() * j + oy, c]), line = [];
+      for (const [i, n] of size(st) > 0.5 ? [[0, 1], [moved.length - 1, moved.length - 2]] : []) { // and stops a little early, or runs on (a dot or a comma stays one)
+        const p = moved[i], q = moved[n], len = Math.hypot(p[0] - q[0], p[1] - q[1]) || 1, e = clip(N() * 0.06 * zs, -0.3 * len, Math.min(0.14, 0.3 * len));
+        moved[i] = [p[0] + (p[0] - q[0]) / len * e, p[1] + (p[1] - q[1]) / len * e, p[2]];
+      }
       for (let a = 0, b = 1; b < moved.length; b++) // smooth from corner to corner
         if (moved[b][2] || b === moved.length - 1) { line.push(...spline(moved.slice(a, b + 1), 0.04).slice(line.length ? 1 : 0)); a = b; }
-      return line.map(([x, y]) => { const u = (x + sh * y) * sc, v = y * sc + lift; return [u * cr - v * sr, u * sr + v * cr]; });
+      return line.map(([x, y]) => { const u = (x + sh * y) * sx, v = y * sy + lift; return [u * cr - v * sr, u * sr + v * cr]; });
     });
     let x0 = Infinity;
     for (const st of out) for (const p of st) x0 = Math.min(x0, p[0]);
@@ -438,7 +455,7 @@
   function pieces(word, code) {
     const out = [];
     for (const run of word.split(GLYPH_SPLIT).filter(Boolean)) {
-      if (GLYPHS[run] || /^[.,:;]+$/.test(run)) { out.push(...run); continue; }
+      if (GLYPHS[run] || /^[.,:;]+$/.test(run)) { out.push(...run); continue; } // (x alone is drawn too)
       const parts = isCaps(run) ? run.match(/[^A-Z]*[A-Z][^A-Z]*/g) : [run];
       for (let part of parts) {
         while (code && part.length > MAX_WORD) {
@@ -497,7 +514,6 @@
   }
   const isCaps = word => (word.match(/[A-Z]/g) || []).length >= 2 && !/[a-z]/.test(word);
   const LETTER_GAP = 0.18; // x-heights between block capitals
-  const INDENT = 0.55;     // x-heights per space a line of code is indented
 
   /** A word's ink, assembled from its separately written pieces (pieces()); drawn symbols in this hand (handOf). */
   function wordInk(wd, inkOf, gap, hand, k) {
@@ -527,7 +543,7 @@
   function shapeWord(wd, inkOf, k, N, hand) {
     const ws = clip(1 + N() * 0.04 * k, 0.9, 1.1), shear = clip(N() * 0.05 * k, -0.12, 0.12), rot = clip(N() * 0.012 * k, -0.03, 0.03);
     const cr = Math.cos(rot), sr = Math.sin(rot);
-    let ink = wordInk(wd, inkOf, () => Math.max(0.06, LETTER_GAP + N() * 0.04 * k), hand, k).map(st => st.map(([sx, sy]) => { const a = (sx + shear * sy) * ws, b = sy * ws; return [a * cr - b * sr, a * sr + b * cr]; }));
+    let ink = wordInk(wd, inkOf, () => Math.max(0.06, LETTER_GAP + N() * 0.06 * k), hand, k).map(st => st.map(([sx, sy]) => { const a = (sx + shear * sy) * ws, b = sy * ws; return [a * cr - b * sr, a * sr + b * cr]; }));
     let xmin = Infinity, width = 0;
     for (const st of ink) for (const pt of st) xmin = Math.min(xmin, pt[0]);
     ink = ink.map(st => st.map(([a, b]) => [a - xmin, b])); // the word still starts where it is placed
@@ -705,7 +721,7 @@
         let x = f.left, drift = 0;
         // indents (at most half a line); in code a line too long for the paper runs on one step further in
         const indent = lineStart ? para.runOn : para.indent;
-        if (indent) x += Math.min(indent * INDENT * f.lxh, 0.5 * (f.lineRight - f.left));
+        if (indent) x += Math.min(indent * w.indent * f.lxh, 0.5 * (f.lineRight - f.left));
         const x0 = x, strokes = [], placed = [];
         while (i < para.length) {
           const wd = para[i];

@@ -868,21 +868,26 @@
   const W_ = () => state.settings.writing, P_ = () => state.settings.paper, PR_ = () => state.settings.printer;
   $("text").value = state.text;
   $("text").addEventListener("input", e => {
-    state.text = e.target.value; scheduleRender();
-    if (!W_().code && (state.text.match(/^\s*(#include|#define|import |from \S+ import|def |class |public |int main|library\(|function\b)|<-|[;{}(]\s*$/gm) || []).length >= 3)
+    state.text = e.target.value; scheduleRender(); syncIndent();
+    if (!W_().code &&(state.text.match(/^\s*(#include|#define|import |from \S+ import|def |class |public |int main|library\(|function\b)|<-|[;{}(]\s*$/gm) || []).length >= 3)
       tipOnce("code", "Writing code? Turn on Code under the text box: every line and indent stays as typed, and _ and * are written as they are.");
   });
   /** Code: the text box shows indents in a fixed-width font, without spelling marks; the markup tip doesn't apply. */
   const syncCode = () => { const on = W_().code === true; $("codeMode").checked = on; $("text").classList.toggle("code", on); $("text").spellcheck = !on; $("markupTip").hidden = on; };
   syncCode();
-  $("codeMode").onchange = () => { W_().code = $("codeMode").checked; if (W_().code) $("tipToast").hidden = true; syncCode(); scheduleRender(0); }; // the tip said to do this
-  for (const [id, key] of [["bias", "bias"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"]]) {
+  $("codeMode").onchange = () => { W_().code = $("codeMode").checked; if (W_().code) $("tipToast").hidden = true; syncCode(); syncIndent(); scheduleRender(0); }; // the tip said to do this
+  for (const [id, key] of [["bias", "bias"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"], ["indent", "indent"]]) {
     const el = $(id), out = el.nextElementSibling;
-    el.value = W_()[key]; out.textContent = (+el.value).toFixed(2);
-    const fill = () => el.style.setProperty("--fill", (el.value - el.min) / (el.max - el.min) * 100 + "%"); fill();
+    const show = () => { out.textContent = key === "indent" ? `${(el.value * 4 * (+$("xh").value || W_().x_height)).toFixed(1)} mm` : (+el.value).toFixed(2); }; // indent: a tab's width
+    const fill = () => el.style.setProperty("--fill", (el.value - el.min) / (el.max - el.min) * 100 + "%");
+    el.value = W_()[key]; show(); fill();
+    if (key === "indent") $("xh").addEventListener("input", show);
     // only neatness needs new handwriting; the others just re-lay the cached words
-    el.addEventListener("input", () => { W_()[key] = +el.value; out.textContent = (+el.value).toFixed(2); fill(); scheduleRender(key === "bias" ? 400 : 60); });
+    el.addEventListener("input", () => { W_()[key] = +el.value; show(); fill(); scheduleRender(key === "bias" ? 400 : 60); });
   }
+  /** The indent slider shows once the text has an indented line, or is code. */
+  function syncIndent() { $("indentRow").hidden = !(W_().code === true || /^[^\S\n]+\S/m.test(state.text)); }
+  syncIndent();
   bindNumber("xh", () => W_(), "x_height", 60);
   bindNumber("lineSpacing", () => W_(), "line_spacing", 60);
   bindNumber("margin", () => P_(), "margin", 60);

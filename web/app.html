@@ -309,6 +309,8 @@
   .row.toggle { grid-template-columns: minmax(0,1fr) auto; row-gap: 0; }
   .row.toggle > label { min-height: 40px; display: flex; align-items: center; color: var(--text); font-size: 14px; font-weight: 500; cursor: pointer; }
   .row.toggle .hint { grid-column: 1 / -1; margin: 0; }
+  #indentRow .hint { grid-column: 2; margin: -6px 0 0; }
+  #indentRow .slider { grid-template-columns: minmax(0,1fr) 68px; } /* "12.3 mm" on one line */
   input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; margin: 0; position: relative; width: 40px; height: 24px; border-radius: 999px;
     background: var(--surface-2); border: 1px solid var(--field); cursor: pointer; transition: background-color var(--d2), border-color var(--d2); }
   input[type=checkbox]::before { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
@@ -578,6 +580,9 @@
         <h2>Text <span id="count" class="count"></span></h2>
         <textarea id="text" spellcheck="true" aria-label="Text to write" placeholder="Type or paste what you want written"></textarea>
         <div class="row toggle"><label for="codeMode">Code</label><input type="checkbox" id="codeMode"><p class="hint">For programs: every line and indent as typed, and symbols like <code># &lt; &gt; { } = + * / _</code> written by hand</p></div>
+        <div class="row" id="indentRow" hidden><label for="indent" title="How far a tab (4 spaces) at the start of a line moves it in">Indent</label>
+          <div class="slider"><input type="range" id="indent" min="0" max="1.5" step="0.05" aria-describedby="indentHint"><output for="indent"></output></div>
+          <p class="hint" id="indentHint">How far in each tab (4 spaces) moves a line</p></div>
         <p class="hint" id="capacity" role="status"></p>
         <p class="hint warn" id="skipped" hidden></p>
         <p class="hint" id="markupTip">Tip: <code>_underline_</code> words, or write them with a <code>*second pen*</code> (the printer pauses to swap pens).</p>

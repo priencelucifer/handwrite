@@ -137,7 +137,7 @@ test("text edge cases", () => {
 test("fuzz: thousands of random setups -> every produced file passes the independent simulator", () => {
   const rng = mulberry(12345), pick = a => a[Math.floor(rng.random() * a.length)], U = (a, b) => a + rng.random() * (b - a);
   const models = Object.keys(G.PRINTERS), papers = Object.keys(G.PAPERS);
-  const vocab = "the quick brown fox jumps over a lazy dog and writes letters home to friends each day HELLO, NASA OK I _the fox_ *dog day* _*both*_".split(" ");
+  const vocab = "the quick brown fox jumps over a lazy dog and writes letters home to friends each day HELLO, NASA OK I _the fox_ *dog day* _*both*_ 2024 3.14 10:30 85, x x2 (12)".split(" ");
   // code: drawn symbols, ALL-CAPS names with drawn X and Z, and (in code mode) indents and names longer than a word
   const code = "#include <stdio.h> int main() { } a[i] = b * c / d; x_y && || != >= <= += -> @d $v ~a ^b \\n %d MAX_SIZE ZERO {x} [0]".split(" ");
   const tally = { ok: 0, refused: 0, edited: 0, code: 0 };
@@ -152,11 +152,11 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     Object.assign(s.printer, { offset_x: U(-40, 40), offset_y: U(-40, 40), z_draw: U(2, 40), dry_run: rng.random() < 0.3 });
     if (rng.random() < 0.4) Object.assign(s.paper, { ruling: U(3, 14), first_line: U(0, 80), margin_line: rng.random() < 0.5 ? U(0, 60) : 0 });
     s.printer.z_lift = s.printer.z_draw + U(0.9, 12);
-    Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3) });
+    Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3), indent: U(0, 1.5) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
     s.writing.code = rng.random() < 0.35;
     const words = s.writing.code ? [...vocab, ...code, ...code, 'System.out.println("Hello,World!");'] : rng.random() < 0.5 ? vocab : [...vocab, ...code];
-    const text = Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () => " ".repeat(s.writing.code ? Math.floor(rng.random() * 17) : 0) +
+    const text = Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () => " ".repeat(s.writing.code || rng.random() < 0.3 ? Math.floor(rng.random() * 17) : 0) +
       Array.from({ length: Math.floor(rng.random() * 25) }, () => pick(words)).join(" ")).join("\n");
     // words edited in the preview: some bigger or smaller, some moved anywhere (on or off the page)
     const edit = rng.random() < 0.4 ? (ws, r) => { for (const w of ws) if (r.random() < 0.3) {
@@ -225,7 +225,7 @@ test("code: symbols the model can't write are drawn pieces; long names are cut; 
   assert.deepStrictEqual(G.pieces(long, false), [long]); // outside code a word that long stays a word (and is refused)
   // in code _ and * are written; outside code they still mark underline and the second pen
   const [[xy, star]] = G.words("x_y *p", 1, true);
-  assert.deepStrictEqual(xy.parts.map(p => [p.word, !!p.glyph]), [["x", false], ["_", true], ["y", false]]);
+  assert.deepStrictEqual(xy.parts.map(p => [p.word, !!p.glyph]), [["x", true], ["_", true], ["y", false]]); // an x on its own is drawn too
   assert.deepStrictEqual(star.parts.map(p => p.word), ["*", "p"]);
   assert.ok(!xy.underline && !star.pen);
   const [[fox]] = G.words("_fox_", 1);
@@ -282,6 +282,12 @@ test("code keeps every line's indent, and a line too long for the paper runs on 
   const pl = G.layout(G.words("int main() {\n    " + Array(30).fill("x").join(" "), 1), ink, plain, mulberry(1));
   assert.ok(pl.length >= 3 && Math.abs(left(pl[1]) - left(pl[0]) - 4 * 0.55 * xh) < 1e-6 && Math.abs(left(pl[2]) - left(pl[0])) < 1e-6,
     pl.map(left).join(" "));
+  // how far is a setting: twice as far, or not at all
+  for (const indent of [1.1, 0]) {
+    const l2 = G.layout(G.words("ab\n    cd", 1, true), ink, G.resolve(withSet({ "writing.wobble": 0, "writing.code": true, "writing.indent": indent })), mulberry(1));
+    assert.ok(Math.abs(left(l2[1]) - left(l2[0]) - 4 * indent * xh) < 1e-6, `${indent}: ${l2.map(left).join(" ")}`);
+  }
+  assert.throws(() => G.resolve(withSet({ "writing.indent": 2 })), /indent/);
 });
 
 test("long text continues on further pages: nothing lost or doubled, every page safe", () => {
