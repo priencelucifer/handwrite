@@ -392,8 +392,12 @@
   setInterval(() => { if (state.view && !state.error) updateSummary(); }, 60000); // keep "done around" current
 
   // ---------- build-plate view ----------
-  const canvas = $("plate"), ctx = canvas.getContext("2d");
-  const view = { zoom: 1, panX: 0, panY: 0, s: 1, ox: 0, oy: 0 };
+  const canvas = $("plate"), ctx = canvas.getContext("2d"), stageEl = canvas.closest(".stage");
+  // fit: "plate" (the whole plate), "paper" (full screen: the whole paper), or null (zoomed in: cx, cy, zoom stay as set).
+  // Whatever it follows is fitted again on every draw, so a rotation or the browser's bars coming and going can't move
+  // the page off screen.
+  const view = { fit: "plate", zoom: 1, fitZoom: 1, cx: null, cy: null, s: 1, ox: 0, oy: 0, base: 0, W: 0, H: 0, by: 0 };
+  if (new URLSearchParams(location.search).has("test")) window.__hwView = view; // read by the phone tests (phone.js); nothing else uses it
   let drag = null;
   let sel = null; // selected word(s): {key: the word clicked, keys: what changes (it, or its whole line), lineKeys, line: bool}
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -407,12 +411,19 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     const cfg = plateCfg();
-    if (!cfg) return;
+    if (!cfg || !W || !H) return; // no size yet (mid-layout): nothing to fit the view to
     const pr = cfg.printer, p = cfg.paper, bx = pr.bed_x, by = pr.bed_y, dx = pr.offset_x, dy = pr.offset_y;
-    const s = Math.min(W / (bx * 1.35), H / (by * 1.35)) * view.zoom;
-    const limX = W / 2 + bx * s / 2 - 60, limY = H / 2 + by * s / 2 - 60; // keep some plate in view
-    view.panX = Math.min(Math.max(view.panX, -limX), limX); view.panY = Math.min(Math.max(view.panY, -limY), limY);
-    Object.assign(view, { s, ox: (W - bx * s) / 2 - dx * s + view.panX, oy: (H - by * s) / 2 + dy * s + view.panY, by });
+    const base = Math.min(W / (bx * 1.35), H / (by * 1.35)), full = stageEl.classList.contains("full");
+    if (view.fit === "plate") Object.assign(view, { zoom: 1, fitZoom: 1, cx: null, cy: null });
+    else if (view.fit === "paper") paperView(p, base, W, H);
+    const s = base * view.zoom;
+    // the view's centre in bed mm: the plate's middle, or the spot zoomed into; never so far that less than 40 px of the
+    // paper (full screen) or the plate stays on screen, so a zoomed page can't be lost
+    const [l0, t0, l1, t1] = full ? [p.x, p.y, p.x + p.width, p.y + p.height] : [dx, dy, dx + bx, dy + by];
+    const kx = Math.max(0, W / 2 - 40) / s, ky = Math.max(0, H / 2 - 40) / s;
+    const cx = Math.min(Math.max(view.cx ?? dx + bx / 2, l0 - kx), l1 + kx), cy = Math.min(Math.max(view.cy ?? dy + by / 2, t0 - ky), t1 + ky);
+    if (view.cx !== null) Object.assign(view, { cx, cy });
+    Object.assign(view, { s, base, W, H, by, ox: W / 2 - cx * s, oy: H / 2 - (by - cy) * s });
     const X = x => view.ox + x * s, Y = y => view.oy + (by - y) * s;
 
     // plate + grid, drawn where the pen tip can go (the nozzle's travel moved by the pen offset, like the cutter
@@ -492,8 +503,8 @@
     const area = q => (q[2] - q[0]) * (q[3] - q[1]), big = lost.reduce((m, q) => (!m || area(q) > area(m) ? q : m), null);
     if (big && (big[3] - big[1]) * s > 24 && (big[2] - big[0]) * s > 120) // at its top edge, clear of the chips at the bottom
       label("pen can't reach", pX((big[0] + big[2]) / 2), pY(big[1]) + 19, css("--muted"), "center");
-    label(`${pr.model} · plate ${bx} × ${by} mm`, 14, 22, css("--muted"), "left");
-    const full = canvas.closest(".stage").classList.contains("full"), fy = Y(dy) + 22;
+    if (!full) label(`${pr.model} · plate ${bx} × ${by} mm`, 14, 22, css("--muted"), "left");
+    const fy = Y(dy) + 22;
     if (!full || fy <= H - 12) // just under the plate, above the chips; zoomed onto the paper in full screen, only if the front edge shows
       label("FRONT OF PRINTER", X(dx + bx / 2), full ? fy : Math.min(fy, H - 58), css("--muted"), "center");
   }
@@ -502,11 +513,29 @@
     const bar = $("wordBar");
     if (bar.hidden) return;
     const bw = bar.offsetWidth, bh = bar.offsetHeight, gap = 12;
+    if (getComputedStyle(bar).getPropertyValue("--dock").trim() === "1") { // phones: full width along the bottom of the preview, or just
+      const low = Math.max(8, H - bh - 8); // above the selection if that would hide it (in full screen the view moves instead)
+      bar.style.left = ""; bar.style.top = `${canvas.offsetTop + (stageEl.classList.contains("full") || y1 + 4 <= low ? low : Math.max(8, y0 - bh - 8))}px`;
+      return;
+    }
     const x = Math.max(gap, Math.min((x0 + x1) / 2 - bw / 2, W - bw - gap));
     let y = y1 + gap + 4;
     if (y + bh > H - gap) y = y0 - bh - gap - 4;
     y = Math.max(gap, Math.min(y, H - bh - gap));
     bar.style.left = `${canvas.offsetLeft + x}px`; bar.style.top = `${canvas.offsetTop + y}px`;
+  }
+  /** Full screen: the whole paper, as big as it fits below or beside the toolbar (whichever shows it bigger), centred there. */
+  function paperView(p, base, W, H) {
+    const c = canvas.getBoundingClientRect(), t = $("zoomFull").parentElement.getBoundingClientRect(), m = 12;
+    const bottom = H - m - ($("pager").hidden ? 0 : 56);
+    let best = null;
+    for (const [x0, y0, x1, y1] of [[m, t.bottom - c.top + 8, W - m, bottom], [m, m, t.left - c.left - 8, bottom]]) {
+      const k = Math.min((x1 - x0) / (p.width * 1.04), (y1 - y0) / (p.height * 1.04));
+      if (k > 0 && (!best || k > best.k)) best = { k, mx: (x0 + x1) / 2, my: (y0 + y1) / 2 };
+    }
+    if (!best) return;
+    Object.assign(view, { zoom: best.k / base, fitZoom: best.k / base,
+      cx: p.x + p.width / 2 + (W / 2 - best.mx) / best.k, cy: p.y + p.height / 2 + (best.my - H / 2) / best.k });
   }
   function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
   function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
@@ -523,18 +552,49 @@
     const [x, y] = toBed(e), p = cfg.paper;
     return x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height;
   }
-  /** The word under the pointer on the page shown: {w: {seed, key, box, s0, s1}, ln: its line}, or null. */
-  function wordAt(e) {
+  /** The word nearest the pointer on the page shown, within padPx of it (a fingertip): {w: {seed, key, box, s0, s1}, ln: its line}, or null. */
+  function wordAt(e, padPx = 0) {
     const v = cur(), cfg = plateCfg();
     if (!v || !cfg || state.busy) return null;
-    const [bx, by] = toBed(e), p = cfg.paper, x = bx - p.x, y = p.y + p.height - by, pad = 0.6;
-    for (const ln of v.lines) for (const w of ln.words || []) if (x >= w.box[0] - pad && x <= w.box[2] + pad && y >= w.box[1] - pad && y <= w.box[3] + pad) return { w, ln };
-    return null;
+    const [bx, by] = toBed(e), p = cfg.paper, x = bx - p.x, y = p.y + p.height - by, pad = Math.max(0.6, padPx / view.s);
+    let best = null, bestD = Infinity;
+    for (const ln of v.lines) for (const w of ln.words || []) {
+      const d = Math.hypot(Math.max(w.box[0] - x, 0, x - w.box[2]), Math.max(w.box[1] - y, 0, y - w.box[3]));
+      if (d <= pad && d < bestD) { best = { w, ln }; bestD = d; }
+    }
+    return best;
   }
-  let hover = null; // word under the pointer
+  /** What a finger pressing here takes hold of: {kind: "word" | "paper" | "pan" | "tap", hit: the word nearest it}.
+   *  The selected word; in full screen at the whole-page view any word (nothing else moves there). The paper only in
+   *  the normal view: full screen shows too little of the plate to place it, so a finger that misses a word can't move it. */
+  function fingerGrab(e) {
+    const near = wordAt(e, 14), pan = zoomedIn();
+    if (near && !isFixed(near.w.key) && (isFull() && !pan || sel && sel.keys.includes(near.w.key))) return { kind: "word", hit: near };
+    return { kind: !isFull() && onPaper(e) ? "paper" : pan ? "pan" : "tap", hit: near };
+  }
+  let hover = null; // word under the mouse
+  const isFull = () => stageEl.classList.contains("full");
+  const touches = new Map(); // finger -> [x, y] in the preview
+  let lastTap = null; // the previous finger tap, for double-tap
+  const inView = e => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const zoomedIn = () => view.fit === null && view.zoom > view.fitZoom * 1.02;
   canvas.addEventListener("pointerdown", e => {
-    canvas.setPointerCapture(e.pointerId);
-    const p = state.settings.paper, hit = e.button === 0 ? wordAt(e) : null;
+    const touch = e.pointerType === "touch";
+    if (touch) touches.set(e.pointerId, inView(e));
+    if (touch && touches.size === 2 && isFull()) { // two fingers in full screen: pinch to zoom, move them to look around
+      const [a, b] = [...touches.values()], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      if (drag && drag.kind === "word" && drag.moved) draw(); // a half-dragged word goes back
+      drag = { kind: "pinch", d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, z0: view.zoom, ax: (mx - view.ox) / view.s, ay: view.by - (my - view.oy) / view.s };
+      return;
+    }
+    if (touches.size > 1) return;
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* a synthetic pointer can't be captured */ }
+    const p = state.settings.paper;
+    if (touch) { // a finger: nothing changes until it moves (a tap, or a second finger for a pinch, picks nothing up)
+      drag = { ...fingerGrab(e), start: toBed(e), x: p.x, y: p.y, sx: e.clientX, sy: e.clientY, cx: view.cx, cy: view.cy, moved: false, delta: [0, 0] };
+      return;
+    }
+    const hit = e.button === 0 ? wordAt(e) : null;
     if (hit) { // a word: select it (unless it's part of the selection already) and maybe drag it
       if (!sel || !sel.keys.includes(hit.w.key)) select(hit.w, hit.ln);
       drag = { kind: isFixed(hit.w.key) ? "none" : "word", start: toBed(e), sx: e.clientX, sy: e.clientY, moved: false, delta: [0, 0] };
@@ -544,22 +604,39 @@
       : { kind: "bg", sx: e.clientX, sy: e.clientY, moved: false }; // beside the paper: the plate stays put (a click deselects)
   });
   canvas.addEventListener("pointermove", e => {
+    const touch = e.pointerType === "touch";
+    if (touch && touches.has(e.pointerId)) touches.set(e.pointerId, inView(e));
+    if (drag && drag.kind === "pinch") {
+      if (touches.size < 2) return;
+      const [a, b] = [...touches.values()], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      const zoom = Math.min(Math.max(drag.z0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / drag.d0, view.fitZoom * 0.8), 14), k = view.base * zoom;
+      Object.assign(view, { fit: null, zoom, cx: drag.ax + (view.W / 2 - mx) / k, cy: drag.ay + (my - view.H / 2) / k }); // the spot between the fingers stays there
+      return draw();
+    }
     if (!drag) {
+      if (touch) return;
       const hit = wordAt(e), w = hit && hit.w;
       if ((w && w.key) !== (hover && hover.key)) { hover = w; draw(); }
       canvas.style.cursor = w ? (sel && sel.keys.includes(w.key) && !isFixed(w.key) ? "move" : "pointer") : onPaper(e) ? "grab" : "default";
       return;
     }
     if (drag.kind === "none") return;
-    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return; // still a click, not a drag
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < (touch ? 10 : 4)) return; // still a tap or a click
+    drag.moved = true;
+    if (drag.kind === "word" && drag.hit && (!sel || !sel.keys.includes(drag.hit.w.key))) select(drag.hit.w, drag.hit.ln); // a finger picks the word up
+    if (drag.kind === "tap") return; // a finger sliding over the whole-page view: the plate stays put
+    if (drag.kind === "pan") { // a zoomed-in page follows the finger
+      Object.assign(view, { cx: drag.cx - (e.clientX - drag.sx) / view.s, cy: drag.cy + (e.clientY - drag.sy) / view.s });
+      return draw();
+    }
     canvas.style.cursor = drag.kind === "word" ? "move" : drag.kind === "bg" ? "default" : "grabbing";
     if (drag.kind === "word") { // mm on the page (y down), kept on the paper; drawn live, laid out when let go
       const [x, y] = toBed(e);
-      drag.moved = true; drag.delta = fitMove(x - drag.start[0], drag.start[1] - y);
+      drag.delta = fitMove(x - drag.start[0], drag.start[1] - y);
       return draw();
     }
-    if (drag.kind === "bg") { drag.moved = true; return; }
-    drag.moved = true; hover = null;
+    if (drag.kind === "bg") return;
+    hover = null;
     const cfg = plateCfg(); if (!cfg) return;
     const [x, y] = toBed(e), p = state.settings.paper, pr = cfg.printer;
     // keep at least 20 mm of paper over the plate so it can't be lost
@@ -567,15 +644,44 @@
     p.y = Math.round(Math.min(Math.max(drag.y + y - drag.start[1], 20 - cfg.paper.height), pr.bed_y - 20));
     relayout();
   });
-  canvas.addEventListener("pointerup", () => {
+  function pointerEnd(e, cancelled) {
+    const touch = e.pointerType === "touch";
+    if (touch) touches.delete(e.pointerId);
     const d = drag;
+    if (d && d.kind === "pinch") { // both fingers up: zoomed out as far as the whole page means the whole page again
+      if (touches.size) return;
+      drag = null;
+      if (view.zoom <= view.fitZoom * 1.02) { view.fit = "paper"; draw(); }
+      return;
+    }
     drag = null;
     if (!d) return;
+    if (cancelled) { if (d.kind === "word" && d.moved) draw(); return; } // the browser took over (the page scrolled): nothing happens
+    if (touch && !d.moved) return tapAt(e, d.hit);
     if (d.kind === "word" && d.moved) return moveBy(...d.delta);
     if (d.kind === "paper" && d.moved) return scheduleRender(0);
     if ((d.kind === "paper" || d.kind === "bg") && !d.moved && sel) { select(null); draw(); } // a click beside the words: done
-  });
-  canvas.addEventListener("pointerleave", () => { if (hover && !drag) { hover = null; draw(); } });
+  }
+  canvas.addEventListener("pointerup", e => pointerEnd(e, false));
+  canvas.addEventListener("pointercancel", e => pointerEnd(e, true));
+  canvas.addEventListener("pointerleave", e => { if (e.pointerType !== "touch" && hover && !drag) { hover = null; draw(); } });
+  canvas.addEventListener("touchstart", e => { // the normal view on a phone: a finger moving the paper or a word mustn't scroll the page too
+    const t = e.touches[0];
+    if (!isFull() && e.touches.length === 1 && /^(paper|word)$/.test(fingerGrab({ clientX: t.clientX, clientY: t.clientY }).kind)) e.preventDefault();
+  }, { passive: false });
+  /** A finger tap: on a word its bar opens, elsewhere it closes. In full screen, two quick taps zoom in there, or back out. */
+  function tapAt(e, hit) {
+    const now = e.timeStamp || performance.now(), [x, y] = inView(e); // when the finger lifted, not when this ran
+    if (isFull() && lastTap && now - lastTap.t < 350 && Math.hypot(x - lastTap.x, y - lastTap.y) < 30) {
+      lastTap = null;
+      if (zoomedIn()) { view.fit = "paper"; draw(); } else zoomAt(2.5, e);
+      return;
+    }
+    lastTap = { t: now, x, y };
+    if (hit) { if (!sel || !sel.keys.includes(hit.w.key)) select(hit.w, hit.ln); requestAnimationFrame(revealSelection); }
+    else if (sel) select(null);
+    draw();
+  }
   /** Write these words again: each gets the next fresh seed, the rest of the page keeps its handwriting. */
   function rewriteWords(seeds) {
     remember();
@@ -599,6 +705,17 @@
   function select(w, ln) {
     sel = w ? { key: w.key, keys: [w.key], lineKeys: (ln.words || []).map(x => x.key).filter(k => !isFixed(k)), line: false } : null;
     syncBar();
+    if (!w && isFull() && view.fit === null && view.zoom <= view.fitZoom * 1.02) view.fit = "paper"; // moved only to show the word
+  }
+  /** Full screen on a phone: if the word bar along the bottom covers the selected word, the view moves up to show it. */
+  function revealSelection() {
+    const bar = $("wordBar"), ws = selected(), v = cur();
+    if (bar.hidden || !ws.length || !isFull() || !v || getComputedStyle(bar).getPropertyValue("--dock").trim() !== "1") return;
+    const p = v.cfg.paper, low = Math.max(...ws.map(w => view.oy + (view.by - (p.y + p.height - w.box[3])) * view.s));
+    const limit = bar.offsetTop - canvas.offsetTop - 12;
+    if (low <= limit) return;
+    Object.assign(view, { fit: null, cx: (view.W / 2 - view.ox) / view.s, cy: view.by - (view.H / 2 - view.oy) / view.s - (low - limit) / view.s });
+    draw();
   }
   function setLine(line) {
     if (!sel || isFixed(sel.key)) return;
@@ -660,38 +777,32 @@
     if (act) { e.preventDefault(); act(); }
   });
   canvas.addEventListener("wheel", e => { e.preventDefault(); zoomAt(Math.pow(1.0015, -e.deltaY), e); }, { passive: false });
+  /** Zoom by f around a point (the pointer, or the middle): that spot stays where it is. All the way out: the whole plate
+   *  (or, in full screen, the whole paper) again. */
   function zoomAt(f, e) {
-    const r = canvas.getBoundingClientRect(), mx = e ? e.clientX - r.left : r.width / 2, my = e ? e.clientY - r.top : r.height / 2;
-    const z = Math.min(Math.max(view.zoom * f, 1), 14), k = z / view.zoom, W = canvas.clientWidth, H = canvas.clientHeight;
-    const cfg = plateCfg(); if (!cfg) return;
-    const bx = cfg.printer.bed_x, by = cfg.printer.bed_y, s1 = view.s * k;
-    view.panX = mx - (mx - view.ox) * k - (W - bx * s1) / 2;
-    view.panY = my - (my - view.oy) * k - (H - by * s1) / 2;
-    view.zoom = z; draw();
+    if (!view.base) return;
+    const r = canvas.getBoundingClientRect(), mx = e ? e.clientX - r.left : view.W / 2, my = e ? e.clientY - r.top : view.H / 2;
+    const ax = (mx - view.ox) / view.s, ay = view.by - (my - view.oy) / view.s, least = view.fitZoom;
+    const zoom = Math.min(Math.max(view.zoom * f, least), 14), k = view.base * zoom;
+    if (zoom <= least * 1.001) view.fit = isFull() ? "paper" : "plate";
+    else Object.assign(view, { fit: null, zoom, cx: ax + (view.W / 2 - mx) / k, cy: ay + (my - view.H / 2) / k });
+    draw();
   }
   /** Paper moved: words are cached, so re-layout is instant; done on the next frame to keep dragging smooth. */
   let frame = 0;
   function relayout() { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => render()); }
-  new ResizeObserver(() => draw()).observe(canvas);
+  new ResizeObserver(() => draw()).observe(canvas); // the view re-fits: rotation, the browser's bars, entering full screen
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw()); // paper + labels follow the theme
   $("zoomIn").onclick = () => zoomAt(1.5); $("zoomOut").onclick = () => zoomAt(1 / 1.5);
-  $("zoomFit").onclick = () => { if (stageEl.classList.contains("full")) return focusPaper(); Object.assign(view, { zoom: 1, panX: 0, panY: 0 }); draw(); };
+  $("zoomFit").onclick = () => { view.fit = isFull() ? "paper" : "plate"; draw(); };
 
-  // full screen: the plate over the whole screen, zoomed onto the paper, so the words are easy to read on a phone
-  const stageEl = canvas.closest(".stage");
-  /** Zoom so the paper fills the view, centred on it. */
-  function focusPaper() {
-    const cfg = plateCfg(); if (!cfg) return;
-    const W = canvas.clientWidth, H = canvas.clientHeight, pr = cfg.printer, p = cfg.paper, bx = pr.bed_x, by = pr.bed_y;
-    const base = Math.min(W / (bx * 1.35), H / (by * 1.35)), fit = Math.min(W / (p.width * 1.08), (H - 24) / (p.height * 1.08));
-    const zoom = Math.min(Math.max(fit / base, 1), 14), s = base * zoom, cx = p.x + p.width / 2, cy = p.y + p.height / 2;
-    Object.assign(view, { zoom, panX: W / 2 - ((W - bx * s) / 2 - pr.offset_x * s + cx * s), panY: H / 2 - ((H - by * s) / 2 + pr.offset_y * s + (by - cy) * s) });
-    draw();
-  }
+  // full screen: the preview over the whole screen, fitted to the paper and kept fitted while the screen settles
   function setFull(on) {
-    if (stageEl.classList.contains("full") === on) return;
+    if (isFull() === on) return;
     stageEl.classList.toggle("full", on); document.documentElement.classList.toggle("stage-full", on);
     $("zoomFull").setAttribute("aria-pressed", on); $("zoomFull").setAttribute("aria-label", on ? "Close full screen" : "Full screen");
+    $("zoomFullLbl").textContent = on ? "Close" : "Full screen";
+    view.fit = on ? "paper" : "plate"; lastTap = null; touches.clear(); drag = null;
     if (on) {
       window.history.pushState({ full: true }, ""); // the phone's Back button closes it
       if (stageEl.requestFullscreen && matchMedia("(pointer: coarse)").matches) stageEl.requestFullscreen().catch(() => {}); // hides the browser bars where allowed
@@ -699,12 +810,12 @@
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       if (window.history.state && window.history.state.full) window.history.back();
     }
-    requestAnimationFrame(() => requestAnimationFrame(() => (on ? focusPaper() : (Object.assign(view, { zoom: 1, panX: 0, panY: 0 }), draw()))));
+    draw();
   }
-  $("zoomFull").onclick = () => setFull(!stageEl.classList.contains("full"));
+  $("zoomFull").onclick = () => setFull(!isFull());
   addEventListener("popstate", () => setFull(false));
-  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && stageEl.classList.contains("full")) setFull(false); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && !e.defaultPrevented && stageEl.classList.contains("full")) setFull(false); });
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && isFull()) setFull(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !e.defaultPrevented && isFull()) setFull(false); });
 
   // ---------- controls ----------
   const W_ = () => state.settings.writing, P_ = () => state.settings.paper, PR_ = () => state.settings.printer;
@@ -750,7 +861,7 @@
     try {
       Object.assign(P_(), G.placePaper(G.resolve(state.settings))); // where the pen reaches, not just mid-plate
     } catch { /* invalid settings: render() explains */ }
-    Object.assign(view, { zoom: 1, panX: 0, panY: 0 });
+    view.fit = isFull() ? "paper" : "plate"; // and show it whole
     scheduleRender(0);
   }
   const syncSounds = () => {
@@ -1023,7 +1134,9 @@
     ["#text", "Type your note", "Write or paste what you want written. The page on the right updates as you type."],
     ["#styles", "Pick a handwriting", "Every style is written live by the model, so no two letters are the same. Try a few."],
     ["#printerMaker", "Choose your printer and paper", "Pick the maker, then your printer, then the paper. The preview shows where the paper sits on the plate."],
-    ["#plate", "Check your page", "This is your page on the build plate. Drag the paper to move it, and click any word to move it, resize it or change its handwriting."],
+    ["#plate", "Check your page", matchMedia("(pointer: coarse)").matches
+      ? "This is your page on the build plate. Drag the paper to move it, and tap any word to change it. Full screen shows the page big and keeps the paper still: drag a word to move it, pinch or double-tap to zoom."
+      : "This is your page on the build plate. Drag the paper to move it, and click any word to move it, resize it or change its handwriting."],
     ["#save", "Save and print", "Happy with it? Save the G-code. The app then walks you through printing it, one step at a time."],
   ];
   let tourAt = -1;

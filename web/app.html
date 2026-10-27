@@ -132,8 +132,20 @@
   #zoomFull .i-close, .stage.full #zoomFull .i-open { display: none; }
   .stage.full #zoomFull .i-close { display: block; }
   #zoomFull { padding: 0 10px; }
-  .stage.full .info { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 0; }
-  .stage.full .pager { top: auto; bottom: 16px; }
+  .stage.full { overscroll-behavior: none; }
+  .stage.full .toolbar { top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); }
+  .stage.full .info { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); padding: 0; }
+  .stage.full .pager { top: auto; bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .tb-lbl { display: none; margin-left: 6px; font: 600 13px var(--font-sans); }
+  .for-touch { display: none; }
+  @media (pointer: coarse) {
+    .stage:not(.full) #plate { touch-action: pan-y; } /* phone, page view: a finger scrolls the page; full screen handles every gesture */
+    .stage:not(.full) #zoomOut, .stage:not(.full) #zoomIn, .stage:not(.full) #zoomFit { display: none; } /* pinch in full screen instead */
+    .stage:not(.full) #zoomFull::before { display: none; }
+    #zoomFull .tb-lbl { display: inline; }
+    #zoomFull { padding: 0 14px; }
+    .for-touch { display: inline; } .for-mouse { display: none; }
+  }
   @media (max-width: 860px) { .stage.full .legend, .stage.full #summary { display: none; } } /* on a phone, all of the screen for the page */
 
   /* ---------- top bar ---------- */
@@ -432,17 +444,35 @@
   .wb-tip { margin: 0; font-size: 12px; color: var(--text-3); }
   .wordbar.fixed-word .wb-edit { display: none; } /* header words are written afresh per sheet: only "write again" */
   @media (pointer: coarse) { .wb-group .btn { min-width: 40px; height: 40px; } .wb-scope button { height: 36px; } }
+  /* phones: the word bar docks along the bottom of the preview, full width, compact */
+  @media (max-width: 600px), (max-height: 500px) {
+    .wordbar { --dock: 1; left: 8px; right: 8px; width: auto; max-width: none; padding: 8px 10px; gap: 6px; }
+    .wb-tip { display: none; }
+    .wb-head b { font-size: 15px; }
+    .wb-scope { width: 150px; }
+    .wb-row { gap: 6px; }
+    .wordbar select { max-width: 140px; }
+  }
+  /* short screens (a phone on its side): one row that scrolls sideways, so the bar hides little of the page */
+  @media (max-height: 500px) {
+    .wordbar { display: flex; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 6px 8px; }
+    .wb-head, .wb-row { display: contents; }
+    .wb-head b { display: none; } /* the word is highlighted on the page */
+    .wb-x { order: -1; } /* the way out stays in reach; the rest scrolls */
+    .wb-scope { margin-left: 0; }
+    .wb-head > *, .wb-row > * { flex: none; }
+  }
   .linkish { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
   /* ---------- dialogs ---------- */
-  dialog { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 0; width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  dialog { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 0; width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
     overflow: hidden; background: var(--surface); color: var(--text); box-shadow: var(--sh-3); }
   dialog::backdrop { background: rgba(20,16,10,.42); backdrop-filter: blur(3px); }
   dialog[open] { animation: dlg-in 240ms var(--e-out); }
   dialog[open]::backdrop { animation: fade 240ms var(--e-out); }
   @keyframes dlg-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
   @keyframes fade { from { opacity: 0; } }
-  .dlg { position: relative; display: grid; grid-template-rows: auto minmax(0,1fr) auto; max-height: calc(100vh - 48px); }
+  .dlg { position: relative; display: grid; grid-template-rows: auto minmax(0,1fr) auto; max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); }
   .dlg > header { padding: 22px 24px 14px; }
   .dlg > header h3 { margin: 0; font: 400 24px/1.2 var(--font-display); letter-spacing: -.01em; }
   .dlg > header p { margin: 6px 0 0; color: var(--text-2); text-wrap: pretty; }
@@ -497,7 +527,7 @@
     html, body { height: auto; }
     body { display: block; }
     main { display: flex; flex-direction: column; }
-    .stage { --plate-h: clamp(320px, 56svh, 560px); order: -1; display: flex; flex-direction: column; }
+    .stage { --plate-h: clamp(200px, min(56svh, 100svh - 140px), 560px); order: -1; display: flex; flex-direction: column; }
     #plate { height: var(--plate-h); }
     .info { position: static; padding: 10px 16px 14px; }
     .chip { max-width: none; }
@@ -572,7 +602,7 @@
         <div class="row"><label for="paper">Paper</label><select id="paper"></select></div>
         <div class="row"><label>Orientation</label>
           <div class="seg" role="group" aria-label="Orientation"><button type="button" id="portrait">Portrait</button><button type="button" id="landscape">Landscape</button></div></div>
-        <p class="hint">Drag the paper on the build plate to where it will sit. Scroll to zoom.</p>
+        <p class="hint"><span class="for-mouse">Drag the paper on the build plate to where it will sit. Scroll to zoom.</span><span class="for-touch">Drag the paper on the build plate to where it will sit. Full screen shows the page big and keeps the paper still while you move words.</span></p>
         <button type="button" class="btn place" id="placePaper" title="Put the paper where the pen reaches, so writing starts at the top border">Place paper automatically</button>
         <details class="more" id="morePage"><summary><span class="more-t">More options</span><span class="more-s" id="morePageSum"></span></summary>
           <div class="more-body">
@@ -630,6 +660,7 @@
       <button class="btn small" id="zoomFull" type="button" aria-label="Full screen" aria-pressed="false" title="Full screen">
         <svg class="i-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
         <svg class="i-close" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        <span class="tb-lbl" id="zoomFullLbl">Full screen</span>
       </button>
     </div>
     <div class="wordbar" id="wordBar" role="toolbar" aria-label="Change the selected word" hidden>
@@ -654,7 +685,7 @@
     </div>
     <div class="tip-toast" id="tipToast" role="status" hidden><span id="tipText"></span><button type="button" id="tipClose" aria-label="Dismiss tip">✕</button></div>
     <div class="info">
-      <div class="chip legend"><span><i class="k-edge"></i>plate edge</span><span><i class="k-area"></i>writing area</span><span><i class="k-slide"></i>paper slide</span><span class="tip">click a word to move, resize or restyle it</span></div>
+      <div class="chip legend"><span><i class="k-edge"></i>plate edge</span><span><i class="k-area"></i>writing area</span><span><i class="k-slide"></i>paper slide</span><span class="tip"><span class="for-mouse">click a word to move, resize or restyle it</span><span class="for-touch">tap a word to change it</span></span></div>
       <div class="chip" id="summary" hidden></div>
       <div class="chip err" id="error" hidden></div>
     </div>
