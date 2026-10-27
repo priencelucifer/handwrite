@@ -226,6 +226,13 @@ test("code: symbols the model can't write are drawn pieces; long names are cut; 
   assert.ok(!xy.underline && !star.pen);
   const [[fox]] = G.words("_fox_", 1);
   assert.ok(fox.underline && fox.word === "fox");
+  // in plain text too, a * or _ standing alone is the symbol (a mark always touches a word): "5 * 3" needs no second pen
+  const [plain] = G.words("5 * 3 = 15 a _ b ** *pen two* _under_", 1);
+  assert.deepStrictEqual(plain.map(w => w.word), ["5", "*", "3", "=", "15", "a", "_", "b", "**", "pen", "two", "under"]);
+  assert.deepStrictEqual(plain.filter(w => w.pen).map(w => w.word), ["pen", "two"]);
+  assert.deepStrictEqual(plain.filter(w => w.underline).map(w => w.word), ["under"]);
+  assert.ok(plain[1].glyph && plain[6].glyph && plain[8].parts.every(p => p.glyph));
+  assert.deepStrictEqual(G.pieces("QUIT", false), ["Q", "U", "I", "T"]); // Q is drawn too, the rest letter by letter
   const [[brace, eq]] = G.words("{ ==", 1, true);
   assert.ok(brace.glyph && !brace.parts && eq.parts.every(p => p.glyph)); // nothing here for the model to write
   assert.deepStrictEqual(G.words("a\n    b\n\n  c", 1, true).map(p => p.indent), [0, 4, 0, 2]);

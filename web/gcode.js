@@ -336,6 +336,7 @@
         [0.04, 0.38], [0.26, 0.04], [0.62, -0.06], [0.92, 0.0]]],
     "$": [[[0.78, 1.4], [0.55, 1.55], [0.25, 1.48], [0.12, 1.2], [0.3, 0.95], [0.62, 0.75], [0.8, 0.45], [0.68, 0.12], [0.38, 0.02], [0.06, 0.15]],
       [[0.47, 1.78], [0.43, -0.3]]],
+    "Q": [ring(0.55, 0.95, 0.52, 0.95, 100, 370), [[0.62, 0.4], [1.1, -0.12]]], // an O begun at the top, and its tail
     "X": [[[0.04, 1.92], [0.96, 0.0]], [[0.94, 1.92], [0.0, 0.02]]],
     "Z": [[[0.06, 1.9], [0.98, 1.93, 1], [0.04, 0.02, 1], [1.02, 0.0]]],
   };
@@ -448,9 +449,10 @@
       const out = [];
       for (const token of para.split(" ")) {
         let word = "", u = false, p = false;
+        const literal = code || /^[_*]+$/.test(token); // a mark always touches a word: "5 * 3" or "a _ b" means the symbol
         for (const ch of token) {
-          if (ch === "_" && !code) underline = !underline;
-          else if (ch === "*" && !code) pen2 = !pen2;
+          if (ch === "_" && !literal) underline = !underline;
+          else if (ch === "*" && !literal) pen2 = !pen2;
           else { if (!word) { u = underline; p = pen2; } word += ch; } // a word takes the marks open at its first letter
         }
         if (!word) continue;

@@ -62,6 +62,8 @@ test("cleanText matches clean_text", () => {
 test("cleanText keeps the characters asked for exactly as typed (drawn symbols, markup)", () => {
   assert.deepEqual(E.cleanText("MAX <Zoo>\t_a_").clean, "MAx zoo a");
   assert.deepEqual(E.cleanText("MAX <Zoo>\t_a_", "XZ<>_").clean, "MAX <Zoo> _a_");
+  assert.deepEqual(E.cleanText("Quiz").clean, "quiz");
+  assert.deepEqual(E.cleanText("Quiz", "Q").clean, "Quiz");
   assert.deepEqual([...E.cleanText("a{b}", "{").dropped], ["}"]);
 });
 
