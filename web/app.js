@@ -706,6 +706,7 @@
   }
   function select(w, ln) {
     sel = w ? { key: w.key, keys: [w.key], lineKeys: (ln.words || []).map(x => x.key).filter(k => !isFixed(k)), line: false } : null;
+    $("wordBar").classList.remove("adding");
     syncBar();
     if (!w && isFull() && view.fit === null && view.zoom <= view.fitZoom * 1.02) view.fit = "paper"; // moved only to show the word
   }
@@ -733,6 +734,8 @@
     bar.classList.toggle("fixed-word", fixed);
     $("wbLabel").textContent = `“${(sel.line ? sel.keys : [sel.key]).map(wordText).join(" ")}”`;
     $("wbWord").setAttribute("aria-pressed", !sel.line); $("wbLine").setAttribute("aria-pressed", sel.line);
+    $("wbAdd").textContent = sel.line ? "+ Add line" : "+ Add word";
+    $("wbAddText").placeholder = sel.line ? "A new line to go under this one" : `Words to add after “${wordText(sel.key)}”`;
     $("wbSize").textContent = `${Math.round((e.size || 1) * 100)}%`;
     const styles = new Set(sel.keys.map(k => (state.edits.get(k) || {}).style || ""));
     $("wbStyle").value = styles.size === 1 ? [...styles][0] : "";
@@ -771,6 +774,48 @@
   $("wbAgain").onclick = () => rewriteWords(selected().map(w => w.seed));
   $("wbWord").onclick = () => setLine(false); $("wbLine").onclick = () => setLine(true);
   $("wbClose").onclick = () => { select(null); draw(); };
+
+  /** The text box's words as the page keys them ("word|n", like G.words), each with where it ends in the text. */
+  function textWords(text) {
+    const keep = MARKS + G.GLYPH_CHARS, code = W_().code === true, seen = new Map(), out = [];
+    for (const m of text.matchAll(/\S+/g)) { // cleanText turns every space but \n into " ", so these are G.words' tokens
+      const w = G.words(E.cleanText(m[0], keep).clean, 0, code)[0][0];
+      if (!w) continue;
+      const n = (seen.get(w.word) || 0) + 1;
+      seen.set(w.word, n);
+      out.push({ key: `${w.word}|${n}`, end: m.index + m[0].length });
+    }
+    return out;
+  }
+  /** Adds words after the selected word, or (Whole line) a line under the selected line, to the text box. Words already
+   *  moved or resized keep their changes; Ctrl+Z takes the addition out again. */
+  function addText(add) {
+    if (!sel || isFixed(sel.key) || !add.trim()) return false;
+    const text = state.text, old = textWords(text), at = Math.max(...old.filter(w => sel.keys.includes(w.key)).map(w => w.end));
+    if (!Number.isFinite(at)) return false;
+    let put, rest = text.slice(at);
+    if (sel.line) { // code keeps the line's indent unless one was typed
+      const start = text.lastIndexOf("\n", at - 1) + 1, indent = W_().code === true && !/^\s/.test(add) ? text.slice(start).match(/^[^\S\n]*/)[0] : "";
+      rest = rest.replace(/^[^\S\n]+/, "");
+      put = "\n" + indent + add.trimEnd() + (rest && rest[0] !== "\n" ? "\n" : ""); // a line from the middle of a paragraph: the rest goes on after it
+    } else put = " " + add.trim();
+    const next = text.slice(0, at) + put + rest, now = textWords(next).filter(w => w.end <= at || w.end > at + put.length);
+    remember(true);
+    if (now.length === old.length) { // the same words in the same order: later copies of an added word move up a number
+      const to = new Map(old.map((w, i) => [w.key, now[i].key]));
+      state.edits = new Map([...state.edits].map(([k, e]) => [to.get(k) || k, e]));
+      keep(STORE.edits, Object.fromEntries(state.edits));
+    }
+    undoStack.undo.at(-1).after = next;
+    state.text = $("text").value = next;
+    scheduleRender(0);
+    return true;
+  }
+  const closeAdd = () => { $("wordBar").classList.remove("adding"); draw(); };
+  $("wbAdd").onclick = () => { $("wbAddText").value = ""; $("wordBar").classList.add("adding"); draw(); $("wbAddText").focus(); };
+  $("wbAddCancel").onclick = closeAdd;
+  $("wbAddForm").onsubmit = e => { e.preventDefault(); if (addText($("wbAddText").value)) closeAdd(); else $("wbAddText").focus(); };
+  $("wbAddText").addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); closeAdd(); } }); // not full screen's Esc
   $("resetEdits").onclick = () => { remember(); state.edits.clear(); keep(STORE.edits, {}); syncBar(); scheduleRender(0); };
   document.addEventListener("keydown", e => {
     if (!sel || e.altKey || e.ctrlKey || e.metaKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector("dialog[open]")) return;
@@ -1118,12 +1163,14 @@
   // undo / redo for word changes and rewrites (the text box keeps its own undo)
   const undoStack = { undo: [], redo: [] }; // not `history`: that's the browser's
   const snapshot = () => ({ edits: new Map([...state.edits].map(([k, e]) => [k, { ...e }])), rerolls: new Map(state.rerolls) });
-  function remember() { undoStack.undo.push(snapshot()); if (undoStack.undo.length > 100) undoStack.undo.shift(); undoStack.redo.length = 0; $("wbUndo").hidden = false; }
+  /** text: the change also changes the text box (an added word); .after is set to the text it made. */
+  function remember(text) { undoStack.undo.push({ ...snapshot(), ...(text && { text: state.text }) }); if (undoStack.undo.length > 100) undoStack.undo.shift(); undoStack.redo.length = 0; $("wbUndo").hidden = false; }
   function travel(from, to) {
     if (!from.length) return;
-    to.push(snapshot());
-    const s = from.pop();
+    const s = from.pop(), text = s.text !== undefined && state.text === s.after; // not over typing done in the text box since
+    to.push({ ...snapshot(), ...(text && { text: state.text, after: s.text }) });
     state.edits = s.edits; state.rerolls = s.rerolls;
+    if (text) state.text = $("text").value = s.text;
     keep(STORE.edits, Object.fromEntries(state.edits));
     $("wbUndo").hidden = !undoStack.undo.length;
     syncBar(); scheduleRender(0);

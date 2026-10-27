@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Handwrite app: make handwriting G-code for your 3D printer</title>
 <meta name="description" content="Write text or code in realistic handwriting and save G-code for Bambu Lab, Prusa, Creality, Voron and 400+ pen-holder printers: 45 styles, lined paper. Free.">
 <link rel="canonical" href="https://handwrite.rickykashyap.top/app">
@@ -444,6 +444,10 @@
   .wordbar select { width: auto; max-width: 190px; height: 36px; font-size: 13px; }
   .wb-tip { margin: 0; font-size: 12px; color: var(--text-3); }
   .wordbar.fixed-word .wb-edit { display: none; } /* header words are written afresh per sheet: only "write again" */
+  .wb-add { display: none; align-items: center; gap: 8px; flex: 1 1 240px; }
+  .wordbar.adding .wb-add { display: flex; }
+  .wordbar.adding .wb-row, .wordbar.adding .wb-tip { display: none; } /* just the text box while adding */
+  .wb-add input[type=text] { flex: 1; width: 280px; min-width: 0; }
   @media (pointer: coarse) { .wb-group .btn { min-width: 40px; height: 40px; } .wb-scope button { height: 36px; } }
   /* phones: the word bar docks along the bottom of the preview, full width, compact */
   @media (max-width: 600px), (max-height: 500px) {
@@ -453,6 +457,7 @@
     .wb-scope { width: 150px; }
     .wb-row { gap: 6px; }
     .wordbar select { max-width: 140px; }
+    .wb-add input[type=text] { width: 0; } /* the bar is the screen's width: the box takes what's left */
   }
   /* short screens (a phone on its side): one row that scrolls sideways, so the bar hides little of the page */
   @media (max-height: 500px) {
@@ -679,11 +684,13 @@
           <button class="btn" id="wbSmaller" type="button" aria-label="Smaller" title="Smaller (−)">A−</button><output id="wbSize">100%</output><button class="btn" id="wbBigger" type="button" aria-label="Bigger" title="Bigger (+)">A+</button>
         </div>
         <select id="wbStyle" class="wb-edit" aria-label="Handwriting for the selection"></select>
+        <button class="btn small wb-edit" id="wbAdd" type="button">+ Add word</button>
         <button class="btn small" id="wbAgain" type="button">↻ Write again</button>
         <button class="btn small ghost wb-edit" id="wbReset" type="button">Reset</button>
         <button class="btn small ghost" id="wbUndo" type="button" title="Undo (Ctrl+Z)" hidden>Undo</button>
       </div>
       <p class="wb-tip wb-edit">Drag it, or use the arrow keys: 0.5 mm a press, 5 mm with Shift. Ctrl+Z undoes.</p>
+      <form class="wb-add" id="wbAddForm"><input type="text" id="wbAddText" maxlength="500" autocomplete="off" enterkeyhint="done" aria-label="Text to add"><button class="btn small primary" type="submit">Add</button><button class="btn small ghost" id="wbAddCancel" type="button">Cancel</button></form>
     </div>
     <div class="tip-toast" id="tipToast" role="status" hidden><span id="tipText"></span><button type="button" id="tipClose" aria-label="Dismiss tip">✕</button></div>
     <div class="info">

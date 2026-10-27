@@ -41,7 +41,8 @@ and word gaps are never the same twice.
 - **Code for programming assignments**: turn on **Code** and every line and indent stays as typed. Symbols the model
   never learned (`# < > { } [ ] = + * / _ & |` and more) are drawn by hand in the page's own slant and size.
 - **Header and page numbers** at the top of every sheet, written afresh each time.
-- **Edit any word or line**: click it in the preview to drag it, resize it, give it another handwriting or write it again.
+- **Edit any word or line**: click it in the preview to drag it, resize it, give it another handwriting or write it again, or add
+  words after it (or a line under it).
   The rest of the page stays as it is, and moved words are still checked against the paper and the pen's reach.
 - **Dry run** (the pen stays 8 mm above the paper) and **start again from line N** when a pen runs dry mid-page.
 - **Reach check**: a file to run with no pen and no paper. The head visits the far corners of the page's writing at
