@@ -901,7 +901,7 @@
 
   function describe(cfg, seed) {
     const w = cfg.writing, pr = cfg.printer, p = cfg.paper;
-    return [`handwrite: style=${w.style} bias=${w.bias} wobble=${w.wobble} x_height=${w.x_height} seed=${seed}`,
+    return [`handplot: style=${w.style} bias=${w.bias} wobble=${w.wobble} x_height=${w.x_height} seed=${seed}`,
       `ONLY for ${pr.model} (bed ${pr.bed_x} x ${pr.bed_y} mm${pr.origin[0] || pr.origin[1] ? ` from X${pr.origin[0]} Y${pr.origin[1]}` : ""}), pen offset ${pr.offset_x},${pr.offset_y}`,
       `paper ${p.size} ${p.orientation}, front-left corner at X${p.x} Y${p.y}`];
   }
@@ -919,7 +919,7 @@
       paper: { ...settings.paper, size: "A4", orientation: "portrait", x: -pr.plate[0], y: pr.bed_y + pr.plate[3] - height } });
     const { left: mid, top: Y } = offsetTestMarks(settings), half = Math.min(50, mid - BED_INSET);
     const marks = [[[mid - half, Y], [mid + half, Y]], [[mid, Y - 10], [mid, Y + 10]]];
-    return toGcode(planPasses([marks], cfg), cfg, ["handwrite: pen offset test", ...describe(cfg, 0).slice(1),
+    return toGcode(planPasses([marks], cfg), cfg, ["handplot: pen offset test", ...describe(cfg, 0).slice(1),
       "push A4 paper into the top-left (far-left) corner of the plate, top and left edges against the plate's edges"]);
   }
   /** Where the test marks land if the pen offset is 0: mm from the paper's left edge (short mark) and top edge (long line). */

@@ -1,4 +1,4 @@
-/* Handwrite web app: UI, background word generation, build-plate view, G-code export.
+/* Handplot web app: UI, background word generation, build-plate view, G-code export.
  * Engine: engine.js (HWEngine). Safety-critical layout/G-code: gcode.js (HWGcode). */
 (() => {
   "use strict";

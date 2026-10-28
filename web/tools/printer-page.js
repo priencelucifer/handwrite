@@ -16,11 +16,11 @@ const index = fs.readFileSync(path.join(WEB, "index.html"), "utf8");
 // the site's shared design tokens and base styles, taken from the guide so the pages stay one product
 const shared = index.slice(index.indexOf("  /* ---------- 1. shared tokens"), index.indexOf("  /* ---------- 3. guide"));
 const icon = /<link rel="icon"[^>]*>/.exec(index)[0];
-const title = `Supported 3D printers for handwriting G-code: Bambu Lab, Prusa, Creality, Anycubic, Voron and more | Handwrite`;
+const title = `Supported 3D printers for handwriting G-code: Bambu Lab, Prusa, Creality, Anycubic, Voron and more | Handplot`;
 const desc = `Write real-looking handwriting with a pen on ${total} 3D printers: Bambu Lab A1, Prusa MK4, Creality Ender-3, Anycubic Kobra, Elegoo, Voron, Qidi and more. Every model with its bed size.`;
 const ld = { "@context": "https://schema.org", "@type": "WebPage", name: `Handwriting on ${total} 3D printers`, url: SITE + "printers", description: desc,
-  isPartOf: { "@type": "WebSite", name: "Handwrite", url: SITE },
-  breadcrumb: { "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Handwrite", item: SITE }, { "@type": "ListItem", position: 2, name: "Supported printers", item: SITE + "printers" }] } };
+  isPartOf: { "@type": "WebSite", name: "Handplot", url: SITE },
+  breadcrumb: { "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Handplot", item: SITE }, { "@type": "ListItem", position: 2, name: "Supported printers", item: SITE + "printers" }] } };
 
 const sections = groups.map(([vendor, names]) => `    <section class="maker" id="${slug(vendor)}">
       <h2>${esc(vendor)} <span>${names.length} printer${names.length === 1 ? "" : "s"}</span></h2>
@@ -43,7 +43,7 @@ const html = `<!doctype html>
 <meta name="theme-color" content="#3b5bdb">
 ${icon}
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Handwrite">
+<meta property="og:site_name" content="Handplot">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${SITE}printers">
@@ -102,7 +102,7 @@ ${shared}
 <body>
 <header class="top">
   <div class="wrap bar">
-    <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Handwrite</a>
+    <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Handplot</a>
     <a class="btn primary small top-cta" href="app.html">Open the app</a>
     <div class="menu-wrap">
       <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="siteMenu">
@@ -117,7 +117,7 @@ ${shared}
   <div class="wrap intro">
     <p class="kicker">Supported printers</p>
     <h1>Handwriting on ${total} 3D printers</h1>
-    <p class="lead">Handwrite turns typed text into real-looking handwriting that your 3D printer writes with a pen in a pen holder,
+    <p class="lead">Handplot turns typed text into real-looking handwriting that your 3D printer writes with a pen in a pen holder,
       like a pen plotter. It makes plain G-code for every printer below: Bambu Lab, Prusa, Creality, Anycubic, Elegoo, Voron, Qidi,
       Sovol and ${groups.length - 8} more makers. Each printer's writing area, keep-out areas and firmware come from
       <a href="https://github.com/OrcaSlicer/OrcaSlicer">OrcaSlicer</a>'s printer profiles; Bambu Lab's are checked by hand.</p>

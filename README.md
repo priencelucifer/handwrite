@@ -1,6 +1,6 @@
 <div align="center">
 
-# Handwrite
+# Handplot
 
 **Real-looking handwriting from your 3D printer.**
 
@@ -14,7 +14,7 @@ It runs in your browser, works offline, and needs no install.
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
 ![Printers](https://img.shields.io/badge/printers-Bambu_Lab_%2B_400%2B_from_OrcaSlicer-e08a00)
 
-<img src="docs/images/app.png" alt="Handwrite: text on the left, a handwritten page on the printer's build plate on the right" width="900">
+<img src="docs/images/app.png" alt="Handplot: text on the left, a handwritten page on the printer's build plate on the right" width="900">
 
 </div>
 
@@ -23,11 +23,11 @@ It runs in your browser, works offline, and needs no install.
 Pen-plotter tools usually write with a font. Even with a few versions of each letter, it looks like a font:
 letters never join, they connect the same way every time, and the lines are perfectly straight.
 
-Handwrite uses a neural network trained on real pen strokes ([Graves, 2013](https://arxiv.org/abs/1308.0850)).
+Handplot uses a neural network trained on real pen strokes ([Graves, 2013](https://arxiv.org/abs/1308.0850)).
 It draws every word stroke by stroke, so letters join, vary and lift like a person's. Each line also wanders a bit,
 and word gaps are never the same twice.
 
-<p align="center"><img src="docs/images/sample-page.png" alt="A sample page written by Handwrite" width="420"></p>
+<p align="center"><img src="docs/images/sample-page.png" alt="A sample page written by Handplot" width="420"></p>
 
 ## Features
 
@@ -61,7 +61,7 @@ and word gaps are never the same twice.
 3. Type your text, pick a handwriting, choose your printer and paper.
 4. Click **Save G-code** and send the file to the printer like any other plain `.gcode` file.
 
-You need a pen holder on the print head. Handwrite is set up for [**Plotter** by Elli](https://makerworld.com/en/models/1247876-plotter#profileId-1269790) (A1 and A1 mini, Stabilo pens),
+You need a pen holder on the print head. Handplot is set up for [**Plotter** by Elli](https://makerworld.com/en/models/1247876-plotter#profileId-1269790) (A1 and A1 mini, Stabilo pens),
 free on MakerWorld.
 
 The first time, open **Printer settings** and set your pen heights and [pen offset](#calibrate-the-pen-offset).
