@@ -8,7 +8,7 @@ Type some text, pick a handwriting, and get G-code that writes it with a pen on 
 Creality, Voron and 400+ more.
 It runs in your browser, works offline, and needs no install.
 
-**Use it now: [handwrite.rickykashyap.top](https://handwrite.rickykashyap.top)**
+**Use it now: [handplot.org](https://handplot.org)**
 
 ![Tests](https://img.shields.io/badge/tests-31_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
@@ -55,7 +55,7 @@ and word gaps are never the same twice.
 
 ## Quick start
 
-1. Open **[handwrite.rickykashyap.top](https://handwrite.rickykashyap.top)**, or download **`Handwrite-web.zip`** from the
+1. Open **[handplot.org](https://handplot.org)**, or download **`Handwrite-web.zip`** from the
    [latest release](https://github.com/priencelucifer/handwrite/releases/latest), unzip it and double-click **`Handwrite.html`**.
 2. It runs in Edge, Chrome, Firefox or Safari, and works offline once loaded.
 3. Type your text, pick a handwriting, choose your printer and paper.
@@ -102,7 +102,7 @@ default, so you can skip this. For any other holder:
 The G-code is plain and BambuPlot-style. It was developed on an A1; the other Bambu models use the same commands and
 bed sizes from Bambu's specs. For every other printer, its printable area, height, bed keep-out areas and firmware come
 from OrcaSlicer's printer profiles (`web/tools/orca-printers.js` builds `web/printers.js` from them, then
-`web/tools/printer-page.js` writes the [supported printers page](https://handwrite.rickykashyap.top/printers)). Klipper printers get
+`web/tools/printer-page.js` writes the [supported printers page](https://handplot.org/printers)). Klipper printers get
 pauses as `G4 P` (milliseconds), which every firmware here reads, and no `G21`. Round (delta) beds, belt printers and
 printers that need their own file format are left out.
 
