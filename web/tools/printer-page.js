@@ -42,6 +42,8 @@ const html = `<!doctype html>
 <meta name="author" content="Ricky Kashyap">
 <meta name="theme-color" content="#3b5bdb">
 ${icon}
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="robots" content="max-image-preview:large">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Handplot">
 <meta property="og:title" content="${esc(title)}">
