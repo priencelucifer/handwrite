@@ -140,10 +140,10 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
   const vocab = "the quick brown fox jumps over a lazy dog and writes letters home to friends each day HELLO, NASA OK I _the fox_ *dog day* _*both*_ 2024 3.14 10:30 85, x x2 (12)".split(" ");
   // code: drawn symbols, ALL-CAPS names with drawn X and Z, and (in code mode) indents and names longer than a word
   const code = "#include <stdio.h> int main() { } a[i] = b * c / d; x_y && || != >= <= += -> @d $v ~a ^b \\n %d MAX_SIZE ZERO {x} [0]".split(" ");
-  const tally = { ok: 0, refused: 0, edited: 0, code: 0 };
+  const tally = { ok: 0, refused: 0, edited: 0, code: 0, levelled: 0, pressed: 0 };
   for (let c = 0; c < 4000; c++) {
     const s = structuredClone(G.DEFAULT_SETTINGS);
-    s.printer.model = pick(models);
+    s.printer.model = rng.random() < 0.15 ? pick(["Bambu Lab A1", "Bambu Lab A1 mini"]) : pick(models); // levelling runs on these
     if (s.printer.model === "Custom") Object.assign(s.printer, { bed_x: U(80, 350), bed_y: U(80, 350), bed_z: U(60, 300) });
     s.paper.size = pick(papers);
     if (s.paper.size === "Custom") Object.assign(s.paper, { width: U(40, 400), height: U(40, 500) });
@@ -152,6 +152,8 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     Object.assign(s.printer, { offset_x: U(-40, 40), offset_y: U(-40, 40), z_draw: U(2, 40), dry_run: rng.random() < 0.3 });
     if (rng.random() < 0.4) Object.assign(s.paper, { ruling: U(3, 14), first_line: U(0, 80), margin_line: rng.random() < 0.5 ? U(0, 60) : 0 });
     s.printer.z_lift = s.printer.z_draw + U(0.9, 12);
+    if (rng.random() < 0.4) s.printer.press_bottom = U(0, 2); // pressing harder toward the bottom (refused if too low)
+    s.printer.level = rng.random() < 0.7; // bed levelling first (A1 and A1 mini)
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3), indent: U(0, 1.5) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
     s.writing.code = rng.random() < 0.35;
@@ -175,10 +177,12 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     tally.ok++;
     if (edit) tally.edited++;
     if (s.writing.code) tally.code++;
+    if (/^G29 A1 /m.test(out.gcode)) tally.levelled++;
+    if (s.printer.press_bottom > 0) tally.pressed++;
   }
   test.diagnostic?.(`fuzz: ${tally.ok} files simulated safely, ${tally.refused} setups refused`);
-  console.log(`fuzz: ${tally.ok} files simulated safely (${tally.edited} with edited words, ${tally.code} code), ${tally.refused} setups refused`);
-  assert.ok(tally.ok > 500 && tally.edited > 100 && tally.code > 150, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
+  console.log(`fuzz: ${tally.ok} files simulated safely (${tally.edited} with edited words, ${tally.code} code, ${tally.levelled} levelled, ${tally.pressed} pressing harder), ${tally.refused} setups refused`);
+  assert.ok(tally.ok > 500 && tally.edited > 100 && tally.code > 150 && tally.levelled > 30 && tally.pressed > 100, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
 });
 
 test("page capacity estimate: plausible, grows with paper, counts paragraph lines", () => {
@@ -488,6 +492,37 @@ test("extra pressure at the bottom: the pen goes lower line by line down the pag
   assert.throws(() => simulate(bad, out.cfg), /behind its clamping point/);
   assert.throws(() => G.resolve(withSet({ "printer.z_draw": 2.5, "printer.z_lift": 4.5, "printer.press_bottom": 1 })), /at least 2 mm/);
   assert.throws(() => G.resolve(withSet({ "printer.press_bottom": 3 })), /press bottom/);
+});
+
+test("bed levelling (A1 and A1 mini): after homing, pen out, cold, under the writing only, before the paper; never saved", () => {
+  const text = "Dear friend,\nA few lines written to check the bed levelling.\nAnd one more.";
+  for (const model of ["Bambu Lab A1", "Bambu Lab A1 mini"]) {
+    const s = withSet({ "printer.model": model }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
+    const out = run(s, text, 2), g = out.gcode.split("\n"), pr = out.cfg.printer;
+    simulate(out.gcode, out.cfg);
+    const at = l => g.indexOf(l), lv = g.findIndex(l => l.startsWith("G29 A1"));
+    assert.ok(at("G28") < at("M104 S0") && at("M104 S0") < at("G29.2 S1") && at("G29.2 S1") === lv - 1, `${model}: order`);
+    assert.ok(lv < g.findIndex(l => /^G0 X/.test(l)) && !g.some(l => /^M500|^M109|^M104 S[1-9]/.test(l)), `${model}: before any move; nothing heated or saved`);
+    const [, x, y, i, j] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(g[lv]).map(Number);
+    const draws = g.filter(l => /^G1 X/.test(l)).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number));
+    assert.ok(draws.length > 50 && draws.every(([dx, dy]) => dx >= x && dx <= x + i && dy >= y && dy <= y + j), `${model}: every written point inside the levelled area`);
+    assert.ok(i < 0.8 * pr.bed_x && j < 0.8 * pr.bed_y, `${model}: just the writing, not the whole bed (${i} x ${j})`);
+    assert.match(g.find(l => l.startsWith("; BEFORE STARTING")), /bed levelling/);
+    const off = run(withSet({ "printer.model": model, "printer.level": false, "paper.x": s.paper.x, "paper.y": s.paper.y }), text, 2).gcode;
+    assert.ok(!/G29/.test(off), `${model}: off means off`);
+  }
+  for (const model of ["Bambu Lab P1P / P1S", "Bambu Lab X1 Carbon / X1E", "Creality Ender-3 V3 SE"]) {
+    const s = withSet({ "printer.model": model }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
+    assert.ok(!/G29/.test(run(s, text, 2).gcode), `${model}: no levelling where the commands aren't known`);
+  }
+  const reach = G.reachCheck(G.planPasses(G.layout(G.words(text, 2), () => [[[0, 0], [1, 1]]], G.resolve(G.DEFAULT_SETTINGS), mulberry(2)), G.resolve(G.DEFAULT_SETTINGS)), G.resolve(G.DEFAULT_SETTINGS), ["r"]);
+  assert.ok(!/G29/.test(reach), "the reach check doesn't level");
+  // the simulator refuses levelling after the head has moved (the paper or pen may be there), and a stored calibration
+  const s = withSet({}), out = run(s, text, 2), g = out.gcode.split("\n");
+  const late = g.filter(l => !l.startsWith("G29")); late.splice(late.findIndex(l => l.startsWith("; place the paper")), 0, "G29.2 S1", g.find(l => l.startsWith("G29 A1")));
+  assert.throws(() => simulate(late.join("\n"), out.cfg), /levelling where it can't be/);
+  assert.throws(() => simulate(out.gcode.replace(/^(G29 A1 .*)$/m, "$1\nM500"), out.cfg), /malformed/);
+  assert.throws(() => G.resolve(withSet({ "printer.level": "yes" })), /on or off/);
 });
 
 test("every printer OrcaSlicer knows: a page is safe in its own coordinates, and its firmware gets G-code it reads", () => {

@@ -162,6 +162,10 @@
     },
   };
   const SOUND_PRINTERS = new Set(Object.keys(BAMBU_TUNES));
+  // Bed levelling as Bambu Studio's own start code does it (G29.2 S1, then G29 A1 over a rectangle), but with the nozzle
+  // cold, as the pen holder sits beside it, and without M500, so the printer's saved calibration stays as it was.
+  // Only where those commands are known: other printers' firmware levels differently or not at all.
+  const LEVEL_PRINTERS = new Set(["Bambu Lab A1", "Bambu Lab A1 mini"]), LEVEL_PAD = 3; // mm around the writing
   // [MIDI note or 0 for a rest, duration in 10 ms] -> the same note on all three channels at full volume: as loud as the motors go
   const loud = steps => steps.map(([n, d]) => { const v = n ? 100 : 0; return [n, d, v, n, d, v, n, d, v]; });
   const TUNES = { pause: loud([[76, 14], [0, 8], [76, 14], [0, 8], [76, 22]]), resume: loud([[67, 10], [72, 20]]) };
@@ -173,10 +177,11 @@
   // paper x/y: placePaper() of these defaults, so the first page sits where the pen reaches.
   const DEFAULT_SETTINGS = {
     printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 1, offset_y: -25,
-      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12, press_bottom: 0,
+      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12, press_bottom: 0, level: true,
       z_feed: 600, draw_feed: 1500, travel_feed: 6000, settle_ms: 60, sounds: true, dry_run: false },
     // press_bottom: mm the pen goes lower by the bottom of the page than where it was clamped (no bed levelling with a
-    // pen fitted, so a bed a little lower toward the front leaves the last lines faint)
+    // pen fitted, so a bed a little lower toward the front leaves the last lines faint). level: on LEVEL_PRINTERS, measure
+    // the bed under the writing after homing, while the pen is still out, and write with the printer's correction on
     // ruling: mm between the printed lines of ruled paper (0 = plain); first_line: mm from the top edge to the first
     // printed line; margin_line: mm from the left edge to the printed margin line (0 = none)
     paper: { size: "A5", orientation: "portrait", x: 55, y: 10, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
@@ -203,8 +208,8 @@
           throw new WriteError(`Setting ${key.replace(/_/g, " ")} = ${JSON.stringify(v)} must be a number from ${lo} to ${hi}.`);
       }
     const pr = cfg.printer, w = cfg.writing;
-    if ([pr.sounds, cfg.paper.slide, pr.dry_run, w.page_numbers, w.code].some(v => typeof v !== "boolean"))
-      throw new WriteError("Settings sounds, slide, dry run, page numbers and code must be on or off.");
+    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, w.page_numbers, w.code].some(v => typeof v !== "boolean"))
+      throw new WriteError("Settings sounds, slide, dry run, bed levelling, page numbers and code must be on or off.");
     if (!["portrait", "landscape"].includes(cfg.paper.orientation) || typeof w.style !== "string")
       throw new WriteError("Paper orientation must be portrait or landscape, and style a name.");
     if (typeof w.header !== "string" || w.header.length > 80) throw new WriteError("The header must be text, 80 characters at most.");
@@ -843,7 +848,8 @@
     const oneLine = h => Array.from(String(h), c => (c.codePointAt(0) < 32 || c.codePointAt(0) === 0x2028 || c.codePointAt(0) === 0x2029 ? " " : c)).join("");
     const out = header.map(h => "; " + oneLine(h)); // a header can never add a command line
     if (dz) out.push(`; DRY RUN: the pen is clamped as usual, then every stroke is drawn ${DRY_RUN_LIFT} mm above the paper`);
-    out.push("; BEFORE STARTING: take the pen out of the holder. Homing touches the nozzle to the plate.");
+    const level = !opts.reach && pr.level && LEVEL_PRINTERS.has(pr.model);
+    out.push(`; BEFORE STARTING: take the pen out of the holder. Homing${level ? " and bed levelling touch" : " touches"} the nozzle to the plate.`);
     if (opts.reach) { // see reachCheck: the written points nearest the four corners, at pen-up height, nothing drawn
       const pts = passes.flatMap(ps => ps.strokes.flatMap(s => s.map(pt => ({ pt, shift: ps.shift,
         x: p.x + pt[0] - pr.offset_x, y: p.y + ps.shift + p.height - pt[1] - pr.offset_y }))));
@@ -870,6 +876,15 @@
     const firstPen2 = passes.length === 1 && passes[0].strokes.some(s => s.pen !== PEN2) ? passes[0].strokes.find(s => s.pen === PEN2) : null;
     out.push("G90", ...(pr.dialect === "bambu" ? ["G21"] : []), ...sound("start"), "G28"); // always home: every move after this assumes a known position
     out.push("M104 S0"); // nozzle heater off: nothing here needs heat, and the pen holder sits next to the hotend
+    if (level) { // the nozzle positions of everything written, a little wider, on the bed
+      const pts = passes.flatMap(ps => ps.strokes.flatMap(s => s.map(pt => [p.x + pt[0] - pr.offset_x, bedY(pt, ps.shift)])));
+      const x0 = Math.max(0, Math.min(...pts.map(q => q[0])) - LEVEL_PAD), x1 = Math.min(pr.bed_x, Math.max(...pts.map(q => q[0])) + LEVEL_PAD);
+      const y0 = Math.max(0, Math.min(...pts.map(q => q[1])) - LEVEL_PAD), y1 = Math.min(pr.bed_y, Math.max(...pts.map(q => q[1])) + LEVEL_PAD);
+      if (pr.keepouts.some(k => x0 <= k[2] && x1 >= k[0] && y0 <= k[3] && y1 >= k[1]))
+        throw new WriteError("The bed can't be levelled under this page: it reaches a part of the plate the nozzle must avoid. Turn off bed levelling or move the paper.");
+      out.push("; LEVEL THE BED under the writing, the pen still out: the cold nozzle touches the plate here and there, and the head follows the bed from now on",
+        "G29.2 S1", `G29 A1 X${f(x0 + ox)} Y${f(y0 + oy)} I${f(x1 - x0)} J${f(y1 - y0)}`);
+    }
     out.push(z(pr.z_draw + CLEARANCE), `G0 ${xy(order(passes[0])[0][0], 0)} ${travel}`,
       "; place the paper: the first letter goes right under the pen holder", ...sound("pause"), wait(pr.paper_pause_s),
       ...sound("resume"), touch, "; attach the pen: slide it down until it touches the paper, then clamp it", ...sound("pause"),
@@ -941,7 +956,7 @@
     return { offset_x: round2(fromLeft - m.left), offset_y: round2(m.top - fromTop) };
   }
 
-  return { WriteError, SOUND_PRINTERS, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PRINTER_GROUPS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
+  return { WriteError, SOUND_PRINTERS, LEVEL_PRINTERS, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PRINTER_GROUPS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
     toGcode, reachCheck, REACH_WAIT_S, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper, penRange,
     lineGrid, headerWords, rulingLetters, PEN2, DRY_RUN_LIFT, MARGIN_LINE_GAP, WORD_SIZE, GLYPH_CHARS, glyph, pieces, handOf };

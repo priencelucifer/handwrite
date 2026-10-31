@@ -376,7 +376,8 @@
     const zTime = 2 * Math.abs(pr.z_lift - pr.z_draw) / pr.z_feed * 60 + 2 * pr.settle_ms / 1000;
     const change = penChange(passes) ? 1 : 0;
     const sec = draw / pr.draw_feed * 60 * 1.3 + travel / pr.travel_feed * 60 * 1.5 + lifts * zTime +
-      pr.paper_pause_s + pr.pen_pause_s * (1 + 2 * change) + (passes.length - 1) * pr.shift_pause_s + 40; // +40 s homing
+      pr.paper_pause_s + pr.pen_pause_s * (1 + 2 * change) + (passes.length - 1) * pr.shift_pause_s + 40 + // +40 s homing
+      (pr.level && G.LEVEL_PRINTERS.has(pr.model) ? 90 : 0); // bed levelling under the writing: about a minute and a half
     if (pr.sounds && G.SOUND_PRINTERS.has(pr.model)) { // each tune: a 1 s wait, then its lines (10 ms units, the longest channel)
       const t = name => 1 + G.tuneOf(pr.model, name).reduce((a, s) => a + Math.max(s[1], s[4], s[7]), 0) / 100;
       return sec + t("start") + t("finish") + (2 + (passes.length - 1) + change) * (t("pause") + t("resume"));
@@ -931,10 +932,18 @@
     $("soundsNote").textContent = ok ? "Bambu's own start and finish tunes, plus a tune at each pause" : "Not supported by this printer";
   };
   $("sounds").onchange = () => { PR_().sounds = $("sounds").checked; scheduleRender(0); };
+  const syncLevel = () => { // bed levelling: only where the printer's commands are known
+    const ok = G.LEVEL_PRINTERS.has(PR_().model);
+    $("level").checked = ok && PR_().level !== false; $("level").disabled = !ok;
+    $("levelNote").textContent = ok ? "Before the paper goes in, the nozzle (pen out, cold) measures the plate under the writing, so the pen presses the same everywhere. About a minute."
+      : "Bambu Lab A1 and A1 mini only";
+  };
+  $("level").onchange = () => { PR_().level = $("level").checked; scheduleRender(0); };
+  $("printer").addEventListener("change", syncLevel);
   $("slide").checked = P_().slide === true;
   $("slide").onchange = () => { P_().slide = $("slide").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncSounds);
-  syncSounds();
+  syncSounds(); syncLevel();
   $("reroll").onclick = () => { state.seed = (Math.random() * 2 ** 31) | 0; state.rerolls.clear(); seedOrigin.clear(); scheduleRender(0); };
   // ruled paper: how far apart its printed lines are, where the first one is, and its margin line
   const RULINGS = [[0, "Plain paper"], [6, "Ruled 6 mm"], [7, "Ruled 7 mm"], [7.1, "Ruled 7.1 mm (US college)"], [8, "Ruled 8 mm"],
@@ -1139,7 +1148,8 @@
       morePage: [["borders, lined paper, header, page numbers"], [...on(p.margin !== D.paper.margin || p.margin_y !== D.paper.margin_y, "borders"),
         ...on(p.ruling > 0, `lined paper ${p.ruling} mm`), ...on(!!(w.header || "").trim(), "header"), ...on(w.page_numbers, "page numbers"),
         ...on(pr.sounds === false && G.SOUND_PRINTERS.has(pr.model), "sounds off"), ...on(p.slide, "long pages")]],
-      morePrint: [["dry run, start again from a line, reach check"], [...on(state.dryRun, "dry run"), ...on(state.startLine > 1, `from line ${state.startLine}`)]],
+      morePrint: [["bed levelling, dry run, start again from a line, reach check"], [...on(state.dryRun, "dry run"), ...on(state.startLine > 1, `from line ${state.startLine}`),
+        ...on(pr.level === false && G.LEVEL_PRINTERS.has(pr.model), "no bed levelling")]],
     };
     for (const [id, [[inside], changed]] of Object.entries(sets)) {
       const el = $(id + "Sum");
@@ -1283,7 +1293,9 @@
   function showSteps(v, extra) {
     const pr = v.cfg.printer, steps = [...extra];
     if (state.dryRun) steps.unshift(`Dry run: the pen is clamped as usual, then every stroke is drawn ${G.DRY_RUN_LIFT} mm above the paper, so nothing gets written.`);
-    steps.push("Take the pen out of the holder. The printer homes first, and homing touches the nozzle to the plate.",
+    steps.push(pr.level && G.LEVEL_PRINTERS.has(pr.model)
+      ? "Take the pen out of the holder and leave the plate empty. The printer homes, then levels the bed under where you'll write (about a minute): the nozzle touches the plate here and there."
+      : "Take the pen out of the holder. The printer homes first, and homing touches the nozzle to the plate.",
       `Start the file. The head moves over the first letter and waits ${pr.paper_pause_s} s: put the paper where the preview shows and tape it down.`,
       `The head lowers and waits ${pr.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`);
     if (penChange(v.passes)) steps.push(`When the first pen is done, the head rises and waits ${pr.pen_pause_s} s: take that pen out. Then it lowers and waits ${pr.pen_pause_s} s: slide the second pen in until it touches the paper, and clamp it.`);

@@ -10,7 +10,9 @@ const FACTS = {
 };
 for (const list of Object.values(require("../printers.js")))
   for (const [name, [x0, y0, x1, y1, z, , keep]] of Object.entries(list)) if (!FACTS[name]) FACTS[name] = [x0, y0, x1, y1, z, keep, "generic"];
-const LINE_OK = /^(;[^\n]*|G90|G21|G28|M104 S0|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
+const LINE_OK = /^(;[^\n]*|G90|G21|G28|M104 S0|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G29\.2 S1|G29 A1 X\d+\.\d\d Y\d+\.\d\d I\d+\.\d\d J\d+\.\d\d|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
+// Bed levelling: Bambu Studio's own A1 / A1 mini commands, nowhere else (other firmware levels differently or not at all)
+const LEVELS = new Set(["Bambu Lab A1", "Bambu Lab A1 mini"]);
 
 /** Simulate a G-code file; throws on any violation. s: the settings it was made from (for z, paper, offsets).
  *  opts.reach: a reach check (no pen, no paper): nothing may be drawn and no paper or pen pause is needed. */
@@ -33,7 +35,7 @@ function simulate(gcode, s, opts = {}) {
   let clampY = null, downY = null; // where the pen was clamped; where the current stroke's pen-down happened
   const dry = s.printer.dry_run === true ? 8 : 0; // a dry run draws 8 mm above the writing height: the pen never touches
   const pw = s.paper.width, ph = s.paper.height; // already oriented by the caller
-  let homed = false, heaterOff = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
+  let levelOn = false, homed = false, heaterOff = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
   const lines = gcode.split("\n");
   assert.strictEqual(lines.pop(), "", "file ends with a newline");
   for (const [n, line] of lines.entries()) {
@@ -44,6 +46,15 @@ function simulate(gcode, s, opts = {}) {
     if (line.startsWith("; attach the pen") && clampY === null) clampY = y;
     if (line.startsWith(";")) continue;
     if (line === "G28") { homed = true; continue; }
+    if (line.startsWith("G29")) { // after homing with the heater off, before the head goes anywhere (no paper, no pen yet)
+      assert.ok(LEVELS.has(model) && !opts.reach && homed && heaterOff && x === null, `bed levelling where it can't be ${where}`);
+      if (line === "G29.2 S1") { levelOn = true; continue; }
+      assert.ok(levelOn, `levelling without the correction on ${where}`);
+      const [, lx, ly, li, lj] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(line).map(Number);
+      assert.ok(li > 0 && lj > 0 && lx >= X0 && ly >= Y0 && lx + li <= X1 + 1e-9 && ly + lj <= Y1 + 1e-9, `levelling off the bed ${where}`);
+      for (const ko of keepouts) assert.ok(lx > ko[2] || lx + li < ko[0] || ly > ko[3] || ly + lj < ko[1], `levelling over a keep-out ${where}`);
+      continue;
+    }
     if (line === "M104 S0") { heaterOff = true; continue; } // the only temperature command allowed: nozzle heater off
     if (line.startsWith("M1006 A")) { // motor music: never while the pen may be on the paper; notes in a sane range
       assert.ok(z === null || z > zd + 1e-9 || draws === 0, `sound with the pen on the paper ${where}`);
