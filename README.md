@@ -77,9 +77,10 @@ The first time, open **Printer settings** and set your pen heights and [pen offs
 > Take the pen **out** of the holder before you start, and leave the plate empty. The printer homes first, and homing
 > (and bed levelling, where it's on) touches the nozzle or the printer's probe to the plate.
 
-1. **Pause 1:** the head rises and stops over where the first letter goes. Put the paper where the preview shows it and tape it down.
-2. **Pause 2:** the head lowers. Slide the pen down until it touches the paper, then clamp it.
-3. It writes the page. With sounds on, the A1, A1 mini and P2S play a tune at each pause and when it's done.
+1. **Bed levelling** (where it's on): after homing, the printer levels the bed under where it will write, about a minute. Keep the plate empty until it's done.
+2. **Pause 1:** the head rises and stops over where the first letter goes. Now put the paper where the preview shows it and tape it down.
+3. **Pause 2:** the head lowers. Slide the pen down until it touches the paper, then clamp it.
+4. It writes the page. With sounds on, the A1, A1 mini and P2S play a tune at each pause and when it's done.
 
 Do a dry run first, and stay with the printer the first time.
 

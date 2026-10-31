@@ -543,11 +543,16 @@
   #print .head-y { transform: translate(0, 28px); }
   #print[data-stage="2"] .head-y { transform: translate(0, -14px); }
   #print[data-stage="3"] .head-y, #print[data-stage="4"] .head-y { transform: translate(0, 8px); }
-  #print[data-stage="1"] .head-y { animation: tap 1.2s var(--e-in-out) 1.3s; }
-  @keyframes tap { 0%, 50%, 100% { transform: translate(0, 28px); } 25%, 75% { transform: translate(0, 16px); } }
+  /* stage 1: homed, then the bed is levelled: the nozzle lifts and touches the plate at a few spots, before any paper */
+  #print[data-stage="1"] .head-y { animation: level 3.2s var(--e-in-out) 1s; }
+  @keyframes level { 0%, 100% { transform: translate(0, 28px); } 10% { transform: translate(0, 16px); } 22% { transform: translate(-64px, 16px); }
+    30% { transform: translate(-64px, 28px); } 40% { transform: translate(-64px, 16px); } 58% { transform: translate(-24px, 16px); }
+    66% { transform: translate(-24px, 28px); } 76% { transform: translate(-24px, 16px); } 90% { transform: translate(0, 16px); } }
   #print .ripple { fill: none; stroke: var(--edge); stroke-width: 1.5; opacity: 0; transform-box: fill-box; transform-origin: center; }
-  #print[data-stage="1"] .ripple { animation: ripple 600ms var(--e-out) 1.9s 2; }
-  @keyframes ripple { from { opacity: .7; transform: scale(.5); } to { opacity: 0; transform: scale(2); } }
+  #print[data-stage="1"] .ripple { animation: level-ripple 3.2s linear 1s; } /* a ring where the nozzle touches */
+  @keyframes level-ripple { 0%, 29.9% { opacity: 0; transform: translate(-64px, 0) scale(.5); } 30% { opacity: .7; transform: translate(-64px, 0) scale(.5); }
+    42% { opacity: 0; transform: translate(-64px, 0) scale(2); } 42.1%, 65.9% { opacity: 0; transform: translate(-24px, 0) scale(.5); }
+    66% { opacity: .7; transform: translate(-24px, 0) scale(.5); } 78%, 100% { opacity: 0; transform: translate(-24px, 0) scale(2); } }
   #print .pen-g { opacity: 0; transform: translate(0, -64px); }
   #print[data-stage="3"] .pen-g { opacity: 1; transform: translate(0, 0); transition-delay: 1s, 1s; transition-duration: 1.6s, .4s; }
   #print[data-stage="4"] .pen-g { opacity: 1; transform: translate(0, 0); }
@@ -1103,7 +1108,7 @@
                 </g>
               </g>
             </g>
-            <g class="fade cap s1"><text class="lbl cap-strong" x="372" y="96">pen out of the holder</text><text class="lbl" x="372" y="112">the nozzle touches the plate</text><text class="lbl" x="372" y="128">to find its height</text></g>
+            <g class="fade cap s1"><text class="lbl cap-strong" x="372" y="96">pen out, plate empty</text><text class="lbl" x="372" y="112">homes, then levels the bed</text><text class="lbl" x="372" y="128">the nozzle taps the plate</text></g>
             <g class="fade cap s2"><circle class="pring-track" cx="364" cy="92" r="7"/><circle class="pring" cx="364" cy="92" r="7" pathLength="1"/><text class="lbl cap-strong" x="378" y="96">pause 1 · 30 s</text><text class="lbl" x="378" y="112">place the paper under</text><text class="lbl" x="378" y="128">the pen holder, tape it</text></g>
             <g class="fade cap s3"><circle class="pring-track" cx="364" cy="92" r="7"/><circle class="pring" cx="364" cy="92" r="7" pathLength="1"/><text class="lbl cap-strong" x="378" y="96">pause 2 · 30 s</text><text class="lbl" x="378" y="112">slide the pen down to</text><text class="lbl" x="378" y="128">the paper, then clamp it</text></g>
             <g class="fade s4 inset">
@@ -1118,8 +1123,8 @@
           </button>
         </div>
         <ol class="stage-list">
-          <li><button type="button" data-go="1"><span class="n">1</span><span><b class="h">Start with the pen out</b><span class="t">Take the pen out of the holder, then start the file. The printer homes first, and on the A1 homing touches the nozzle to the plate: a pen sticking out below it would crash.</span><span class="bar"><i></i></span></span></button></li>
-          <li><button type="button" data-go="2"><span class="n">2</span><span><b class="h">Pause 1: place the paper</b><span class="t">The head rises and stops right above where the first letter goes. Put the paper where the preview shows it and tape it down.</span><span class="bar"><i></i></span></span></button></li>
+          <li><button type="button" data-go="1"><span class="n">1</span><span><b class="h">Start with the pen out: it levels the bed first</b><span class="t">Take the pen out of the holder, leave the plate empty (no paper yet) and start the file. The printer homes, then levels the bed under where you'll write, about a minute (with <span class="ui">Printing → Level the bed first</span> on, where your printer can): the nozzle touches the plate here and there, so a pen sticking out below it would crash, and paper would be in the way.</span><span class="bar"><i></i></span></span></button></li>
+          <li><button type="button" data-go="2"><span class="n">2</span><span><b class="h">Pause 1: now place the paper</b><span class="t">Once the bed is levelled, the head rises and stops right above where the first letter goes. Now put the paper where the preview shows it and tape it down.</span><span class="bar"><i></i></span></span></button></li>
           <li><button type="button" data-go="3"><span class="n">3</span><span><b class="h">Pause 2: attach the pen</b><span class="t">The head lowers to the writing height. Slide the pen down through the holder until the tip just touches the paper, then clamp it. That sets the pen's length, so nothing else needs measuring.</span><span class="bar"><i></i></span></span></button></li>
           <li><button type="button" data-go="4"><span class="n">4</span><span><b class="h">It writes</b><span class="t">The pen lifts and lowers for every stroke at about the speed of real handwriting. Stay with the printer the first time.</span><span class="bar"><i></i></span></span></button></li>
         </ol>

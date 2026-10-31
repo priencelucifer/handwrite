@@ -1296,11 +1296,11 @@
     const pr = v.cfg.printer, steps = [...extra];
     if (state.dryRun) steps.unshift(`Dry run: the pen is clamped as usual, then every stroke is drawn ${G.DRY_RUN_LIFT} mm above the paper, so nothing gets written.`);
     const how = pr.level && G.LEVEL_PRINTERS.get(pr.model);
-    steps.push(how && !G.LEVEL_SAVED.has(how)
-      ? `Take the pen out of the holder and leave the plate empty. The printer homes, then measures the bed ${/^G29 A/.test(how)
-        ? "under where you'll write (about a minute): the nozzle touches" : "(a minute or two): the nozzle or its probe touches"} the plate here and there.`
-      : "Take the pen out of the holder. The printer homes first, and homing touches the nozzle to the plate.",
-      `Start the file. The head moves over the first letter and waits ${pr.paper_pause_s} s: put the paper where the preview shows and tape it down.`,
+    const measures = how && !G.LEVEL_SAVED.has(how);
+    steps.push(measures ? "Take the pen out of the holder and leave the plate empty: no paper yet." : "Take the pen out of the holder.",
+      `Start the file. The printer homes${measures ? `, then levels the bed ${/^G29 A/.test(how) ? "under where you'll write (about a minute): the nozzle touches"
+        : "(a minute or two): the nozzle or its probe touches"} the plate here and there` : " (homing touches the nozzle to the plate)"}. ` +
+        `Then the head moves over the first letter and waits ${pr.paper_pause_s} s: now put the paper where the preview shows and tape it down.`,
       `The head lowers and waits ${pr.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`);
     if (penChange(v.passes)) steps.push(`When the first pen is done, the head rises and waits ${pr.pen_pause_s} s: take that pen out. Then it lowers and waits ${pr.pen_pause_s} s: slide the second pen in until it touches the paper, and clamp it.`);
     if (v.passes.length > 1) steps.push(G.passNote(v.passes) + ` You have ${pr.shift_pause_s} s each time.`);
