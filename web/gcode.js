@@ -162,10 +162,12 @@
     },
   };
   const SOUND_PRINTERS = new Set(Object.keys(BAMBU_TUNES));
-  // Bed levelling as Bambu Studio's own start code does it (G29.2 S1, then G29 A1 over a rectangle), but with the nozzle
-  // cold, as the pen holder sits beside it, and without M500, so the printer's saved calibration stays as it was.
-  // Only where those commands are known: other printers' firmware levels differently or not at all.
-  const LEVEL_PRINTERS = new Set(["Bambu Lab A1", "Bambu Lab A1 mini"]), LEVEL_PAD = 3; // mm around the writing
+  // Bed levelling as Bambu Studio's own start code does it (G29.2 S1, then G29 A1 or G29 A over a rectangle: model ->
+  // that letter), but with the nozzle cold, as the pen holder sits beside it (Bambu cools it to 140 C just so the plate
+  // takes no harm), and without M500, so the printer's saved calibration stays as it was. Only where those commands are
+  // known: the P2S levels in other steps, and other makers' firmware differently or not at all (many have no probe).
+  const LEVEL_PRINTERS = new Map([["Bambu Lab A1", "A1"], ["Bambu Lab A1 mini", "A1"], ["Bambu Lab P1P / P1S", "A"], ["Bambu Lab X1 Carbon / X1E", "A"]]);
+  const LEVEL_PAD = 3; // mm around the writing
   // [MIDI note or 0 for a rest, duration in 10 ms] -> the same note on all three channels at full volume: as loud as the motors go
   const loud = steps => steps.map(([n, d]) => { const v = n ? 100 : 0; return [n, d, v, n, d, v, n, d, v]; });
   const TUNES = { pause: loud([[76, 14], [0, 8], [76, 14], [0, 8], [76, 22]]), resume: loud([[67, 10], [72, 20]]) };
@@ -880,10 +882,16 @@
       const pts = passes.flatMap(ps => ps.strokes.flatMap(s => s.map(pt => [p.x + pt[0] - pr.offset_x, bedY(pt, ps.shift)])));
       const x0 = Math.max(0, Math.min(...pts.map(q => q[0])) - LEVEL_PAD), x1 = Math.min(pr.bed_x, Math.max(...pts.map(q => q[0])) + LEVEL_PAD);
       const y0 = Math.max(0, Math.min(...pts.map(q => q[1])) - LEVEL_PAD), y1 = Math.min(pr.bed_y, Math.max(...pts.map(q => q[1])) + LEVEL_PAD);
-      if (pr.keepouts.some(k => x0 <= k[2] && x1 >= k[0] && y0 <= k[3] && y1 >= k[1]))
-        throw new WriteError("The bed can't be levelled under this page: it reaches a part of the plate the nozzle must avoid. Turn off bed levelling or move the paper.");
+      let r = [x0, y0, x1, y1];
+      for (const k of pr.keepouts) if (r[0] <= k[2] && r[2] >= k[0] && r[1] <= k[3] && r[3] >= k[1]) {
+        // a part of the plate the nozzle must never touch (a purge chute): step back from it on the side that keeps the most
+        const sides = [[k[2] + 1, r[1], r[2], r[3]], [r[0], r[1], k[0] - 1, r[3]], [r[0], k[3] + 1, r[2], r[3]], [r[0], r[1], r[2], k[1] - 1]]
+          .filter(q => q[2] - q[0] >= 10 && q[3] - q[1] >= 10), size = q => (q[2] - q[0]) * (q[3] - q[1]);
+        if (!sides.length) throw new WriteError("The bed can't be levelled under this page: it reaches a part of the plate the nozzle must avoid. Turn off bed levelling or move the paper.");
+        r = sides.reduce((a, q) => (size(q) > size(a) ? q : a));
+      }
       out.push("; LEVEL THE BED under the writing, the pen still out: the cold nozzle touches the plate here and there, and the head follows the bed from now on",
-        "G29.2 S1", `G29 A1 X${f(x0 + ox)} Y${f(y0 + oy)} I${f(x1 - x0)} J${f(y1 - y0)}`);
+        "G29.2 S1", `G29 ${LEVEL_PRINTERS.get(pr.model)} X${f(r[0] + ox)} Y${f(r[1] + oy)} I${f(r[2] - r[0])} J${f(r[3] - r[1])}`);
     }
     out.push(z(pr.z_draw + CLEARANCE), `G0 ${xy(order(passes[0])[0][0], 0)} ${travel}`,
       "; place the paper: the first letter goes right under the pen holder", ...sound("pause"), wait(pr.paper_pause_s),

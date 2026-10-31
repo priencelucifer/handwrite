@@ -936,7 +936,7 @@
     const ok = G.LEVEL_PRINTERS.has(PR_().model);
     $("level").checked = ok && PR_().level !== false; $("level").disabled = !ok;
     $("levelNote").textContent = ok ? "Before the paper goes in, the nozzle (pen out, cold) measures the plate under the writing, so the pen presses the same everywhere. About a minute."
-      : "Bambu Lab A1 and A1 mini only";
+      : "Bambu Lab A1, A1 mini, P1P / P1S and X1 only: other printers level differently, or have no probe";
   };
   $("level").onchange = () => { PR_().level = $("level").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncLevel);

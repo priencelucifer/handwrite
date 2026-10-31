@@ -143,7 +143,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
   const tally = { ok: 0, refused: 0, edited: 0, code: 0, levelled: 0, pressed: 0 };
   for (let c = 0; c < 4000; c++) {
     const s = structuredClone(G.DEFAULT_SETTINGS);
-    s.printer.model = rng.random() < 0.15 ? pick(["Bambu Lab A1", "Bambu Lab A1 mini"]) : pick(models); // levelling runs on these
+    s.printer.model = rng.random() < 0.25 ? pick([...G.LEVEL_PRINTERS.keys()]) : pick(models); // levelling runs on these
     if (s.printer.model === "Custom") Object.assign(s.printer, { bed_x: U(80, 350), bed_y: U(80, 350), bed_z: U(60, 300) });
     s.paper.size = pick(papers);
     if (s.paper.size === "Custom") Object.assign(s.paper, { width: U(40, 400), height: U(40, 500) });
@@ -153,7 +153,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     if (rng.random() < 0.4) Object.assign(s.paper, { ruling: U(3, 14), first_line: U(0, 80), margin_line: rng.random() < 0.5 ? U(0, 60) : 0 });
     s.printer.z_lift = s.printer.z_draw + U(0.9, 12);
     if (rng.random() < 0.4) s.printer.press_bottom = U(0, 2); // pressing harder toward the bottom (refused if too low)
-    s.printer.level = rng.random() < 0.7; // bed levelling first (A1 and A1 mini)
+    s.printer.level = rng.random() < 0.7; // bed levelling first (where the printer's commands are known)
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3), indent: U(0, 1.5) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
     s.writing.code = rng.random() < 0.35;
@@ -494,13 +494,14 @@ test("extra pressure at the bottom: the pen goes lower line by line down the pag
   assert.throws(() => G.resolve(withSet({ "printer.press_bottom": 3 })), /press bottom/);
 });
 
-test("bed levelling (A1 and A1 mini): after homing, pen out, cold, under the writing only, before the paper; never saved", () => {
+test("bed levelling (A1, A1 mini, P1, X1): after homing, pen out, cold, under the writing only, before the paper; never saved", () => {
   const text = "Dear friend,\nA few lines written to check the bed levelling.\nAnd one more.";
-  for (const model of ["Bambu Lab A1", "Bambu Lab A1 mini"]) {
+  for (const [model, cmd] of [["Bambu Lab A1", "G29 A1 X"], ["Bambu Lab A1 mini", "G29 A1 X"], ["Bambu Lab P1P / P1S", "G29 A X"], ["Bambu Lab X1 Carbon / X1E", "G29 A X"]]) {
     const s = withSet({ "printer.model": model }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
     const out = run(s, text, 2), g = out.gcode.split("\n"), pr = out.cfg.printer;
     simulate(out.gcode, out.cfg);
-    const at = l => g.indexOf(l), lv = g.findIndex(l => l.startsWith("G29 A1"));
+    const at = l => g.indexOf(l), lv = g.findIndex(l => l.startsWith(cmd)); // Bambu Studio's own form for this printer
+    assert.ok(lv > 0 && g.filter(l => l.startsWith("G29 ")).length === 1, `${model}: one levelling, as ${cmd}`);
     assert.ok(at("G28") < at("M104 S0") && at("M104 S0") < at("G29.2 S1") && at("G29.2 S1") === lv - 1, `${model}: order`);
     assert.ok(lv < g.findIndex(l => /^G0 X/.test(l)) && !g.some(l => /^M500|^M109|^M104 S[1-9]/.test(l)), `${model}: before any move; nothing heated or saved`);
     const [, x, y, i, j] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(g[lv]).map(Number);
@@ -511,7 +512,16 @@ test("bed levelling (A1 and A1 mini): after homing, pen out, cold, under the wri
     const off = run(withSet({ "printer.model": model, "printer.level": false, "paper.x": s.paper.x, "paper.y": s.paper.y }), text, 2).gcode;
     assert.ok(!/G29/.test(off), `${model}: off means off`);
   }
-  for (const model of ["Bambu Lab P1P / P1S", "Bambu Lab X1 Carbon / X1E", "Creality Ender-3 V3 SE"]) {
+  { // writing just beside the P1's purge chute (a keep-out, x 0-18, y 0-28): the levelled area, 3 mm wider than the
+    // writing, would reach into it, so it steps back past the keep-out's edge on the side that keeps the most
+    const cfg = G.resolve(withSet({ "printer.model": "Bambu Lab P1P / P1S", "printer.offset_x": 0, "printer.offset_y": 0, "paper.size": "A6", "paper.x": 10, "paper.y": 20 }));
+    const at = (x, y) => [x - 10, 20 + cfg.paper.height - y]; // a nozzle position on the bed, as a point on the paper
+    const g = G.toGcode([{ shift: 0, strokes: [[at(20, 30), at(60, 30)], [at(20, 60), at(60, 60)]] }], cfg, ["t"]);
+    simulate(g, cfg); // which refuses a levelled area over a keep-out
+    const lv = g.split("\n").find(l => l.startsWith("G29 A X")), [, x, y, i, j] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(lv).map(Number);
+    assert.ok(x === 19 && y === 27 && x + i === 63 && y + j === 63, `stepped back past the keep-out's right edge: ${lv}`);
+  }
+  for (const model of ["Bambu Lab P2S", "Creality Ender-3 V3 SE", "Prusa MK4"]) {
     const s = withSet({ "printer.model": model }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
     assert.ok(!/G29/.test(run(s, text, 2).gcode), `${model}: no levelling where the commands aren't known`);
   }
@@ -522,6 +532,7 @@ test("bed levelling (A1 and A1 mini): after homing, pen out, cold, under the wri
   const late = g.filter(l => !l.startsWith("G29")); late.splice(late.findIndex(l => l.startsWith("; place the paper")), 0, "G29.2 S1", g.find(l => l.startsWith("G29 A1")));
   assert.throws(() => simulate(late.join("\n"), out.cfg), /levelling where it can't be/);
   assert.throws(() => simulate(out.gcode.replace(/^(G29 A1 .*)$/m, "$1\nM500"), out.cfg), /malformed/);
+  assert.throws(() => simulate(out.gcode.replace(/^G29 A1 X/m, "G29 A X"), out.cfg), /not this printer's levelling command/); // the P1's form on an A1
   assert.throws(() => G.resolve(withSet({ "printer.level": "yes" })), /on or off/);
 });
 
