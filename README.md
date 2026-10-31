@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 # Handplot
 
@@ -10,7 +10,7 @@ It runs in your browser, works offline, and needs no install.
 
 **Use it now: [handplot.org](https://handplot.org)**
 
-![Tests](https://img.shields.io/badge/tests-52_passing-2ea043)
+![Tests](https://img.shields.io/badge/tests-53_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
 ![Printers](https://img.shields.io/badge/printers-Bambu_Lab_%2B_400%2B_from_OrcaSlicer-e08a00)
 
@@ -34,7 +34,7 @@ and word gaps are never the same twice.
 - **45 handwriting styles**, neat to casual, based on 13 real writers.
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
-- **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.
+- **Long text** flows onto page 2, 3, â€¦ (up to 50). Save one page or all of them as a zip.
 - **Lined paper**: pick the ruling and every line of writing sits on a printed line, right of the margin line.
 - **Underlines and a second pen**: `_like this_` is underlined by hand, `*like this*` is written with a second pen after a pen change.
   A `*` or `_` on its own, as in `5 * 3`, is simply written.
@@ -88,10 +88,10 @@ Do a dry run first, and stay with the printer the first time.
 The pen sits a little to the side of the nozzle. The app needs to know by how much, so the writing lands where the
 preview shows it and the pen never runs off the edge of the plate.
 
-With the [Plotter holder](https://makerworld.com/en/models/1247876-plotter#profileId-1269790) the offset is **X 1, Y −25 mm**, and that's the
+With the [Plotter holder](https://makerworld.com/en/models/1247876-plotter#profileId-1269790) the offset is **X 1, Y âˆ’25 mm**, and that's the
 default, so you can skip this. For any other holder:
 
-1. In **Printer settings → Pen offset**, click **Save offset test G-code** and run it.
+1. In **Printer settings â†’ Pen offset**, click **Save offset test G-code** and run it.
 2. Push an A4 sheet into the **top-left (far-left) corner** of the plate, with its top and left edges against the plate's edges.
 3. The pen draws a long line and a short mark. Measure how far the long line is below the paper's top edge,
    and how far the short mark is from its left edge.
@@ -101,8 +101,8 @@ default, so you can skip this. For any other holder:
 
 | Printers | Paper |
 |---|---|
-| Bambu Lab A1, A1 mini, P1P / P1S, P2S, X1 Carbon / X1E (checked by hand) | A4, A5, A6, US Letter, 4×6 in card |
-| 400+ more from [OrcaSlicer](https://github.com/OrcaSlicer/OrcaSlicer)'s profiles: Prusa, Creality, Voron, Elegoo, Qidi, Anycubic, Sovol, … | |
+| Bambu Lab A1, A1 mini, P1P / P1S, P2S, X1 Carbon / X1E (checked by hand) | A4, A5, A6, US Letter, 4Ã—6 in card |
+| 400+ more from [OrcaSlicer](https://github.com/OrcaSlicer/OrcaSlicer)'s profiles: Prusa, Creality, Voron, Elegoo, Qidi, Anycubic, Sovol, â€¦ | |
 | Custom (any bed size) | Custom (any size), portrait or landscape |
 
 The G-code is plain and BambuPlot-style. It was developed on an A1; the other Bambu models use the same commands and
@@ -114,7 +114,7 @@ printers that need their own file format are left out.
 
 ## Bed levelling
 
-**Printing → Level the bed first** (on by default) is offered only where the printer's maker levels the bed in its own
+**Printing â†’ Level the bed first** (on by default) is offered only where the printer's maker levels the bed in its own
 start G-code (Bambu Studio's for Bambu, OrcaSlicer's profiles for the rest). Handplot sends that same command, after
 homing and before the paper and pen go in, with the nozzle cold, and never saves anything to the printer:
 
@@ -123,16 +123,16 @@ homing and before the paper and pen go in, with the nozzle cold, and never saves
 | Bambu Lab A1, A1 mini / P1P, P1S, X1 | `G29.2 S1`, then `G29 A1` / `G29 A` over the writing only |
 | Prusa MK4, MK4S, MK3.5, MINI, XL, CORE One (Buddy firmware) | `M555` (the writing's area), then `G29` |
 | Prusa MK3S | levels as it homes (`G28`); off: `G28 W` |
-| Marlin printers that probe every print (Ender-3 V2 Neo, Sidewinder X2, Kobra Neo, …) | `G29` |
-| Marlin printers with a saved mesh (Elegoo Neptune 3s, Sovol SV06, Wanhao D9, …) | `M420 S1` (no movement) |
-| Klipper printers that probe (Qidi X-Plus 3 / X-Max 3, Ender-3 V3 KE, Centauri Carbon 2, …) | `BED_MESH_CALIBRATE` |
+| Marlin printers that probe every print (Ender-3 V2 Neo, Sidewinder X2, Kobra Neo, â€¦) | `G29` |
+| Marlin printers with a saved mesh (Elegoo Neptune 3s, Sovol SV06, Wanhao D9, â€¦) | `M420 S1` (no movement) |
+| Klipper printers that probe (Qidi X-Plus 3 / X-Max 3, Ender-3 V3 KE, Centauri Carbon 2, â€¦) | `BED_MESH_CALIBRATE` |
 | Klipper printers with a saved mesh (Vzbot, FlyingBear S1, InfiMech TX) | `BED_MESH_PROFILE LOAD=default` |
 
 On Marlin and Prusa, `M420 S1 Z0` keeps the correction on at the pen's writing height (Marlin usually fades it out by
 10 mm; this lasts until the printer restarts). After probing, both heaters are switched off again in case the firmware
 warmed them. Left out: Lulzbot (its probe needs a hot, wiped nozzle), tool changers, Bambu's newer printers (OrcaSlicer
 has no Bambu start code for them), and printers whose levelling happens inside their own start macro (Voron, Creality
-K1, Elegoo Neptune 4, …): there, use **Press harder toward the bottom** in Printer settings.
+K1, Elegoo Neptune 4, â€¦): there, use **Press harder toward the bottom** in Printer settings.
 
 ## Safety
 
@@ -203,7 +203,7 @@ The [`python/`](python/) folder holds the older desktop and command-line version
 ## Limits
 
 - The model writes letters and `! " ' ( ) , - . : ; ?`; the app draws digits, `# < > { } [ ] = + * / \ % & | ^ ~ _ @ $` and
-  capital Q, X and Z itself. Accents are dropped (é becomes e), and other characters are skipped. The app lists any it
+  capital Q, X and Z itself. Accents are dropped (Ã© becomes e), and other characters are skipped. The app lists any it
   skipped.
 - A word occasionally comes out garbled. Click **New version** to write the page again.
 

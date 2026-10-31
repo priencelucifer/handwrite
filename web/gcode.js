@@ -372,7 +372,7 @@
     "X": [[[0.04, 1.92], [0.96, 0.0]], [[0.94, 1.92], [0.0, 0.02]]],
     "Z": [[[0.06, 1.9], [0.98, 1.93, 1], [0.04, 0.02, 1], [1.02, 0.0]]],
     // digits: the model saw few and garbles them (85 -> &5). Their y is a share of the digit's height (FIGURE_HEIGHT).
-    "0": [ring(0.42, 0.5, 0.4, 0.5, 95, 368)],
+    "0": [ring(0.42, 0.5, 0.4, 0.5, 100, 362)], // begun at the top and just closed: no hook where it meets
     "1": [[[0.12, 0.84], [0.34, 1.0, 1], [0.3, 0.0]]],
     "2": [[[0.04, 0.75], [0.2, 0.95], [0.45, 1.0], [0.66, 0.88], [0.68, 0.68], [0.5, 0.45], [0.02, 0.02, 1], [0.8, 0.03]]],
     "3": [[[0.04, 0.85], [0.3, 1.0], [0.58, 0.95], [0.66, 0.78], [0.52, 0.6], [0.26, 0.53, 1], [0.58, 0.47], [0.72, 0.28], [0.6, 0.06], [0.32, 0.0], [0.02, 0.1]]],
@@ -432,9 +432,10 @@
     const z = scale(all.map(p => p[0]), all.map(p => p[1])); // a small symbol (=, x, a point) wavers less than a tall digit
     // no two written alike: width and height, lean, angle and place on the line; where the middle falls (the waist of
     // an 8, the bar of a 4), whether the top comes out wider than the bottom, and how the middle bows sideways
-    const sx = clip(1 + N() * 0.08 * k, 0.82, 1.18), sy = clip(1 + N() * 0.07 * k, 0.86, 1.14), sh = hand.slant + clip(N() * 0.07 * k, -0.15, 0.15);
-    const rot = clip(N() * 0.04 * k, -0.09, 0.09), lift = clip(N() * 0.05 * k, -0.12, 0.12), cr = Math.cos(rot), sr = Math.sin(rot);
-    const waist = clip(N() * 0.08 * k, -0.16, 0.16), flare = clip(N() * 0.2 * k, -0.4, 0.4), bow = clip(N() * 0.05 * z, -0.1, 0.1);
+    // (one writer's figures differ only a little: much more and a row of them looks shaky and uneven)
+    const sx = clip(1 + N() * 0.04 * k, 0.92, 1.08), sy = clip(1 + N() * 0.03 * k, 0.94, 1.06), sh = hand.slant + clip(N() * 0.03 * k, -0.06, 0.06);
+    const rot = clip(N() * 0.015 * k, -0.035, 0.035), lift = clip(N() * 0.02 * k, -0.05, 0.05), cr = Math.cos(rot), sr = Math.sin(rot);
+    const waist = clip(N() * 0.035 * k, -0.07, 0.07), flare = clip(N() * 0.06 * k, -0.12, 0.12), bow = clip(N() * 0.025 * z, -0.05, 0.05);
     const mid = (Math.min(...all.map(p => p[0])) + Math.max(...all.map(p => p[0]))) / 2;
     const warp = ([x, y, c]) => { const t = (y - y0) / h; return [x + flare * (x - mid) * (t - 0.5) + bow * h * Math.sin(Math.PI * t), y + waist * h * 4 * t * (1 - t), c]; };
     const out = GLYPHS[ch].map((st, si) => {
@@ -444,11 +445,11 @@
         if (i && end(i - 1) && end(i) && Math.hypot(p[0] - st[i - 1][0], p[1] - st[i - 1][1]) > 0.5) pts.push([(p[0] + st[i - 1][0]) / 2, (p[1] + st[i - 1][1]) / 2]);
         pts.push(p);
       });
-      const ox = si ? N() * 0.05 * z : 0, oy = si ? N() * 0.05 * z : 0; // the pen put down again never lands quite where it should
-      const zs = scale(st.map(p => p[0]), st.map(p => p[1])), j = 0.05 * zs; // and a small stroke (the rings of a %) wavers less
+      const ox = si ? N() * 0.03 * z : 0, oy = si ? N() * 0.03 * z : 0; // the pen put down again never lands quite where it should
+      const zs = scale(st.map(p => p[0]), st.map(p => p[1])), j = 0.018 * zs; // and a small stroke (the rings of a %) wavers less
       const moved = pts.map(warp).map(([x, y, c]) => [x * wide + N() * j + ox, band(y) + N() * j + oy, c]), line = [];
       for (const [i, n] of size(st) > 0.5 ? [[0, 1], [moved.length - 1, moved.length - 2]] : []) { // and stops a little early, or runs on (a dot or a comma stays one)
-        const p = moved[i], q = moved[n], len = Math.hypot(p[0] - q[0], p[1] - q[1]) || 1, e = clip(N() * 0.06 * zs, -0.3 * len, Math.min(0.14, 0.3 * len));
+        const p = moved[i], q = moved[n], len = Math.hypot(p[0] - q[0], p[1] - q[1]) || 1, e = clip(N() * 0.03 * zs, -0.2 * len, Math.min(0.05, 0.2 * len));
         moved[i] = [p[0] + (p[0] - q[0]) / len * e, p[1] + (p[1] - q[1]) / len * e, p[2]];
       }
       for (let a = 0, b = 1; b < moved.length; b++) // smooth from corner to corner
@@ -546,21 +547,37 @@
   }
   const isCaps = word => (word.match(/[A-Z]/g) || []).length >= 2 && !/[a-z]/.test(word);
   const LETTER_GAP = 0.18; // x-heights between block capitals
+  const FIGURE_GAP = 0.3;  // x-heights where a drawn figure comes closest to its neighbour
 
-  /** A word's ink, assembled from its separately written pieces (pieces()); drawn symbols in this hand (handOf). */
+  /** A word's ink, assembled from its separately written pieces (pieces()); drawn symbols in this hand (handOf).
+   *  gap(figures): a random gap, between drawn symbols (figures) or between block capitals. */
   function wordInk(wd, inkOf, gap, hand, k) {
     const inkFor = part => part.glyph ? glyph(part.word, part.seed, hand, k) : inkOf(part);
     if (!wd.parts) return inkFor(wd);
     const out = [];
-    let x = 0;
+    let x = 0, prev = null;
     for (const part of wd.parts) {
-      const ink = inkFor(part);
+      const ink = inkFor(part), figures = !!prev && (part.glyph || prev.glyph), g = gap(figures);
+      // beside a drawn symbol, spaced by the shapes as a hand does it, not by their boxes, so a row of figures looks
+      // evenly spaced (a 7's bar may reach over a point's head, a 1 stands close to the 0 before it)
+      if (figures) x = besideAt(out, ink, g) ?? x;
       let w = 0;
       for (const st of ink) for (const p of st) w = Math.max(w, p[0]);
       for (const st of ink) out.push(st.map(([a, b]) => [a + x, b]));
-      x += w + gap();
+      x += w + g; // where the next piece goes box to box (block capitals), or if it shares no height with these
+      prev = part;
     }
     return out;
+  }
+  /** How far right ink b (from x = 0) must go so it comes no closer than gap to ink a at any height they share (give or
+   *  take a little), or undefined if they share none. */
+  function besideAt(a, b, gap) {
+    const BIN = 0.08, right = new Map();
+    for (const st of a) for (const [x, y] of st) { const r = Math.round(y / BIN); if (!(right.get(r) >= x)) right.set(r, x); }
+    let at;
+    for (const st of b) for (const [x, y] of st) for (let r = Math.round(y / BIN) - 1; r <= Math.round(y / BIN) + 1; r++)
+      if (right.has(r)) at = Math.max(at ?? -Infinity, right.get(r) - x + gap);
+    return at;
   }
   function hash(s) { // FNV-1a, 32 bit
     let h = 0x811c9dc5;
@@ -575,7 +592,8 @@
   function shapeWord(wd, inkOf, k, N, hand) {
     const ws = clip(1 + N() * 0.04 * k, 0.9, 1.1), shear = clip(N() * 0.05 * k, -0.12, 0.12), rot = clip(N() * 0.012 * k, -0.03, 0.03);
     const cr = Math.cos(rot), sr = Math.sin(rot);
-    let ink = wordInk(wd, inkOf, () => Math.max(0.06, LETTER_GAP + N() * 0.06 * k), hand, k).map(st => st.map(([sx, sy]) => { const a = (sx + shear * sy) * ws, b = sy * ws; return [a * cr - b * sr, a * sr + b * cr]; }));
+    const gap = figures => (figures ? clip(FIGURE_GAP + N() * 0.04 * k, 0.2, 0.4) : Math.max(0.06, LETTER_GAP + N() * 0.06 * k));
+    let ink = wordInk(wd, inkOf, gap, hand, k).map(st => st.map(([sx, sy]) => { const a = (sx + shear * sy) * ws, b = sy * ws; return [a * cr - b * sr, a * sr + b * cr]; }));
     let xmin = Infinity, width = 0;
     for (const st of ink) for (const pt of st) xmin = Math.min(xmin, pt[0]);
     ink = ink.map(st => st.map(([a, b]) => [a - xmin, b])); // the word still starts where it is placed

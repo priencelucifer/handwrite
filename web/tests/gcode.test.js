@@ -270,6 +270,25 @@ test("drawn symbols: pen paths in the hand's height and slant, a little differen
   assert.deepStrictEqual(G.handOf([[]], leaning), { slant: 0.1, asc: 2.1 }); // nothing written: a typical hand
 });
 
+test("figures in a number are spaced by their shapes: never touching, never far apart", () => {
+  const cfg = G.resolve(G.DEFAULT_SETTINGS), xh = cfg.writing.x_height, nums = ["0137", "711", "1998", "404", "2048", "5309", "3.14", "1,234"];
+  let lo = Infinity, hi = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const lines = G.layout(G.words(nums.join("\n"), seed), () => [[[0, 0], [1, 1]]], cfg, mulberry(seed));
+    nums.forEach((num, n) => { // each line: one number, its figures' strokes in order
+      let k = 0;
+      const figs = [...num].map(ch => lines[n].slice(k, (k += G.glyph(ch, 1).length)).flat());
+      for (let i = 1; i < figs.length; i++) {
+        let d = Infinity;
+        for (const p of figs[i - 1]) for (const q of figs[i]) d = Math.min(d, Math.hypot(p[0] - q[0], p[1] - q[1]));
+        lo = Math.min(lo, d / xh); hi = Math.max(hi, d / xh);
+      }
+    });
+  }
+  // (box to box, as before, they came 0.07 to 0.69 x-heights apart: touching in 0137, gaping in 1,234)
+  assert.ok(lo > 0.14 && hi < 0.55, `closest approach between neighbours: ${lo.toFixed(3)} to ${hi.toFixed(3)} x-heights`);
+});
+
 test("code keeps every line's indent, and a line too long for the paper runs on one step further in", () => {
   const cfg = G.resolve(withSet({ "writing.wobble": 0, "writing.code": true })), xh = cfg.writing.x_height;
   const ink = ({ word }) => [[[0, 0], [0.6 * word.length, 1]]];
