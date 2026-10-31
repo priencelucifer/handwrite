@@ -1151,8 +1151,7 @@
       morePage: [["borders, lined paper, header, page numbers"], [...on(p.margin !== D.paper.margin || p.margin_y !== D.paper.margin_y, "borders"),
         ...on(p.ruling > 0, `lined paper ${p.ruling} mm`), ...on(!!(w.header || "").trim(), "header"), ...on(w.page_numbers, "page numbers"),
         ...on(pr.sounds === false && G.SOUND_PRINTERS.has(pr.model), "sounds off"), ...on(p.slide, "long pages")]],
-      morePrint: [["bed levelling, dry run, start again from a line, reach check"], [...on(state.dryRun, "dry run"), ...on(state.startLine > 1, `from line ${state.startLine}`),
-        ...on(pr.level === false && G.LEVEL_PRINTERS.has(pr.model), "no bed levelling")]],
+      morePrint: [["dry run, start again from a line, reach check"], [...on(state.dryRun, "dry run"), ...on(state.startLine > 1, `from line ${state.startLine}`)]],
     };
     for (const [id, [[inside], changed]] of Object.entries(sets)) {
       const el = $(id + "Sum");
