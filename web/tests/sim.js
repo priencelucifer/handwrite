@@ -1,19 +1,41 @@
 // Independent G-code simulator: knows only physical facts, not gcode.js's maths. Throws on any violation.
 const assert = require("node:assert");
 // Independent physical facts, in the printer's own coordinates: [x0, y0, x1, y1 (where the nozzle may go), max Z,
-// nozzle keep-outs, dialect]. Bambu Lab by hand; every other printer straight from OrcaSlicer's data (printers.js),
-// not from gcode.js's converted table, so the shift into the printer's coordinates is checked too.
+// nozzle keep-outs, dialect, firmware]. Bambu Lab by hand; every other printer straight from OrcaSlicer's data
+// (printers.js), not from gcode.js's converted table, so the shift into the printer's coordinates is checked too.
 const FACTS = {
-  "Bambu Lab A1": [0, 0, 256, 256, 256, [], "bambu"], "Bambu Lab A1 mini": [0, 0, 180, 180, 180, [], "bambu"],
-  "Bambu Lab P1P / P1S": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu"], "Bambu Lab P2S": [0, 0, 256, 256, 256, [], "bambu"],
-  "Bambu Lab X1 Carbon / X1E": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu"],
+  "Bambu Lab A1": [0, 0, 256, 256, 256, [], "bambu", "bambu"], "Bambu Lab A1 mini": [0, 0, 180, 180, 180, [], "bambu", "bambu"],
+  "Bambu Lab P1P / P1S": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu", "bambu"], "Bambu Lab P2S": [0, 0, 256, 256, 256, [], "bambu", "bambu"],
+  "Bambu Lab X1 Carbon / X1E": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu", "bambu"],
 };
 for (const list of Object.values(require("../printers.js")))
-  for (const [name, [x0, y0, x1, y1, z, , keep]] of Object.entries(list)) if (!FACTS[name]) FACTS[name] = [x0, y0, x1, y1, z, keep, "generic"];
-const LINE_OK = /^(;[^\n]*|G90|G21|G28|M104 S0|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G29\.2 S1|G29 A1? X\d+\.\d\d Y\d+\.\d\d I\d+\.\d\d J\d+\.\d\d|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
-// Bed levelling: as in Bambu Studio's own start code for these printers (G29 A1 on the A1s, G29 A on the P1 and X1),
-// nowhere else (the P2S levels in other steps; other firmware differently or not at all)
-const LEVELS = new Map([["Bambu Lab A1", "A1"], ["Bambu Lab A1 mini", "A1"], ["Bambu Lab P1P / P1S", "A"], ["Bambu Lab X1 Carbon / X1E", "A"]]);
+  for (const [name, [x0, y0, x1, y1, z, fw, keep]] of Object.entries(list)) if (!FACTS[name]) FACTS[name] = [x0, y0, x1, y1, z, keep, "generic", fw];
+const LINE_OK = /^(;[^\n]*|G90|G21|G28|G28 W|M104 S0|M140 S0|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G29\.2 S1|G29 A1? X\d+\.\d\d Y\d+\.\d\d I\d+\.\d\d J\d+\.\d\d|G29|M420 S1 Z0|M555 X\d+\.\d\d Y\d+\.\d\d W\d+\.\d\d H\d+\.\d\d|BED_MESH_CALIBRATE|BED_MESH_PROFILE LOAD=default|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
+// Bed levelling: only on printers whose maker's own start G-code levels the bed (Bambu Studio's; OrcaSlicer's profiles),
+// with the same command on the firmware it belongs to. [method, firmware, printers, its lines in order]: after probing,
+// both heaters off again; Marlin and Buddy also M420 S1 Z0 (correction at every height). "G28": the MK3S levels as it
+// homes, and homes without levelling as G28 W.
+const OFF = [/^M104 S0$/, /^M140 S0$/];
+const LEVELS = [
+  ["G29 A1", /^bambu$/, /^Bambu Lab A1( mini)?$/, [/^G29\.2 S1$/, /^G29 A1 X/, ...OFF]],
+  ["G29 A", /^bambu$/, /^Bambu Lab (P1P \/ P1S|X1 Carbon \/ X1E)$/, [/^G29\.2 S1$/, /^G29 A X/, ...OFF]],
+  ["G29", /^marlin2?$/, /^(Anycubic Kobra Neo|Artillery (Genius Pro|Hornet|Sidewinder X2)|BIQU BX|Creality Ender-3 V2 Neo|Eryone ER20|Wanhao D12-300|WEMAKE3D (PhoenixProV1|TinyBotV1))$/,
+    [/^G29$/, ...OFF, /^M420 S1 Z0$/]],
+  ["M420 S1", /^marlin2?$/, /^(Anycubic Kobra 2 Neo|Creality Ender-3 S1 Plus|Elegoo Neptune( 2| 2D| 2S| 3| 3 Max| 3 Plus| 3 Pro| X)?|Sovol SV06( Plus)?|Wanhao D9-[345]00 MK[123]( BLTouch kit)?)$/,
+    [/^M420 S1 Z0$/]],
+  ["BED_MESH_CALIBRATE", /^klipper$/, /^(Creality Ender-3 V3 KE|Elegoo Centauri( Carbon)? 2|Eryone Thinker X400|Goofoo GP1|Qidi (X-Max 3|X-Max 4|X-Plus 3|X-Plus 5|X-Smart 3)|TwoTrees SK1|Wanhao France D12 (230|300|500) PRO SMARTPAD .+)$/,
+    [/^BED_MESH_CALIBRATE$/, ...OFF]],
+  ["BED_MESH_PROFILE LOAD=default", /^klipper$/, /^(FlyingBear S1|InfiMech TX( Hardened Steel Nozzle)?|Vzbot (235|330) AWD)$/, [/^BED_MESH_PROFILE LOAD=default$/]],
+  ["M555", /^marlin2$/, /^Prusa (MINI( IS)?|MK3\.5|MK4S?( HF| MMU3( HF)?)?|XL|CORE One( HF| L| L HF| MMU3)?)$/, [/^M555 X/, /^G29$/, ...OFF, /^M420 S1 Z0$/]],
+  ["G28", /^marlin$/, /^Prusa MK3S$/, []],
+];
+/** The bed levelling a printer's maker uses: [method, its lines], or undefined. */
+function levelOf(model) {
+  const hit = LEVELS.find(([, fw, re]) => re.test(model));
+  if (!hit) return undefined;
+  assert.match(FACTS[model][7], hit[1], `${model}: ${hit[0]} on ${FACTS[model][7]} firmware`);
+  return [hit[0], hit[3]];
+}
 
 /** Simulate a G-code file; throws on any violation. s: the settings it was made from (for z, paper, offsets).
  *  opts.reach: a reach check (no pen, no paper): nothing may be drawn and no paper or pen pause is needed. */
@@ -36,7 +58,8 @@ function simulate(gcode, s, opts = {}) {
   let clampY = null, downY = null; // where the pen was clamped; where the current stroke's pen-down happened
   const dry = s.printer.dry_run === true ? 8 : 0; // a dry run draws 8 mm above the writing height: the pen never touches
   const pw = s.paper.width, ph = s.paper.height; // already oriented by the caller
-  let levelOn = false, homed = false, heaterOff = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
+  const level = levelOf(model);
+  let pending = [], levelled = false, homed = false, heaterOff = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
   const lines = gcode.split("\n");
   assert.strictEqual(lines.pop(), "", "file ends with a newline");
   for (const [n, line] of lines.entries()) {
@@ -46,15 +69,22 @@ function simulate(gcode, s, opts = {}) {
     if (pass) shift = +pass[1];
     if (line.startsWith("; attach the pen") && clampY === null) clampY = y;
     if (line.startsWith(";")) continue;
-    if (line === "G28") { homed = true; continue; }
-    if (line.startsWith("G29")) { // after homing with the heater off, before the head goes anywhere (no paper, no pen yet)
-      assert.ok(LEVELS.has(model) && !opts.reach && homed && heaterOff && x === null, `bed levelling where it can't be ${where}`);
-      if (line === "G29.2 S1") { levelOn = true; continue; }
-      assert.ok(levelOn, `levelling without the correction on ${where}`);
-      assert.ok(line.startsWith(`G29 ${LEVELS.get(model)} X`), `not this printer's levelling command ${where}`);
-      const [, lx, ly, li, lj] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(line).map(Number);
-      assert.ok(li > 0 && lj > 0 && lx >= X0 && ly >= Y0 && lx + li <= X1 + 1e-9 && ly + lj <= Y1 + 1e-9, `levelling off the bed ${where}`);
-      for (const ko of keepouts) assert.ok(lx > ko[2] || lx + li < ko[0] || ly > ko[3] || ly + lj < ko[1], `levelling over a keep-out ${where}`);
+    if (line === "G28" || line === "G28 W") {
+      assert.ok(line === "G28" || (level && level[0] === "G28"), `G28 W on a printer that doesn't level as it homes ${where}`);
+      homed = true; continue;
+    }
+    if (!pending.length && /^(G29|M420|M555|BED_MESH_)/.test(line)) { // after homing with the heater off, before the head goes anywhere (no paper, no pen yet)
+      assert.ok(level && level[1].length && !opts.reach && homed && heaterOff && x === null && !levelled, `bed levelling where it can't be ${where}`);
+      pending = level[1].slice(); levelled = true;
+    }
+    if (pending.length) { // then exactly the maker's own steps, nothing else in between: no move before the heaters are back off
+      assert.match(line, pending.shift(), `not this printer's levelling ${where}`);
+      const a = /^(?:G29 A1?|M555) X(\S+) Y(\S+) [IW](\S+) [JH](\S+)$/.exec(line);
+      if (a) {
+        const [lx, ly, li, lj] = a.slice(1).map(Number);
+        assert.ok(li > 0 && lj > 0 && lx >= X0 && ly >= Y0 && lx + li <= X1 + 1e-9 && ly + lj <= Y1 + 1e-9, `levelling off the bed ${where}`);
+        for (const ko of keepouts) assert.ok(lx > ko[2] || lx + li < ko[0] || ly > ko[3] || ly + lj < ko[1], `levelling over a keep-out ${where}`);
+      }
       continue;
     }
     if (line === "M104 S0") { heaterOff = true; continue; } // the only temperature command allowed: nozzle heater off
@@ -102,10 +132,11 @@ function simulate(gcode, s, opts = {}) {
     }
   }
   assert.ok(homed, "never homed");
+  assert.ok(!pending.length, "levelling left unfinished");
   if (opts.reach) assert.strictEqual(draws, 0, "a reach check draws nothing");
   assert.ok("Z" in firstMotionAfterHome && firstMotionAfterHome.Z >= zd + 10, "first move after homing must lift");
   assert.ok(z >= zl, "file ends with the pen up");
   return draws;
 }
 
-module.exports = { simulate };
+module.exports = { simulate, levelOf };

@@ -162,11 +162,32 @@
     },
   };
   const SOUND_PRINTERS = new Set(Object.keys(BAMBU_TUNES));
-  // Bed levelling as Bambu Studio's own start code does it (G29.2 S1, then G29 A1 or G29 A over a rectangle: model ->
-  // that letter), but with the nozzle cold, as the pen holder sits beside it (Bambu cools it to 140 C just so the plate
-  // takes no harm), and without M500, so the printer's saved calibration stays as it was. Only where those commands are
-  // known: the P2S levels in other steps, and other makers' firmware differently or not at all (many have no probe).
-  const LEVEL_PRINTERS = new Map([["Bambu Lab A1", "A1"], ["Bambu Lab A1 mini", "A1"], ["Bambu Lab P1P / P1S", "A"], ["Bambu Lab X1 Carbon / X1E", "A"]]);
+  // Bed levelling: only on printers whose maker levels the bed in its own start G-code (Bambu Studio's; OrcaSlicer's
+  // profiles for the rest, read in October 2026), with that same command, but right after homing with the pen out, the
+  // nozzle cold (the pen holder sits beside it; Bambu cools it to 140 C just so the plate takes no harm) and the paper not
+  // yet in, and never saved (no M500 or SAVE_CONFIG): the printer's own calibration stays as it was. Method -> printers:
+  //   "G29 A1", "G29 A": Bambu's G29.2 S1, then G29 over the writing.  "G29": Marlin probes the bed.
+  //   "M420 S1": Marlin turns on the levelling saved in the printer.  "BED_MESH_CALIBRATE": Klipper probes the bed (also
+  //   for makers whose own G29 macro does that).  "BED_MESH_PROFILE LOAD=default": Klipper's saved mesh.  "M555": Prusa's
+  //   Buddy firmware, the writing's area, then G29.  "G28": the Prusa MK3S levels as it homes (G28 W homes without).
+  // Marlin and Buddy then get M420 Z0: the correction at every height, as the pen writes ~10 mm up, where their usual
+  // fade has ended it (it lasts until the printer restarts). After probing, both heaters go off again in case the
+  // firmware warmed them for it. Left out: Lulzbot (probes through the nozzle touching metal washers, which needs a hot,
+  // wiped nozzle), tool changers, Bambu's other printers (OrcaSlicer has no Bambu start code for them), Wanhao France's M2
+  // boards (Marlin by OrcaSlicer, Klipper by their start code), and printers whose maker's start code doesn't level (no
+  // probe, or levelling inside a start macro Handplot can't see).
+  const LEVEL_METHODS = [
+    ["G29 A1", /^Bambu Lab A1( mini)?$/],
+    ["G29 A", /^Bambu Lab (P1P \/ P1S|X1 Carbon \/ X1E)$/],
+    ["G29", /^(Anycubic Kobra Neo|Artillery (Genius Pro|Hornet|Sidewinder X2)|BIQU BX|Creality Ender-3 V2 Neo|Eryone ER20|Wanhao D12-300|WEMAKE3D (PhoenixProV1|TinyBotV1))$/],
+    ["M420 S1", /^(Anycubic Kobra 2 Neo|Creality Ender-3 S1 Plus|Elegoo Neptune( 2| 2D| 2S| 3| 3 Max| 3 Plus| 3 Pro| X)?|Sovol SV06( Plus)?|Wanhao D9-[345]00 MK[123]( BLTouch kit)?)$/],
+    ["BED_MESH_CALIBRATE", /^(Creality Ender-3 V3 KE|Elegoo Centauri( Carbon)? 2|Eryone Thinker X400|Goofoo GP1|Qidi (X-Max 3|X-Max 4|X-Plus 3|X-Plus 5|X-Smart 3)|TwoTrees SK1|Wanhao France D12 (230|300|500) PRO SMARTPAD .+)$/],
+    ["BED_MESH_PROFILE LOAD=default", /^(FlyingBear S1|InfiMech TX( Hardened Steel Nozzle)?|Vzbot (235|330) AWD)$/],
+    ["M555", /^Prusa (MINI( IS)?|MK3\.5|MK4S?( HF| MMU3( HF)?)?|XL|CORE One( HF| L| L HF| MMU3)?)$/],
+    ["G28", /^Prusa MK3S$/],
+  ];
+  const LEVEL_PRINTERS = new Map(Object.keys(PRINTERS).flatMap(name => LEVEL_METHODS.filter(([, re]) => re.test(name)).map(([m]) => [name, m])));
+  const LEVEL_SAVED = new Set(["M420 S1", "BED_MESH_PROFILE LOAD=default"]); // these only switch on what the printer measured before
   const LEVEL_PAD = 3; // mm around the writing
   // [MIDI note or 0 for a rest, duration in 10 ms] -> the same note on all three channels at full volume: as loud as the motors go
   const loud = steps => steps.map(([n, d]) => { const v = n ? 100 : 0; return [n, d, v, n, d, v, n, d, v]; });
@@ -182,8 +203,8 @@
       paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12, press_bottom: 0, level: true,
       z_feed: 600, draw_feed: 1500, travel_feed: 6000, settle_ms: 60, sounds: true, dry_run: false },
     // press_bottom: mm the pen goes lower by the bottom of the page than where it was clamped (no bed levelling with a
-    // pen fitted, so a bed a little lower toward the front leaves the last lines faint). level: on LEVEL_PRINTERS, measure
-    // the bed under the writing after homing, while the pen is still out, and write with the printer's correction on
+    // pen fitted, so a bed a little lower toward the front leaves the last lines faint). level: on LEVEL_PRINTERS, level
+    // the bed the printer's own way after homing, while the pen is still out, and write with the printer's correction on
     // ruling: mm between the printed lines of ruled paper (0 = plain); first_line: mm from the top edge to the first
     // printed line; margin_line: mm from the left edge to the printed margin line (0 = none)
     paper: { size: "A5", orientation: "portrait", x: 55, y: 10, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
@@ -850,8 +871,9 @@
     const oneLine = h => Array.from(String(h), c => (c.codePointAt(0) < 32 || c.codePointAt(0) === 0x2028 || c.codePointAt(0) === 0x2029 ? " " : c)).join("");
     const out = header.map(h => "; " + oneLine(h)); // a header can never add a command line
     if (dz) out.push(`; DRY RUN: the pen is clamped as usual, then every stroke is drawn ${DRY_RUN_LIFT} mm above the paper`);
-    const level = !opts.reach && pr.level && LEVEL_PRINTERS.has(pr.model);
-    out.push(`; BEFORE STARTING: take the pen out of the holder. Homing${level ? " and bed levelling touch" : " touches"} the nozzle to the plate.`);
+    const how = !opts.reach && pr.level ? LEVEL_PRINTERS.get(pr.model) : undefined, probes = how && !LEVEL_SAVED.has(how);
+    const home = LEVEL_PRINTERS.get(pr.model) === "G28" && !how ? "G28 W" : "G28"; // the MK3S levels as it homes, unless told not to
+    out.push(`; BEFORE STARTING: take the pen out of the holder. Homing${probes ? " and bed levelling touch" : " touches"} the nozzle to the plate.`);
     if (opts.reach) { // see reachCheck: the written points nearest the four corners, at pen-up height, nothing drawn
       const pts = passes.flatMap(ps => ps.strokes.flatMap(s => s.map(pt => ({ pt, shift: ps.shift,
         x: p.x + pt[0] - pr.offset_x, y: p.y + ps.shift + p.height - pt[1] - pr.offset_y }))));
@@ -861,7 +883,7 @@
       const corners = [[x0, y1, "back left"], [x1, y1, "back right"], [x1, y0, "front right"], [x0, y0, "front left"]].map(([cx, cy, name]) => [near(cx, cy), name]);
       out.push("; REACH CHECK, no paper: after homing the head visits the written points nearest the four corners of this page's",
         `; writing, at pen-up height, slowly, and waits ${REACH_WAIT_S} s at each. Watch that the pen holder clears the bed clips, wiper and frame.`,
-        "G90", ...(pr.dialect === "bambu" ? ["G21"] : []), "G28", "M104 S0", z(pr.z_draw + CLEARANCE),
+        "G90", ...(pr.dialect === "bambu" ? ["G21"] : []), home, "M104 S0", z(pr.z_draw + CLEARANCE),
         `G0 ${xy(corners[0][0].pt, corners[0][0].shift)} ${travel}`, z(pr.z_lift)); // every point through the same guard
       for (const [q, name] of corners) out.push(`; ${name}`, `G0 ${xy(q.pt, q.shift)} F${REACH_FEED}`, wait(REACH_WAIT_S));
       out.push(`G1 Z${f(pr.z_lift + 10)} F${i(pr.z_feed)}`);
@@ -876,9 +898,9 @@
     const clampY = bedY(firstPt, 0), press = (pt, shift) => pr.press_bottom * clip((clampY - bedY(pt, shift)) / p.height, 0, 1);
     const down = (pt, shift) => z(pr.z_draw + dz - press(pt, shift));
     const firstPen2 = passes.length === 1 && passes[0].strokes.some(s => s.pen !== PEN2) ? passes[0].strokes.find(s => s.pen === PEN2) : null;
-    out.push("G90", ...(pr.dialect === "bambu" ? ["G21"] : []), ...sound("start"), "G28"); // always home: every move after this assumes a known position
+    out.push("G90", ...(pr.dialect === "bambu" ? ["G21"] : []), ...sound("start"), home); // always home: every move after this assumes a known position
     out.push("M104 S0"); // nozzle heater off: nothing here needs heat, and the pen holder sits next to the hotend
-    if (level) { // the nozzle positions of everything written, a little wider, on the bed
+    const area = (w, h) => { // the nozzle positions of everything written, a little wider, on the bed
       const pts = passes.flatMap(ps => ps.strokes.flatMap(s => s.map(pt => [p.x + pt[0] - pr.offset_x, bedY(pt, ps.shift)])));
       const x0 = Math.max(0, Math.min(...pts.map(q => q[0])) - LEVEL_PAD), x1 = Math.min(pr.bed_x, Math.max(...pts.map(q => q[0])) + LEVEL_PAD);
       const y0 = Math.max(0, Math.min(...pts.map(q => q[1])) - LEVEL_PAD), y1 = Math.min(pr.bed_y, Math.max(...pts.map(q => q[1])) + LEVEL_PAD);
@@ -890,9 +912,16 @@
         if (!sides.length) throw new WriteError("The bed can't be levelled under this page: it reaches a part of the plate the nozzle must avoid. Turn off bed levelling or move the paper.");
         r = sides.reduce((a, q) => (size(q) > size(a) ? q : a));
       }
-      out.push("; LEVEL THE BED under the writing, the pen still out: the cold nozzle touches the plate here and there, and the head follows the bed from now on",
-        "G29.2 S1", `G29 ${LEVEL_PRINTERS.get(pr.model)} X${f(r[0] + ox)} Y${f(r[1] + oy)} I${f(r[2] - r[0])} J${f(r[3] - r[1])}`);
-    }
+      return `X${f(r[0] + ox)} Y${f(r[1] + oy)} ${w}${f(r[2] - r[0])} ${h}${f(r[3] - r[1])}`;
+    };
+    const off = ["M104 S0", "M140 S0"]; // after probing: heaters off again, in case the firmware warmed them for it
+    const steps = how === "M420 S1" ? ["M420 S1 Z0"] : how === "BED_MESH_PROFILE LOAD=default" ? [how]
+      : how === "G29" ? ["G29", ...off, "M420 S1 Z0"] : how === "BED_MESH_CALIBRATE" ? [how, ...off]
+      : how === "M555" ? [`M555 ${area("W", "H")}`, "G29", ...off, "M420 S1 Z0"]
+      : how === "G29 A1" || how === "G29 A" ? ["G29.2 S1", `${how} ${area("I", "J")}`, ...off] : []; // "G28": done while homing
+    if (steps.length) out.push(probes
+      ? "; LEVEL THE BED, the pen still out: the cold nozzle (or the printer's probe) touches the plate here and there, and the head follows the bed from now on"
+      : "; BED LEVELLING: the levelling saved in the printer, on at every height, so the head follows the bed", ...steps);
     out.push(z(pr.z_draw + CLEARANCE), `G0 ${xy(order(passes[0])[0][0], 0)} ${travel}`,
       "; place the paper: the first letter goes right under the pen holder", ...sound("pause"), wait(pr.paper_pause_s),
       ...sound("resume"), touch, "; attach the pen: slide it down until it touches the paper, then clamp it", ...sound("pause"),
@@ -964,7 +993,7 @@
     return { offset_x: round2(fromLeft - m.left), offset_y: round2(m.top - fromTop) };
   }
 
-  return { WriteError, SOUND_PRINTERS, LEVEL_PRINTERS, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PRINTER_GROUPS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
+  return { WriteError, SOUND_PRINTERS, LEVEL_PRINTERS, LEVEL_SAVED, TUNES, BAMBU_TUNES, tuneOf, PRINTERS, PRINTER_GROUPS, PAPERS, LIMITS, DEFAULT_SETTINGS, BED_INSET, CLEARANCE, MAX_WORD, SLIDE_HOVER,
     MIN_PEN_LIFT, validate, resolve, reach, writingArea, shifted, words, layout, extent, checkBounds, planPasses,
     toGcode, reachCheck, REACH_WAIT_S, passNote, describe, capacity, layoutPages, MAX_PAGES, offsetTest, offsetFromTest, offsetTestMarks, placePaper, penRange,
     lineGrid, headerWords, rulingLetters, PEN2, DRY_RUN_LIFT, MARGIN_LINE_GAP, WORD_SIZE, GLYPH_CHARS, glyph, pieces, handOf };

@@ -377,7 +377,7 @@
     const change = penChange(passes) ? 1 : 0;
     const sec = draw / pr.draw_feed * 60 * 1.3 + travel / pr.travel_feed * 60 * 1.5 + lifts * zTime +
       pr.paper_pause_s + pr.pen_pause_s * (1 + 2 * change) + (passes.length - 1) * pr.shift_pause_s + 40 + // +40 s homing
-      (pr.level && G.LEVEL_PRINTERS.has(pr.model) ? 90 : 0); // bed levelling under the writing: about a minute and a half
+      (pr.level && G.LEVEL_PRINTERS.has(pr.model) && !G.LEVEL_SAVED.has(G.LEVEL_PRINTERS.get(pr.model)) ? 90 : 0); // measuring the bed: about a minute and a half
     if (pr.sounds && G.SOUND_PRINTERS.has(pr.model)) { // each tune: a 1 s wait, then its lines (10 ms units, the longest channel)
       const t = name => 1 + G.tuneOf(pr.model, name).reduce((a, s) => a + Math.max(s[1], s[4], s[7]), 0) / 100;
       return sec + t("start") + t("finish") + (2 + (passes.length - 1) + change) * (t("pause") + t("resume"));
@@ -932,11 +932,14 @@
     $("soundsNote").textContent = ok ? "Bambu's own start and finish tunes, plus a tune at each pause" : "Not supported by this printer";
   };
   $("sounds").onchange = () => { PR_().sounds = $("sounds").checked; scheduleRender(0); };
-  const syncLevel = () => { // bed levelling: only where the printer's commands are known
-    const ok = G.LEVEL_PRINTERS.has(PR_().model);
-    $("level").checked = ok && PR_().level !== false; $("level").disabled = !ok;
-    $("levelNote").textContent = ok ? "Before the paper goes in, the nozzle (pen out, cold) measures the plate under the writing, so the pen presses the same everywhere. About a minute."
-      : "Bambu Lab A1, A1 mini, P1P / P1S and X1 only: other printers level differently, or have no probe";
+  const syncLevel = () => { // bed levelling: only where the printer's maker levels the bed in its own start G-code
+    const how = G.LEVEL_PRINTERS.get(PR_().model);
+    $("level").checked = !!how && PR_().level !== false; $("level").disabled = !how;
+    $("levelNote").textContent = !how ? "Not on this printer: there's no levelling Handplot can safely run here (no probe, levelling hidden in the printer's own start macro, a probe that needs a hot nozzle, or several tool heads). Press harder toward the bottom (Printer settings) can make up for a lower bed instead."
+      : /^G29 A/.test(how) ? "Before the paper goes in, the nozzle (pen out, cold) measures the plate under the writing, so the pen presses the same everywhere. About a minute."
+      : how === "G28" ? "The MK3S measures the bed as it homes (pen out), so the pen presses the same everywhere. Off: it homes without measuring."
+      : G.LEVEL_SAVED.has(how) ? "Turns on the bed levelling saved in the printer, as its maker's start G-code does, so the pen follows the bed. If the printer has never levelled its bed, run its own levelling once first."
+      : "Before the paper goes in, the printer measures the bed with its probe as its maker's start G-code does (pen out, nozzle cold), so the pen presses the same everywhere. A minute or two.";
   };
   $("level").onchange = () => { PR_().level = $("level").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncLevel);
@@ -1293,8 +1296,10 @@
   function showSteps(v, extra) {
     const pr = v.cfg.printer, steps = [...extra];
     if (state.dryRun) steps.unshift(`Dry run: the pen is clamped as usual, then every stroke is drawn ${G.DRY_RUN_LIFT} mm above the paper, so nothing gets written.`);
-    steps.push(pr.level && G.LEVEL_PRINTERS.has(pr.model)
-      ? "Take the pen out of the holder and leave the plate empty. The printer homes, then levels the bed under where you'll write (about a minute): the nozzle touches the plate here and there."
+    const how = pr.level && G.LEVEL_PRINTERS.get(pr.model);
+    steps.push(how && !G.LEVEL_SAVED.has(how)
+      ? `Take the pen out of the holder and leave the plate empty. The printer homes, then measures the bed ${/^G29 A/.test(how)
+        ? "under where you'll write (about a minute): the nozzle touches" : "(a minute or two): the nozzle or its probe touches"} the plate here and there.`
       : "Take the pen out of the holder. The printer homes first, and homing touches the nozzle to the plate.",
       `Start the file. The head moves over the first letter and waits ${pr.paper_pause_s} s: put the paper where the preview shows and tape it down.`,
       `The head lowers and waits ${pr.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`);

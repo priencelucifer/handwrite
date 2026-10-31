@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const G = require("../gcode.js");
 
-const { simulate } = require("./sim.js");
+const { simulate, levelOf } = require("./sim.js");
 
 // Fake handwriting: plausible word ink without the neural net, so thousands of cases run quickly.
 function fakeInk(rng) {
@@ -177,7 +177,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     tally.ok++;
     if (edit) tally.edited++;
     if (s.writing.code) tally.code++;
-    if (/^G29 A1 /m.test(out.gcode)) tally.levelled++;
+    if (/^(G29|M420|M555|BED_MESH_)/m.test(out.gcode)) tally.levelled++;
     if (s.printer.press_bottom > 0) tally.pressed++;
   }
   test.diagnostic?.(`fuzz: ${tally.ok} files simulated safely, ${tally.refused} setups refused`);
@@ -494,23 +494,33 @@ test("extra pressure at the bottom: the pen goes lower line by line down the pag
   assert.throws(() => G.resolve(withSet({ "printer.press_bottom": 3 })), /press bottom/);
 });
 
-test("bed levelling (A1, A1 mini, P1, X1): after homing, pen out, cold, under the writing only, before the paper; never saved", () => {
+test("bed levelling, each maker's own way: after homing, pen out, cold, before the paper; heaters off again; never saved", () => {
   const text = "Dear friend,\nA few lines written to check the bed levelling.\nAnd one more.";
-  for (const [model, cmd] of [["Bambu Lab A1", "G29 A1 X"], ["Bambu Lab A1 mini", "G29 A1 X"], ["Bambu Lab P1P / P1S", "G29 A X"], ["Bambu Lab X1 Carbon / X1E", "G29 A X"]]) {
+  const bambu = cmd => ["G29.2 S1", new RegExp(`^${cmd} X`), "M104 S0", "M140 S0"], buddy = [/^M555 X/, "G29", "M104 S0", "M140 S0", "M420 S1 Z0"];
+  // one printer per method: the lines right after homing and the nozzle heater going off, up to the first move
+  for (const [model, want] of [["Bambu Lab A1", bambu("G29 A1")], ["Bambu Lab A1 mini", bambu("G29 A1")], ["Bambu Lab P1P / P1S", bambu("G29 A")],
+    ["Bambu Lab X1 Carbon / X1E", bambu("G29 A")], ["Creality Ender-3 V2 Neo", ["G29", "M104 S0", "M140 S0", "M420 S1 Z0"]], ["Elegoo Neptune 3 Pro", ["M420 S1 Z0"]],
+    ["Qidi X-Plus 3", ["BED_MESH_CALIBRATE", "M104 S0", "M140 S0"]], ["Vzbot 235 AWD", ["BED_MESH_PROFILE LOAD=default"]], ["Prusa MK4", buddy], ["Prusa MINI", buddy],
+    ["Prusa MK3S", []]]) { // the MK3S levels as it homes (plain G28)
     const s = withSet({ "printer.model": model }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
-    const out = run(s, text, 2), g = out.gcode.split("\n"), pr = out.cfg.printer;
+    const out = run(s, text, 2), g = out.gcode.split("\n").filter(l => !l.startsWith(";")), pr = out.cfg.printer;
     simulate(out.gcode, out.cfg);
-    const at = l => g.indexOf(l), lv = g.findIndex(l => l.startsWith(cmd)); // Bambu Studio's own form for this printer
-    assert.ok(lv > 0 && g.filter(l => l.startsWith("G29 ")).length === 1, `${model}: one levelling, as ${cmd}`);
-    assert.ok(at("G28") < at("M104 S0") && at("M104 S0") < at("G29.2 S1") && at("G29.2 S1") === lv - 1, `${model}: order`);
-    assert.ok(lv < g.findIndex(l => /^G0 X/.test(l)) && !g.some(l => /^M500|^M109|^M104 S[1-9]/.test(l)), `${model}: before any move; nothing heated or saved`);
-    const [, x, y, i, j] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(g[lv]).map(Number);
-    const draws = g.filter(l => /^G1 X/.test(l)).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number));
-    assert.ok(draws.length > 50 && draws.every(([dx, dy]) => dx >= x && dx <= x + i && dy >= y && dy <= y + j), `${model}: every written point inside the levelled area`);
-    assert.ok(i < 0.8 * pr.bed_x && j < 0.8 * pr.bed_y, `${model}: just the writing, not the whole bed (${i} x ${j})`);
-    assert.match(g.find(l => l.startsWith("; BEFORE STARTING")), /bed levelling/);
-    const off = run(withSet({ "printer.model": model, "printer.level": false, "paper.x": s.paper.x, "paper.y": s.paper.y }), text, 2).gcode;
-    assert.ok(!/G29/.test(off), `${model}: off means off`);
+    const h = g.indexOf("G28"), block = g.slice(h + 2, g.findIndex(l => /^G[01] /.test(l)));
+    assert.ok(h > 0 && g[h + 1] === "M104 S0", `${model}: heater off right after homing`);
+    assert.ok(block.length === want.length && block.every((l, k) => (typeof want[k] === "string" ? l === want[k] : want[k].test(l))), `${model}: ${block.join(" | ")}`);
+    assert.ok(!g.some(l => /^(M500|M109|M190|M104 S[1-9]|M140 S[1-9]|SAVE_CONFIG)/.test(l)), `${model}: nothing heated or saved`);
+    const rect = block.map(l => /^(?:G29 A1?|M555) X(\S+) Y(\S+) [IW](\S+) [JH](\S+)$/.exec(l)).find(Boolean);
+    if (rect) { // Bambu and Prusa's Buddy: under the writing only
+      const [x, y, i, j] = rect.slice(1).map(Number);
+      const draws = g.filter(l => /^G1 X/.test(l)).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number));
+      assert.ok(draws.length > 50 && draws.every(([dx, dy]) => dx >= x && dx <= x + i && dy >= y && dy <= y + j), `${model}: every written point inside the levelled area`);
+      assert.ok(i < 0.8 * pr.bed_x && j < 0.8 * pr.bed_y, `${model}: just the writing, not the whole bed (${i} x ${j})`);
+    }
+    const probes = !G.LEVEL_SAVED.has(G.LEVEL_PRINTERS.get(model)); // the MK3S too: its homing levels
+    assert.strictEqual(/^; BEFORE STARTING.*bed levelling/m.test(out.gcode), probes, `${model}: the warning says levelling touches the plate`);
+    const offS = withSet({ "printer.model": model, "printer.level": false, "paper.x": s.paper.x, "paper.y": s.paper.y }), off = run(offS, text, 2);
+    simulate(off.gcode, off.cfg);
+    assert.match(off.gcode, model === "Prusa MK3S" ? /^G28 W\nM104 S0\nG1 Z/m : /^G28\nM104 S0\nG1 Z/m, `${model}: off means off`);
   }
   { // writing just beside the P1's purge chute (a keep-out, x 0-18, y 0-28): the levelled area, 3 mm wider than the
     // writing, would reach into it, so it steps back past the keep-out's edge on the side that keeps the most
@@ -521,18 +531,36 @@ test("bed levelling (A1, A1 mini, P1, X1): after homing, pen out, cold, under th
     const lv = g.split("\n").find(l => l.startsWith("G29 A X")), [, x, y, i, j] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(lv).map(Number);
     assert.ok(x === 19 && y === 27 && x + i === 63 && y + j === 63, `stepped back past the keep-out's right edge: ${lv}`);
   }
-  for (const model of ["Bambu Lab P2S", "Creality Ender-3 V3 SE", "Prusa MK4"]) {
+  // no levelling where the maker's start code doesn't level (no probe, or a start macro), on a nozzle-contact probe that
+  // needs a hot, wiped nozzle (Lulzbot), on tool changers, or where OrcaSlicer has no Bambu start code (H2D)
+  for (const model of ["Bambu Lab P2S", "Creality Ender-3 V3 SE", "Voron 2.4 350", "Lulzbot Taz 6", "Prusa XL 5T", "Bambu Lab H2D", "Custom"]) {
     const s = withSet({ "printer.model": model }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
-    assert.ok(!/G29/.test(run(s, text, 2).gcode), `${model}: no levelling where the commands aren't known`);
+    const out = run(s, text, 2);
+    simulate(out.gcode, out.cfg);
+    assert.ok(!G.LEVEL_PRINTERS.has(model) && /^G28\nM104 S0\nG1 Z/m.test(out.gcode), `${model}: no levelling where the commands aren't known`);
   }
-  const reach = G.reachCheck(G.planPasses(G.layout(G.words(text, 2), () => [[[0, 0], [1, 1]]], G.resolve(G.DEFAULT_SETTINGS), mulberry(2)), G.resolve(G.DEFAULT_SETTINGS)), G.resolve(G.DEFAULT_SETTINGS), ["r"]);
-  assert.ok(!/G29/.test(reach), "the reach check doesn't level");
-  // the simulator refuses levelling after the head has moved (the paper or pen may be there), and a stored calibration
-  const s = withSet({}), out = run(s, text, 2), g = out.gcode.split("\n");
+  for (const model of ["Bambu Lab A1", "Prusa MK4", "Prusa MK3S", "Qidi X-Plus 3"]) { // the reach check never levels
+    const s = withSet({ "printer.model": model }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
+    const out = run(s, text, 2), reach = G.reachCheck(out.passes, out.cfg, ["r"]);
+    simulate(reach, out.cfg, { reach: true });
+    assert.match(reach, model === "Prusa MK3S" ? /^G28 W\nM104 S0\nG1 Z/m : /^G28\nM104 S0\nG1 Z/m, `${model}: the reach check doesn't level`);
+  }
+  // gcode.js and the simulator agree on every printer
+  for (const model of Object.keys(G.PRINTERS)) assert.strictEqual((levelOf(model) || [])[0], G.LEVEL_PRINTERS.get(model), model);
+  // the simulator refuses levelling after the head has moved (the paper or pen may be there), a stored calibration,
+  // another printer's command, the head moving before the heaters are back off, and levelling the maker doesn't do
+  const out = run(withSet({}), text, 2), g = out.gcode.split("\n");
   const late = g.filter(l => !l.startsWith("G29")); late.splice(late.findIndex(l => l.startsWith("; place the paper")), 0, "G29.2 S1", g.find(l => l.startsWith("G29 A1")));
   assert.throws(() => simulate(late.join("\n"), out.cfg), /levelling where it can't be/);
   assert.throws(() => simulate(out.gcode.replace(/^(G29 A1 .*)$/m, "$1\nM500"), out.cfg), /malformed/);
-  assert.throws(() => simulate(out.gcode.replace(/^G29 A1 X/m, "G29 A X"), out.cfg), /not this printer's levelling command/); // the P1's form on an A1
+  assert.throws(() => simulate(out.gcode.replace(/^G29 A1 X/m, "G29 A X"), out.cfg), /not this printer's levelling/); // the P1's form on an A1
+  const neo = run(withSet({ "printer.model": "Creality Ender-3 V2 Neo" }), text, 2), qidi = run(withSet({ "printer.model": "Qidi X-Plus 3" }), text, 2);
+  assert.throws(() => simulate(neo.gcode.replace(/^G29$/m, "BED_MESH_CALIBRATE"), neo.cfg), /not this printer's levelling/); // Klipper's on Marlin
+  assert.throws(() => simulate(qidi.gcode.replace(/^M140 S0\n/m, ""), qidi.cfg), /not this printer's levelling line \d+: G1 Z/); // moving with the bed heater maybe on
+  assert.throws(() => simulate(qidi.gcode.replace(/^(BED_MESH_CALIBRATE)$/m, "$1\nSAVE_CONFIG"), qidi.cfg), /malformed/);
+  const se = run(withSet({ "printer.model": "Creality Ender-3 V3 SE" }), text, 2);
+  assert.throws(() => simulate(se.gcode.replace(/^M104 S0$/m, "M104 S0\nM420 S1 Z0"), se.cfg), /levelling where it can't be/);
+  assert.throws(() => simulate(se.gcode.replace(/^G28$/m, "G28 W"), se.cfg), /G28 W on a printer/);
   assert.throws(() => G.resolve(withSet({ "printer.level": "yes" })), /on or off/);
 });
 
@@ -622,7 +650,7 @@ test("the nozzle heater is switched off right after homing, and nothing ever hea
   for (const model of Object.keys(G.PRINTERS).filter(m => m !== "Custom")) {
     const { gcode } = run(withSet({ "printer.model": model }), "Hello there", 1);
     assert.match(gcode, /^G28\nM104 S0$/m, model);
-    assert.ok(!/^M(104 S[^0]|104 S0\d|109|140|190)/m.test(gcode), `${model}: no heating command`);
+    assert.ok(!/^M(104 S[^0]|104 S0\d|109|140 S[^0]|140 S0\d|190)/m.test(gcode), `${model}: no heating command`); // M140 S0: bed heater off
   }
   assert.match(G.offsetTest(G.DEFAULT_SETTINGS), /^G28\nM104 S0$/m);
 });
