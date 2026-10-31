@@ -1004,6 +1004,7 @@
     pen_pause_s: ["Pause 2: attach the pen", "s", "The head lowers to the writing height over the first letter and waits this long. Slide the pen down through the holder until the tip just touches the paper, then clamp it. Writing starts when the pause ends."],
     shift_pause_s: ["Pause 3: slide the paper", "s", "Only with \"Slide the paper\" on, for pages longer than the pen reaches, like A4 on an A1. The pen stops just above where the last written mark must end up; slide the paper toward the back until that mark is right under the pen tip. Once per extra pass."],
     z_draw: ["Writing height", "mm", "Nozzle height while the pen is down. The pen is clamped touching the paper at this height in pause 2, so any height that clears the holder works. At least 2 mm."],
+    press_bottom: ["Press harder toward the bottom", "mm", "If the writing gets fainter down the page, the bed sits a little lower there (the printer can't level the bed with a pen fitted). The pen goes this much lower by the bottom of the page, starting from nothing at the first letter. Try 0.3, then more if the last lines are still faint. 0 is off; at most 2."],
     z_lift: ["Pen-up height", "mm", "Nozzle height when moving between strokes. About 2 mm above the writing height: handwriting lifts the pen thousands of times."],
     offset_x: ["Pen offset X", "mm", "Pen tip position minus nozzle position, left/right: negative when the pen is left of the nozzle. BambuPlot calls this the tool offset."],
     offset_y: ["Pen offset Y", "mm", "Same, front/back: negative when the pen is in front of the nozzle. If it's wrong, the last lines can run off the front of the plate."],
@@ -1020,7 +1021,7 @@
   const GROUPS = [
     ["Pen offset", "printer", ["offset_x", "offset_y"]],
     ["Pauses during printing", "printer", ["paper_pause_s", "pen_pause_s", "shift_pause_s"]],
-    ["Pen heights", "printer", ["z_draw", "z_lift"]],
+    ["Pen heights", "printer", ["z_draw", "z_lift", "press_bottom"]],
     ["Speeds", "printer", ["draw_feed", "travel_feed", "z_feed", "settle_ms"]],
     ["Custom printer", "printer", ["bed_x", "bed_y", "bed_z"]],
     ["Custom paper", "paper", ["width", "height"]],

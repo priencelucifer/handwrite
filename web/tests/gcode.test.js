@@ -462,6 +462,34 @@ test("a blank line between paragraphs stays blank when crowded lines get pushed 
 
 const zLines = g => g.split("\n").filter(l => /^G1 Z/.test(l)).map(l => +l.match(/Z([\d.]+)/)[1]);
 
+test("extra pressure at the bottom: the pen goes lower line by line down the page, from the clamping point to at most press_bottom", () => {
+  const text = Array.from({ length: 14 }, (_, i) => `line ${"abcdefghijklmn"[i]} of the page`).join("\n");
+  const downs = g => { // [bed Y, Z] of every pen-down, in order
+    const out = []; let y = null;
+    for (const l of g.split("\n")) { const m = /^G0 X\S+ Y(\S+)/.exec(l); if (m) y = +m[1]; const zm = /^G1 Z(\S+) F/.exec(l); if (zm && y !== null) out.push([y, +zm[1]]); }
+    return out;
+  };
+  const flat = run(G.DEFAULT_SETTINGS, text, 5), pr0 = flat.cfg.printer;
+  const d0 = downs(flat.gcode).filter(([, z]) => z < pr0.z_lift);
+  assert.ok(d0.length > 20 && d0.every(([, z]) => z === pr0.z_draw), "off (the default): every stroke at the writing height, as before");
+  const out = run(withSet({ "printer.press_bottom": 0.6 }), text, 5), pr = out.cfg.printer;
+  simulate(out.gcode, out.cfg);
+  const d = downs(out.gcode).filter(([, z]) => z < pr.z_lift), clampY = d[0][0];
+  assert.strictEqual(d[0][1], pr.z_draw, "clamped and first stroke at the writing height");
+  for (const [y, z] of d) {
+    const want = pr.z_draw - 0.6 * Math.min(1, Math.max(0, (clampY - y) / out.cfg.paper.height));
+    assert.ok(Math.abs(z - want) < 0.006, `at Y${y}: Z${z}, expected ${want.toFixed(3)}`);
+  }
+  const last = d[d.length - 1];
+  assert.ok(pr.z_draw - last[1] > 0.25 && pr.z_draw - last[1] <= 0.6, `the last line presses harder: ${last[1]}`);
+  // and the simulator catches a file that presses where it shouldn't
+  const bad = out.gcode.replace(/^(G0 X\S+ Y\S+ F\d+\n)G1 Z10\.00 F600$/m, "$1G1 Z9.50 F600"); // the first stroke, at the clamping point, pressed 0.5 mm
+  assert.notStrictEqual(bad, out.gcode);
+  assert.throws(() => simulate(bad, out.cfg), /behind its clamping point/);
+  assert.throws(() => G.resolve(withSet({ "printer.z_draw": 2.5, "printer.z_lift": 4.5, "printer.press_bottom": 1 })), /at least 2 mm/);
+  assert.throws(() => G.resolve(withSet({ "printer.press_bottom": 3 })), /press bottom/);
+});
+
 test("every printer OrcaSlicer knows: a page is safe in its own coordinates, and its firmware gets G-code it reads", () => {
   const ORCA = require("../printers.js");
   // the data: sane rectangles, keep-outs inside the bed, the plate around the bed, known firmware

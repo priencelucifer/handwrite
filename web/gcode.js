@@ -173,8 +173,10 @@
   // paper x/y: placePaper() of these defaults, so the first page sits where the pen reaches.
   const DEFAULT_SETTINGS = {
     printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 1, offset_y: -25,
-      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12,
+      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12, press_bottom: 0,
       z_feed: 600, draw_feed: 1500, travel_feed: 6000, settle_ms: 60, sounds: true, dry_run: false },
+    // press_bottom: mm the pen goes lower by the bottom of the page than where it was clamped (no bed levelling with a
+    // pen fitted, so a bed a little lower toward the front leaves the last lines faint)
     // ruling: mm between the printed lines of ruled paper (0 = plain); first_line: mm from the top edge to the first
     // printed line; margin_line: mm from the left edge to the printed margin line (0 = none)
     paper: { size: "A5", orientation: "portrait", x: 55, y: 10, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
@@ -186,7 +188,7 @@
   const LIMITS = {
     printer: { bed_x: [50, 1000], bed_y: [50, 1000], bed_z: [50, 1000], offset_x: [-100, 100], offset_y: [-100, 100],
       z_draw: [2, 200], z_lift: [3, 200], z_feed: [60, 1200], draw_feed: [60, 12000], travel_feed: [600, 12000],
-      paper_pause_s: [5, 600], pen_pause_s: [5, 600], shift_pause_s: [5, 600], settle_ms: [0, 2000] },
+      paper_pause_s: [5, 600], pen_pause_s: [5, 600], shift_pause_s: [5, 600], settle_ms: [0, 2000], press_bottom: [0, 2] },
     paper: { x: [-1000, 1000], y: [-1000, 1000], width: [30, 600], height: [30, 600], margin: [0, 50], margin_y: [0, 80],
       ruling: [0, 30], first_line: [0, 600], margin_line: [0, 300] },
     writing: { bias: [0, 2], wobble: [0, 2], x_height: [1, 20], line_spacing: [1, 100], word_spacing: [0.2, 5], indent: [0, 1.5] },
@@ -206,6 +208,8 @@
     if (!["portrait", "landscape"].includes(cfg.paper.orientation) || typeof w.style !== "string")
       throw new WriteError("Paper orientation must be portrait or landscape, and style a name.");
     if (typeof w.header !== "string" || w.header.length > 80) throw new WriteError("The header must be text, 80 characters at most.");
+    if (round2(pr.z_draw) - round2(pr.press_bottom) < 2)
+      throw new WriteError("Writing height less the extra pressure at the bottom must stay at least 2 mm.");
     if (round2(pr.z_lift) - round2(pr.z_draw) < MIN_PEN_LIFT)
       throw new WriteError(`Pen-up height must be at least ${MIN_PEN_LIFT} mm above the writing height.`);
     if (Math.max(pr.z_draw + CLEARANCE, pr.z_lift + 10 + (pr.dry_run ? DRY_RUN_LIFT : 0)) > pr.bed_z)
@@ -831,7 +835,7 @@
     };
     const wait = s => (pr.dialect === "bambu" ? `G4 S${i(s)}` : `G4 P${i(s * 1000)}`); // Klipper reads only P (ms)
     const z = (h, feed = pr.z_feed) => `G1 Z${f(h)} F${i(feed)}`;
-    const up = z(pr.z_lift + dz), down = z(pr.z_draw + dz), touch = z(pr.z_draw); // touch: where a pen is clamped
+    const up = z(pr.z_lift + dz), touch = z(pr.z_draw); // touch: where a pen is clamped
     const settle = pr.settle_ms >= 1 ? [`G4 P${i(pr.settle_ms)}`] : [];
     const travel = `F${i(pr.travel_feed)}`;
     let strokeNo = 0;
@@ -858,6 +862,11 @@
     const sound = pr.sounds && SOUND_PRINTERS.has(pr.model) ? name => tune(pr.model, name) : () => [];
     // pen 1's strokes first, then pen 2's (planPasses allows a second pen only in a single pass)
     const order = ps => [...ps.strokes.filter(s => s.pen !== PEN2), ...ps.strokes.filter(s => s.pen === PEN2)];
+    // The pen goes lower toward the front, in step with how far below the clamping point it is (press_bottom by a page's
+    // height), never higher: a bed a little lower toward the front would otherwise leave the last lines faint.
+    const bedY = (pt, shift) => p.y + shift + p.height - pt[1] - pr.offset_y, firstPt = order(passes[0])[0][0];
+    const clampY = bedY(firstPt, 0), press = (pt, shift) => pr.press_bottom * clip((clampY - bedY(pt, shift)) / p.height, 0, 1);
+    const down = (pt, shift) => z(pr.z_draw + dz - press(pt, shift));
     const firstPen2 = passes.length === 1 && passes[0].strokes.some(s => s.pen !== PEN2) ? passes[0].strokes.find(s => s.pen === PEN2) : null;
     out.push("G90", ...(pr.dialect === "bambu" ? ["G21"] : []), ...sound("start"), "G28"); // always home: every move after this assumes a known position
     out.push("M104 S0"); // nozzle heater off: nothing here needs heat, and the pen holder sits next to the hotend
@@ -876,8 +885,8 @@
         // The only tune plays with the head up, never with a pen on the paper.
         if (s === firstPen2) out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), `G0 ${xy(s[0], ps.shift)} ${travel}`,
           "; PEN CHANGE: take pen 1 out of the holder", ...sound("pause"), wait(pr.pen_pause_s),
-          touch, "; put pen 2 in: slide it down until it touches the paper, then clamp it", wait(pr.pen_pause_s), up, ...sound("resume"));
-        out.push(`G0 ${xy(s[0], ps.shift)} ${travel}`, down, ...settle);
+          z(pr.z_draw - press(s[0], ps.shift)), "; put pen 2 in: slide it down until it touches the paper, then clamp it", wait(pr.pen_pause_s), up, ...sound("resume"));
+        out.push(`G0 ${xy(s[0], ps.shift)} ${travel}`, down(s[0], ps.shift), ...settle);
         const feed = Math.min(12000, pr.draw_feed * (0.85 + 0.3 * frac(++strokeNo))); // a hand's speed varies stroke to stroke
         for (let j = 1; j < s.length; j++) out.push(`G1 ${xy(s[j], ps.shift)}` + (j === 1 ? ` F${i(feed)}` : ""));
         out.push(up, ...settle);

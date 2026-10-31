@@ -28,6 +28,9 @@ function simulate(gcode, s, opts = {}) {
   } else if (!opts.reach) for (const sec of [s.printer.paper_pause_s, s.printer.pen_pause_s])
     assert.ok(pauses.some(([u, v]) => u === "S" && v === Math.round(sec)), `${model}: no ${sec} s pause`);
   const zd = +s.printer.z_draw.toFixed(2), zl = +s.printer.z_lift.toFixed(2); // as written in the file
+  // extra pressure: at most this much below the writing height, and only toward the front of where the pen was clamped
+  const press = s.printer.press_bottom || 0;
+  let clampY = null, downY = null; // where the pen was clamped; where the current stroke's pen-down happened
   const dry = s.printer.dry_run === true ? 8 : 0; // a dry run draws 8 mm above the writing height: the pen never touches
   const pw = s.paper.width, ph = s.paper.height; // already oriented by the caller
   let homed = false, heaterOff = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
@@ -38,6 +41,7 @@ function simulate(gcode, s, opts = {}) {
     assert.match(line, LINE_OK, `malformed ${where}`);
     const pass = /^; PASS \d+ of \d+: paper slid (-?\d+) mm/.exec(line);
     if (pass) shift = +pass[1];
+    if (line.startsWith("; attach the pen") && clampY === null) clampY = y;
     if (line.startsWith(";")) continue;
     if (line === "G28") { homed = true; continue; }
     if (line === "M104 S0") { heaterOff = true; continue; } // the only temperature command allowed: nozzle heater off
@@ -59,7 +63,8 @@ function simulate(gcode, s, opts = {}) {
     if ("F" in m) assert.ok(m.F > 0 && m.F <= 12000, `feed ${where}`);
     if ("Z" in m) {
       z = m.Z;
-      assert.ok(z >= zd - 1e-9, `nozzle below writing height ${where}`);
+      assert.ok(z >= zd - press - 1e-9, `nozzle below writing height ${where}`);
+      if (!("X" in m)) downY = y;
       assert.ok(z >= 2 && z <= bz, `Z outside the printer ${where}`);
     }
     if ("X" in m) {
@@ -67,10 +72,12 @@ function simulate(gcode, s, opts = {}) {
       assert.ok(z !== null, `XY move before any Z move ${where}`);
       assert.ok(x >= X0 && x <= X1 && y >= Y0 && y <= Y1, `nozzle off the bed ${where}`);
       for (const ko of keepouts) assert.ok(!(x >= ko[0] && x <= ko[2] && y >= ko[1] && y <= ko[3]), `nozzle in keep-out ${where}`);
-      if (dry) assert.ok(z >= zd + dry - 1e-9, `dry run: a move with the pen near the paper ${where}`);
+      if (dry) assert.ok(z >= zd + dry - press - 1e-9, `dry run: a move with the pen near the paper ${where}`);
       if (line.startsWith("G0")) assert.ok(z >= zl + dry - 1e-9 || draws === 0, `travel with the pen down ${where}`);
       else {
-        assert.ok(Math.abs(z - (zd + dry)) < 1e-9, `drawing move not at writing height ${where}`);
+        assert.ok(z <= zd + dry + 1e-9 && z >= zd + dry - press - 1e-9, `drawing move not at writing height ${where}`);
+        assert.ok(zd + dry - z <= press * Math.max(0, Math.min(1, (clampY - downY) / s.paper.height)) + 0.011, // deeper only in front of where it was clamped
+          `pen pressed down behind its clamping point ${where}`);
         draws++;
       }
       if (z <= zd + 1e-9) { // pen touches: must be over the plate AND on the paper (for this pass)
