@@ -10,7 +10,7 @@ It runs in your browser, works offline, and needs no install.
 
 **Use it now: [handplot.org](https://handplot.org)**
 
-![Tests](https://img.shields.io/badge/tests-31_passing-2ea043)
+![Tests](https://img.shields.io/badge/tests-52_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
 ![Printers](https://img.shields.io/badge/printers-Bambu_Lab_%2B_400%2B_from_OrcaSlicer-e08a00)
 
@@ -48,6 +48,11 @@ and word gaps are never the same twice.
 - **Dry run** (the pen stays 8 mm above the paper) and **start again from line N** when a pen runs dry mid-page.
 - **Reach check**: a file to run with no pen and no paper. The head visits the far corners of the page's writing at
   pen-up height, slowly, so you can see the pen holder clears the bed clips, wiper and frame on a new printer.
+- **Bed levelling** on 79 printers (Bambu Lab A1s, P1, X1; Prusa MK3S, MK4, MINI, XL, CORE One; Qidi, Elegoo Neptune 3s and
+  more): right after homing, with the pen out and the nozzle cold, the printer levels its bed the way its maker's own
+  start G-code does, so the pen presses the same all over the page. See [Bed levelling](#bed-levelling).
+- **Press harder toward the bottom**: on any printer, the pen goes a little lower line by line, for a bed that sits
+  lower toward the front.
 - **Pen offset test**: print two marks, measure them with a ruler, and the app works out where your pen sits.
 - **Safety first**: every move is checked against your printer's bed before the file is saved (see [Safety](#safety)).
 - **Printer sounds** (A1, A1 mini, P2S): Bambu's own start and finish tunes, plus a tune when it's time to place the paper or attach the pen.
@@ -69,7 +74,8 @@ The first time, open **Printer settings** and set your pen heights and [pen offs
 ## Printing a page
 
 > [!IMPORTANT]
-> Take the pen **out** of the holder before you start. The printer homes first, and homing touches the nozzle to the plate.
+> Take the pen **out** of the holder before you start, and leave the plate empty. The printer homes first, and homing
+> (and bed levelling, where it's on) touches the nozzle or the printer's probe to the plate.
 
 1. **Pause 1:** the head rises and stops over where the first letter goes. Put the paper where the preview shows it and tape it down.
 2. **Pause 2:** the head lowers. Slide the pen down until it touches the paper, then clamp it.
@@ -106,6 +112,28 @@ from OrcaSlicer's printer profiles (`web/tools/orca-printers.js` builds `web/pri
 pauses as `G4 P` (milliseconds), which every firmware here reads, and no `G21`. Round (delta) beds, belt printers and
 printers that need their own file format are left out.
 
+## Bed levelling
+
+**Printing → Level the bed first** (on by default) is offered only where the printer's maker levels the bed in its own
+start G-code (Bambu Studio's for Bambu, OrcaSlicer's profiles for the rest). Handplot sends that same command, after
+homing and before the paper and pen go in, with the nozzle cold, and never saves anything to the printer:
+
+| Printers | Command |
+|---|---|
+| Bambu Lab A1, A1 mini / P1P, P1S, X1 | `G29.2 S1`, then `G29 A1` / `G29 A` over the writing only |
+| Prusa MK4, MK4S, MK3.5, MINI, XL, CORE One (Buddy firmware) | `M555` (the writing's area), then `G29` |
+| Prusa MK3S | levels as it homes (`G28`); off: `G28 W` |
+| Marlin printers that probe every print (Ender-3 V2 Neo, Sidewinder X2, Kobra Neo, …) | `G29` |
+| Marlin printers with a saved mesh (Elegoo Neptune 3s, Sovol SV06, Wanhao D9, …) | `M420 S1` (no movement) |
+| Klipper printers that probe (Qidi X-Plus 3 / X-Max 3, Ender-3 V3 KE, Centauri Carbon 2, …) | `BED_MESH_CALIBRATE` |
+| Klipper printers with a saved mesh (Vzbot, FlyingBear S1, InfiMech TX) | `BED_MESH_PROFILE LOAD=default` |
+
+On Marlin and Prusa, `M420 S1 Z0` keeps the correction on at the pen's writing height (Marlin usually fades it out by
+10 mm; this lasts until the printer restarts). After probing, both heaters are switched off again in case the firmware
+warmed them. Left out: Lulzbot (its probe needs a hot, wiped nozzle), tool changers, Bambu's newer printers (OrcaSlicer
+has no Bambu start code for them), and printers whose levelling happens inside their own start macro (Voron, Creality
+K1, Elegoo Neptune 4, …): there, use **Press harder toward the bottom** in Printer settings.
+
 ## Safety
 
 A wrong move can crash the print head, so the G-code is checked in layers before it is saved:
@@ -114,9 +142,12 @@ A wrong move can crash the print head, so the G-code is checked in layers before
   or borders too big for the page are refused with a plain message.
 - **Every pen-down point** must be on the paper and where the pen can reach without leaving the plate, taking the pen offset into account.
 - **Every coordinate written to the file** is checked once more against the bed and the P1/X1 filament-cutter corner.
-- **The nozzle heater is switched off** right after homing, so the hotend stays cold next to the pen holder.
+- **The nozzle heater is switched off** right after homing, so the hotend stays cold next to the pen holder, and nothing
+  ever heats it.
+- **Bed levelling** runs only before the head moves anywhere (no paper, no pen yet), only as that printer's maker does
+  it, and is never saved (no `M500` or `SAVE_CONFIG`).
 - **Tests** run the output through an independent G-code simulator, including 4,000 random settings, papers, offsets,
-  lined paper, dry runs and pen changes.
+  lined paper, dry runs, pen changes and bed levelling on every method.
 
 If something is unsafe, the app refuses to save and says why. Each file starts with a comment naming the printer it is for.
 
@@ -158,7 +189,7 @@ docs/images/      screenshots
 No build step: edit the files in `web/` and reload the page. Tests need [Node.js](https://nodejs.org) 20 or newer:
 
 ```bash
-node --test web/tests/gcode.test.js web/tests/engine.test.js
+node --test web/tests/gcode.test.js web/tests/engine.test.js web/tests/pages.test.js
 ```
 
 Build the zip for a release:
@@ -183,7 +214,7 @@ The [`python/`](python/) folder holds the older desktop and command-line version
 - Inference ported from [tibordp/kurvengefahr](https://github.com/tibordp/kurvengefahr) (GPL-2.0).
 - G-code conventions from [Joep648/BambuPlot](https://github.com/Joep648/BambuPlot).
 - Start and finish tunes copied from the printer profiles in [Bambu Studio](https://github.com/bambulab/BambuStudio) (AGPL-3.0).
-- Printer bed sizes, heights, keep-out areas and firmware from [OrcaSlicer](https://github.com/OrcaSlicer/OrcaSlicer)'s printer profiles (AGPL-3.0).
+- Printer bed sizes, heights, keep-out areas, firmware and each maker's bed levelling command from [OrcaSlicer](https://github.com/OrcaSlicer/OrcaSlicer)'s printer profiles (AGPL-3.0).
 
 There is no license file yet. Because of the GPL-2.0 and AGPL-3.0 code and the academic-use training data, check them
 before sharing this beyond personal use.
