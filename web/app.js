@@ -368,11 +368,11 @@
   /** What a file spends before it writes: homing (+40 s), measuring the bed (about a minute and a half), the paper and pen pauses. */
   const startTime = pr => 40 + pr.paper_pause_s + pr.pen_pause_s +
     (pr.level && G.LEVEL_PRINTERS.has(pr.model) && !G.LEVEL_SAVED.has(G.LEVEL_PRINTERS.get(pr.model)) ? 90 : 0);
-  /** All pages in one file (printers with a pause): one start for every page, a pause after each until it's resumed. */
-  const oneFile = cfg => cfg.printer.one_file === true && !!cfg.printer.pause;
+  /** All pages in one file: one start for every page, then after each a pause until resumed, or a timed wait. */
+  const oneFile = cfg => cfg.printer.one_file === true;
   /** Rough time for all pages: one file starts once, separate files once each (the paper changes not counted). */
   const allPagesTime = (cfg, pages) => pages.reduce((sum, p) => sum + estimate({ cfg, passes: p.passes }), 0) -
-    (oneFile(cfg) ? (pages.length - 1) * startTime(cfg.printer) : 0);
+    (oneFile(cfg) ? (pages.length - 1) * (startTime(cfg.printer) - (cfg.printer.pause ? 0 : cfg.printer.page_pause_s)) : 0);
   /** Rough print time: drawing + travel + pen up/down + pauses. */
   function estimate({ cfg, passes }) {
     const pr = cfg.printer, d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -951,13 +951,17 @@
   };
   $("level").onchange = () => { PR_().level = $("level").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncLevel);
-  /** All pages in one file: shown once there are pages to put together; only on printers with a pause to rely on. */
+  /** All pages in one file: shown once there are pages to put together. */
   function syncOneFile(v, n) {
     $("oneFileRow").hidden = n < 2;
-    const ok = !!v && !!v.cfg.printer.pause;
-    $("oneFile").checked = ok && PR_().one_file === true; $("oneFile").disabled = !ok;
-    $("oneFileNote").textContent = ok ? `Save all pages as one file instead of one per page: the bed is levelled and the pen clamped once. After each page the pen lifts${G.SOUND_PRINTERS.has(v.cfg.printer.model) ? ", a tune plays" : ""} and the printer pauses (${v.cfg.printer.pause}): put in a new sheet where the last one was, then resume on the printer.`
-      : "Not on this printer: it has no pause command Handplot can rely on to wait until you resume it, so each page is its own file.";
+    $("oneFile").checked = PR_().one_file === true;
+    $("oneFileNote").textContent = "Save all pages as one file instead of one per page: the bed is levelled and the pen clamped once. " + (v ? pageChange(v.cfg.printer) : "");
+  }
+  /** What happens between pages in one file, for the user. */
+  function pageChange(pr) {
+    return `After each page the pen lifts to the back of the plate (a bed that slides comes forward)${G.SOUND_PRINTERS.has(pr.model) ? ", a tune plays" : ""} and ` +
+      (pr.pause ? `the printer pauses (${pr.pause}): put in a new sheet where the last one was, then resume on the printer.`
+        : `the printer waits ${pr.page_pause_s} s: put in a new sheet where the last one was (set the time in Printer settings, Between pages).`);
   }
   $("oneFile").onchange = () => { PR_().one_file = $("oneFile").checked; scheduleRender(0); };
   $("slide").checked = P_().slide === true;
@@ -1032,6 +1036,7 @@
     paper_pause_s: ["Pause 1: place the paper", "s", "After homing, the head rises and stops right above where the first letter will be written, then waits this long. Put the paper where the preview shows it and tape it down. The pen is not in the holder yet."],
     pen_pause_s: ["Pause 2: attach the pen", "s", "The head lowers to the writing height over the first letter and waits this long. Slide the pen down through the holder until the tip just touches the paper, then clamp it. Writing starts when the pause ends."],
     shift_pause_s: ["Pause 3: slide the paper", "s", "Only with \"Slide the paper\" on, for pages longer than the pen reaches, like A4 on an A1. The pen stops just above where the last written mark must end up; slide the paper toward the back until that mark is right under the pen tip. Once per extra pass."],
+    page_pause_s: ["Between pages", "s", "Only with \"All pages in one file\" on, on printers that can't pause until resumed (Bambu Lab's pause warms the nozzle beside the pen holder). After each page the pen lifts to the back of the plate (a bed that slides comes forward) and the printer waits this long: take the page out and put a new sheet where it was."],
     z_draw: ["Writing height", "mm", "Nozzle height while the pen is down. The pen is clamped touching the paper at this height in pause 2, so any height that clears the holder works. At least 2 mm."],
     press_bottom: ["Press harder toward the bottom", "mm", "If the writing gets fainter down the page, the bed sits a little lower there (the printer can't level the bed with a pen fitted). The pen goes this much lower by the bottom of the page, starting from nothing at the first letter. Try 0.3, then more if the last lines are still faint. 0 is off; at most 2."],
     z_lift: ["Pen-up height", "mm", "Nozzle height when moving between strokes. About 2 mm above the writing height: handwriting lifts the pen thousands of times."],
@@ -1049,7 +1054,7 @@
   };
   const GROUPS = [
     ["Pen offset", "printer", ["offset_x", "offset_y"]],
-    ["Pauses during printing", "printer", ["paper_pause_s", "pen_pause_s", "shift_pause_s"]],
+    ["Pauses during printing", "printer", ["paper_pause_s", "pen_pause_s", "shift_pause_s", "page_pause_s"]],
     ["Pen heights", "printer", ["z_draw", "z_lift", "press_bottom"]],
     ["Speeds", "printer", ["draw_feed", "travel_feed", "z_feed", "settle_ms"]],
     ["Custom printer", "printer", ["bed_x", "bed_y", "bed_z"]],
@@ -1322,9 +1327,9 @@
       `The head lowers and waits ${pr.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`);
     if (penChange(v.passes)) steps.push(`When the first pen is done, the head rises and waits ${pr.pen_pause_s} s: take that pen out. Then it lowers and waits ${pr.pen_pause_s} s: slide the second pen in until it touches the paper, and clamp it.`);
     if (v.passes.length > 1) steps.push(G.passNote(v.passes) + ` You have ${pr.shift_pause_s} s each time.`);
-    if (pages > 1) steps.push(`After each page the pen lifts${G.SOUND_PRINTERS.has(pr.model) ? ", a tune plays" : ""} and the printer pauses (${pages - 1} times). ` +
-      "Wait until it shows it's paused, then take the page out, leaving the pen clamped, put a new sheet where the last one was and tape it, " +
-      `and resume the print on the printer${pr.dialect === "bambu" ? " or in Bambu Handy" : " (its screen, or its web page)"}. While it waits it may park the head; it brings it back when resumed.`);
+    if (pages > 1) steps.push(`${pageChange(pr)} That's ${pages - 1} times. Take the page out, leaving the pen clamped, and tape the new sheet down. ` +
+      (pr.pause ? "Wait until the printer shows it's paused before you reach in, and resume it on its screen or web page. While paused it may park the head; it brings it back when resumed."
+        : "The head stays put while it waits, and the nozzle stays cold."));
     steps.push("Stay with the printer for the first run.");
     $("savedSteps").textContent = "";
     for (const s of steps) { const li = document.createElement("li"); li.textContent = s; $("savedSteps").append(li); }

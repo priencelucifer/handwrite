@@ -18,14 +18,15 @@
   // pauses in ms (Klipper ignores G4 S) and no G21 (Klipper doesn't know it; every firmware here defaults to mm).
   // plate: how far the plate reaches past where the nozzle may go [left, front, right, back] (exclusions at its edges,
   // a second nozzle): the offset test's paper goes into the plate's own corner. pause: the printer's own command that waits
-  // until resumed on the printer (Bambu Studio's M400 U1; OrcaSlicer's profiles), or "": between pages in one file.
+  // until resumed on the printer (OrcaSlicer's profiles), between pages in one file; "": a timed wait instead. Not Bambu's
+  // M400 U1: its pause routine warms the nozzle (seen on an A1), and the pen holder sits beside it.
   const CUTTER = [0, 0, 18, 28];
   const PRINTERS = {
-    "Bambu Lab A1": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
-    "Bambu Lab A1 mini": [180, 180, 180, [], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
-    "Bambu Lab P1P / P1S": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
-    "Bambu Lab P2S": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
-    "Bambu Lab X1 Carbon / X1E": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
+    "Bambu Lab A1": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0], ""],
+    "Bambu Lab A1 mini": [180, 180, 180, [], [0, 0], "bambu", [0, 0, 0, 0], ""],
+    "Bambu Lab P1P / P1S": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0], ""],
+    "Bambu Lab P2S": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0], ""],
+    "Bambu Lab X1 Carbon / X1E": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0], ""],
   };
   const PRINTER_GROUPS = [["Bambu Lab", Object.keys(PRINTERS)]]; // vendor -> printer names, for the printer list
   { // every other printer OrcaSlicer knows: [x0, y0, x1, y1, max Z, firmware, keep-outs, pause], in its own coordinates
@@ -201,7 +202,7 @@
   // paper x/y: placePaper() of these defaults, so the first page sits where the pen reaches.
   const DEFAULT_SETTINGS = {
     printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 1, offset_y: -25,
-      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12, press_bottom: 0, level: true, one_file: false,
+      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, page_pause_s: 60, z_draw: 10, z_lift: 12, press_bottom: 0, level: true, one_file: false,
       z_feed: 600, draw_feed: 1500, travel_feed: 6000, settle_ms: 60, sounds: true, dry_run: false },
     // press_bottom: mm the pen goes lower by the bottom of the page than where it was clamped (no bed levelling with a
     // pen fitted, so a bed a little lower toward the front leaves the last lines faint). level: on LEVEL_PRINTERS, level
@@ -217,7 +218,7 @@
   const LIMITS = {
     printer: { bed_x: [50, 1000], bed_y: [50, 1000], bed_z: [50, 1000], offset_x: [-100, 100], offset_y: [-100, 100],
       z_draw: [2, 200], z_lift: [3, 200], z_feed: [60, 1200], draw_feed: [60, 12000], travel_feed: [600, 12000],
-      paper_pause_s: [5, 600], pen_pause_s: [5, 600], shift_pause_s: [5, 600], settle_ms: [0, 2000], press_bottom: [0, 2] },
+      paper_pause_s: [5, 600], pen_pause_s: [5, 600], shift_pause_s: [5, 600], page_pause_s: [5, 600], settle_ms: [0, 2000], press_bottom: [0, 2] },
     paper: { x: [-1000, 1000], y: [-1000, 1000], width: [30, 600], height: [30, 600], margin: [0, 50], margin_y: [0, 80],
       ruling: [0, 30], first_line: [0, 600], margin_line: [0, 300] },
     writing: { bias: [0, 2], wobble: [0, 2], x_height: [1, 20], line_spacing: [1, 100], word_spacing: [0.2, 5], indent: [0, 1.5] },
@@ -870,16 +871,16 @@
   /** BambuPlot-style plain G-code (known to run on the A1) with timed pauses, in the printer's dialect. Strokes marked .pen = PEN2 are written
    *  last, after a pen change. With printer.dry_run the pen is still clamped at the writing height, but every stroke
    *  is drawn DRY_RUN_LIFT mm higher, so the same file runs without touching the paper.
-   *  opts.pages: the next pages' passes, written in the same file (printers with a pause, pr.pause): after each page
-   *  the pen goes well up over the next page's first letter, a tune plays (Bambu) and the printer waits until the user
-   *  has put in a new sheet where the last one was and resumed it on the printer. Homing, levelling and clamping the
-   *  pen happen once. The paper and pen pauses stay timed: a printer's pause may park the head (Bambu's does), and
-   *  those need it to stay put, over the first letter and at the writing height. */
+   *  opts.pages: the next pages' passes, written in the same file: after each page the pen goes well up to the back of
+   *  the plate (a sliding bed comes forward), a tune plays (Bambu) and the printer waits for a new sheet where the last
+   *  one was: with its own pause until resumed (pr.pause), else for page_pause_s. Homing, levelling and clamping the pen
+   *  happen once. The paper and pen pauses stay timed: a printer's pause may park the head (Bambu's does), and those
+   *  need it to stay put, over the first letter and at the writing height. */
   function toGcode(passes, cfg, header, opts = {}) {
     const p = cfg.paper, pr = cfg.printer, dz = pr.dry_run ? DRY_RUN_LIFT : 0, [ox, oy] = pr.origin;
     const book = [passes, ...(opts.pages || [])];
-    if (book.length > 1 && (opts.reach || !/^(M400 U1|M0|M25|M226|M601|PAUSE)$/.test(pr.pause))) // the only pauses ever written
-      throw new WriteError("All pages in one file needs a printer that pauses until you resume it, and this one has no pause command Handplot can rely on. Save the pages one by one instead.");
+    if (book.length > 1 && (opts.reach || !/^(M0|M25|M226|M601|PAUSE|)$/.test(pr.pause))) // the only pauses ever written
+      throw new WriteError("Several pages in one file can't be written for this printer. Save the pages one by one instead.");
     if (book.length > 1 && book.some(ps => ps.some(s => s.strokes.some(st => st.pen === PEN2))))
       throw new WriteError("A second pen can't be used with all pages in one file. Save the pages one by one, or remove the *second pen* marks.");
     const f = v => v.toFixed(2), i = v => String(Math.round(v)); // pauses and feeds as whole numbers
@@ -956,10 +957,18 @@
       ...sound("resume"), touch, "; attach the pen: slide it down until it touches the paper, then clamp it", ...sound("pause"),
       wait(pr.pen_pause_s), up, ...sound("resume")); // resume tune only once the pen is lifted off the paper
     book.forEach((passes, pg) => {
-      if (pg) out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), `G0 ${xy(order(passes[0])[0][0], 0)} ${travel}`, // pen well up
-        `; PAGE ${pg + 1} of ${book.length}: take the written page out (the pen stays clamped) and put a new sheet exactly where it was, tape it down,`,
-        "; then resume the print on the printer. While it waits the printer may park the head; it brings it back here when resumed.",
-        ...sound("finish"), pr.pause, ...sound("resume"), up);
+      if (pg) { // a new sheet: the pen well up and out of the way at the back of the plate (a bed that slides comes forward)
+        const next = order(passes[0])[0][0], nx = p.x + next[0] - pr.offset_x; // the nozzle over the next page's first letter
+        const by = Math.max(bedY(next, 0), pr.bed_y - Math.max(0, pr.offset_y)); // as far back as the pen stays over the plate
+        const back = pr.keepouts.some(k => nx >= k[0] && nx <= k[2] && by >= k[1] && by <= k[3]) ? [] // else stay over the next first letter
+          : [`G0 ${xy([next[0], p.y + p.height - pr.offset_y - by], 0)} ${travel}`];
+        out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), ...back,
+          `; PAGE ${pg + 1} of ${book.length}: take the written page out (the pen stays clamped) and put a new sheet exactly where it was, tape it down`,
+          pr.pause ? "; then resume the print on the printer: it may park the head meanwhile, and both heaters go off again after"
+            : `; within ${i(pr.page_pause_s)} s (Printer settings: Between pages)`,
+          ...sound("finish"), ...(pr.pause ? [pr.pause, "M104 S0", "M140 S0"] : [wait(pr.page_pause_s)]), ...sound("resume"),
+          `G0 ${xy(next, 0)} ${travel}`, up);
+      }
       passes.forEach((ps, k) => {
         out.push(`; PASS ${k + 1} of ${passes.length}: paper slid ${ps.shift} mm toward the back`);
         if (ps.hover) out.push(z(Math.max(pr.z_lift + dz, pr.z_draw + SLIDE_HOVER)), // clear of wet ink

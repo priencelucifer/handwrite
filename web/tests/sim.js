@@ -4,13 +4,13 @@ const assert = require("node:assert");
 // nozzle keep-outs, dialect, firmware, pause command]. Bambu Lab by hand; every other printer straight from OrcaSlicer's data
 // (printers.js), not from gcode.js's converted table, so the shift into the printer's coordinates is checked too.
 const FACTS = {
-  "Bambu Lab A1": [0, 0, 256, 256, 256, [], "bambu", "bambu", "M400 U1"], "Bambu Lab A1 mini": [0, 0, 180, 180, 180, [], "bambu", "bambu", "M400 U1"],
-  "Bambu Lab P1P / P1S": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu", "bambu", "M400 U1"], "Bambu Lab P2S": [0, 0, 256, 256, 256, [], "bambu", "bambu", "M400 U1"],
-  "Bambu Lab X1 Carbon / X1E": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu", "bambu", "M400 U1"],
+  "Bambu Lab A1": [0, 0, 256, 256, 256, [], "bambu", "bambu", ""], "Bambu Lab A1 mini": [0, 0, 180, 180, 180, [], "bambu", "bambu", ""],
+  "Bambu Lab P1P / P1S": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu", "bambu", ""], "Bambu Lab P2S": [0, 0, 256, 256, 256, [], "bambu", "bambu", ""],
+  "Bambu Lab X1 Carbon / X1E": [0, 0, 256, 256, 250, [[0, 0, 18, 28]], "bambu", "bambu", ""],
 };
 for (const list of Object.values(require("../printers.js")))
   for (const [name, [x0, y0, x1, y1, z, fw, keep, pause]] of Object.entries(list)) if (!FACTS[name]) FACTS[name] = [x0, y0, x1, y1, z, keep, "generic", fw, pause];
-const LINE_OK = /^(;[^\n]*|G90|G21|G28|G28 W|M104 S0|M140 S0|G4 [SP]\d+|M17|M400 S1|M400 U1|M0|M25|M226|M601|PAUSE|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G29\.2 S1|G29 A1? X\d+\.\d\d Y\d+\.\d\d I\d+\.\d\d J\d+\.\d\d|G29|M420 S1 Z0|M555 X\d+\.\d\d Y\d+\.\d\d W\d+\.\d\d H\d+\.\d\d|BED_MESH_CALIBRATE|BED_MESH_PROFILE LOAD=default|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
+const LINE_OK = /^(;[^\n]*|G90|G21|G28|G28 W|M104 S0|M140 S0|G4 [SP]\d+|M17|M400 S1|M0|M25|M226|M601|PAUSE|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G29\.2 S1|G29 A1? X\d+\.\d\d Y\d+\.\d\d I\d+\.\d\d J\d+\.\d\d|G29|M420 S1 Z0|M555 X\d+\.\d\d Y\d+\.\d\d W\d+\.\d\d H\d+\.\d\d|BED_MESH_CALIBRATE|BED_MESH_PROFILE LOAD=default|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
 // Bed levelling: only on printers whose maker's own start G-code levels the bed (Bambu Studio's; OrcaSlicer's profiles),
 // with the same command on the firmware it belongs to. [method, firmware, printers, its lines in order]: after probing,
 // both heaters off again; Marlin and Buddy also M420 S1 Z0 (correction at every height). "G28": the MK3S levels as it
@@ -59,7 +59,7 @@ function simulate(gcode, s, opts = {}) {
   const dry = s.printer.dry_run === true ? 8 : 0; // a dry run draws 8 mm above the writing height: the pen never touches
   const pw = s.paper.width, ph = s.paper.height; // already oriented by the caller
   const level = levelOf(model);
-  let pending = [], levelled = false, homed = false, heaterOff = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
+  let heatersOn = new Set(), pending = [], levelled = false, homed = false, heaterOff = false, x = null, y = null, z = null, shift = 0, draws = 0, firstMotionAfterHome = null;
   const lines = gcode.split("\n");
   assert.strictEqual(lines.pop(), "", "file ends with a newline");
   for (const [n, line] of lines.entries()) {
@@ -69,6 +69,7 @@ function simulate(gcode, s, opts = {}) {
     if (pass) shift = +pass[1];
     if (line.startsWith("; attach the pen") && clampY === null) clampY = y;
     if (line.startsWith(";")) continue;
+    heatersOn.delete(line); // M104 S0 / M140 S0 after a pause
     if (line === "G28" || line === "G28 W") {
       assert.ok(line === "G28" || (level && level[0] === "G28"), `G28 W on a printer that doesn't level as it homes ${where}`);
       homed = true; continue;
@@ -88,8 +89,9 @@ function simulate(gcode, s, opts = {}) {
       continue;
     }
     if (line === "M104 S0") { heaterOff = true; continue; } // the only temperature command allowed: nozzle heater off
-    if (/^(M400 U1|M0|M25|M226|M601|PAUSE)$/.test(line)) { // a pause till the user resumes: the printer's own, only between pages, the pen well clear of them
+    if (/^(M0|M25|M226|M601|PAUSE)$/.test(line)) { // a pause till the user resumes: the printer's own, only between pages, the pen well clear of them
       assert.ok(line === pauseCmd && !opts.reach && draws > 0 && z >= zd + 10 - 1e-9, `pause where it can't be ${where}`);
+      heatersOn = new Set(["M104 S0", "M140 S0"]); // its pause routine may warm them: both off again before the head moves
       continue;
     }
     if (line.startsWith("M1006 A")) { // motor music: never while the pen may be on the paper; notes in a sane range
@@ -104,6 +106,7 @@ function simulate(gcode, s, opts = {}) {
     const m = Object.fromEntries([...line.matchAll(/([XYZF])(-?\d+(?:\.\d+)?)/g)].map(a => [a[1], +a[2]]));
     if (line.startsWith("G4")) { assert.ok(+line.slice(4) >= 0, where); continue; }
     if (!line.startsWith("G0") && !line.startsWith("G1")) continue;
+    assert.ok(!heatersOn.size, `moving after a pause before both heaters are off again ${where}`);
     assert.ok(homed, `motion before homing: ${where}`);
     assert.ok(heaterOff, `motion before the nozzle heater is switched off: ${where}`);
     if (firstMotionAfterHome === null) firstMotionAfterHome = m;
