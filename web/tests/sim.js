@@ -10,7 +10,7 @@ const FACTS = {
 };
 for (const list of Object.values(require("../printers.js")))
   for (const [name, [x0, y0, x1, y1, z, fw, keep]] of Object.entries(list)) if (!FACTS[name]) FACTS[name] = [x0, y0, x1, y1, z, keep, "generic", fw];
-const LINE_OK = /^(;[^\n]*|G90|G21|G28|G28 W|M104 S0|M140 S0|G4 [SP]\d+|M17|M400 S1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G29\.2 S1|G29 A1? X\d+\.\d\d Y\d+\.\d\d I\d+\.\d\d J\d+\.\d\d|G29|M420 S1 Z0|M555 X\d+\.\d\d Y\d+\.\d\d W\d+\.\d\d H\d+\.\d\d|BED_MESH_CALIBRATE|BED_MESH_PROFILE LOAD=default|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
+const LINE_OK = /^(;[^\n]*|G90|G21|G28|G28 W|M104 S0|M140 S0|G4 [SP]\d+|M17|M400 S1|M400 U1|M1006 S1|M1006 W|M1006 A\d+ B\d+ L\d+ C\d+ D\d+ M\d+ E\d+ F\d+ N\d+|G29\.2 S1|G29 A1? X\d+\.\d\d Y\d+\.\d\d I\d+\.\d\d J\d+\.\d\d|G29|M420 S1 Z0|M555 X\d+\.\d\d Y\d+\.\d\d W\d+\.\d\d H\d+\.\d\d|BED_MESH_CALIBRATE|BED_MESH_PROFILE LOAD=default|G[01]( X-?\d+\.\d\d Y-?\d+\.\d\d)?( Z-?\d+\.\d\d)?( F\d+)?)$/;
 // Bed levelling: only on printers whose maker's own start G-code levels the bed (Bambu Studio's; OrcaSlicer's profiles),
 // with the same command on the firmware it belongs to. [method, firmware, printers, its lines in order]: after probing,
 // both heaters off again; Marlin and Buddy also M420 S1 Z0 (correction at every height). "G28": the MK3S levels as it
@@ -88,6 +88,10 @@ function simulate(gcode, s, opts = {}) {
       continue;
     }
     if (line === "M104 S0") { heaterOff = true; continue; } // the only temperature command allowed: nozzle heater off
+    if (line === "M400 U1") { // Bambu's pause till the user resumes: only between pages, the pen well clear of them
+      assert.ok(dialect === "bambu" && !opts.reach && draws > 0 && z >= zd + 10 - 1e-9, `pause where it can't be ${where}`);
+      continue;
+    }
     if (line.startsWith("M1006 A")) { // motor music: never while the pen may be on the paper; notes in a sane range
       assert.ok(z === null || z > zd + 1e-9 || draws === 0, `sound with the pen on the paper ${where}`);
       const ch = [...line.matchAll(/[ACE](\d+) [BDF](\d+) [LMN](\d+)/g)].map(m => m.slice(1).map(Number));

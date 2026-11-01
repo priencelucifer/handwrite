@@ -200,7 +200,7 @@
   // paper x/y: placePaper() of these defaults, so the first page sits where the pen reaches.
   const DEFAULT_SETTINGS = {
     printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 1, offset_y: -25,
-      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12, press_bottom: 0, level: true,
+      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, z_draw: 10, z_lift: 12, press_bottom: 0, level: true, one_file: false,
       z_feed: 600, draw_feed: 1500, travel_feed: 6000, settle_ms: 60, sounds: true, dry_run: false },
     // press_bottom: mm the pen goes lower by the bottom of the page than where it was clamped (no bed levelling with a
     // pen fitted, so a bed a little lower toward the front leaves the last lines faint). level: on LEVEL_PRINTERS, level
@@ -231,8 +231,8 @@
           throw new WriteError(`Setting ${key.replace(/_/g, " ")} = ${JSON.stringify(v)} must be a number from ${lo} to ${hi}.`);
       }
     const pr = cfg.printer, w = cfg.writing;
-    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, w.page_numbers, w.code].some(v => typeof v !== "boolean"))
-      throw new WriteError("Settings sounds, slide, dry run, bed levelling, page numbers and code must be on or off.");
+    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, pr.one_file, w.page_numbers, w.code].some(v => typeof v !== "boolean"))
+      throw new WriteError("Settings sounds, slide, dry run, bed levelling, all pages in one file, page numbers and code must be on or off.");
     if (!["portrait", "landscape"].includes(cfg.paper.orientation) || typeof w.style !== "string")
       throw new WriteError("Paper orientation must be portrait or landscape, and style a name.");
     if (typeof w.header !== "string" || w.header.length > 80) throw new WriteError("The header must be text, 80 characters at most.");
@@ -868,9 +868,18 @@
 
   /** BambuPlot-style plain G-code (known to run on the A1) with timed pauses, in the printer's dialect. Strokes marked .pen = PEN2 are written
    *  last, after a pen change. With printer.dry_run the pen is still clamped at the writing height, but every stroke
-   *  is drawn DRY_RUN_LIFT mm higher, so the same file runs without touching the paper. */
+   *  is drawn DRY_RUN_LIFT mm higher, so the same file runs without touching the paper.
+   *  opts.pages: the next pages' passes, written in the same file (Bambu Lab printers): after each page the pen goes
+   *  well up over the next page's first letter, a tune plays and the printer waits (M400 U1, Bambu Studio's own pause)
+   *  until the user has put in a new sheet where the last one was and resumed it on the printer. Homing, levelling and
+   *  clamping the pen happen once. */
   function toGcode(passes, cfg, header, opts = {}) {
     const p = cfg.paper, pr = cfg.printer, dz = pr.dry_run ? DRY_RUN_LIFT : 0, [ox, oy] = pr.origin;
+    const book = [passes, ...(opts.pages || [])];
+    if (book.length > 1 && (opts.reach || pr.dialect !== "bambu"))
+      throw new WriteError("All pages in one file is for Bambu Lab printers: they pause after each page and go on when you resume. Save the pages one by one instead.");
+    if (book.length > 1 && book.some(ps => ps.some(s => s.strokes.some(st => st.pen === PEN2))))
+      throw new WriteError("A second pen can't be used with all pages in one file. Save the pages one by one, or remove the *second pen* marks.");
     const f = v => v.toFixed(2), i = v => String(Math.round(v)); // pauses and feeds as whole numbers
     const xy = (pt, shift) => {
       const x = p.x + pt[0] - pr.offset_x, y = p.y + shift + p.height - pt[1] - pr.offset_y;
@@ -918,8 +927,8 @@
     const firstPen2 = passes.length === 1 && passes[0].strokes.some(s => s.pen !== PEN2) ? passes[0].strokes.find(s => s.pen === PEN2) : null;
     out.push("G90", ...(pr.dialect === "bambu" ? ["G21"] : []), ...sound("start"), home); // always home: every move after this assumes a known position
     out.push("M104 S0"); // nozzle heater off: nothing here needs heat, and the pen holder sits next to the hotend
-    const area = (w, h) => { // the nozzle positions of everything written, a little wider, on the bed
-      const pts = passes.flatMap(ps => ps.strokes.flatMap(s => s.map(pt => [p.x + pt[0] - pr.offset_x, bedY(pt, ps.shift)])));
+    const area = (w, h) => { // the nozzle positions of everything written (every page), a little wider, on the bed
+      const pts = book.flat().flatMap(ps => ps.strokes.flatMap(s => s.map(pt => [p.x + pt[0] - pr.offset_x, bedY(pt, ps.shift)])));
       const x0 = Math.max(0, Math.min(...pts.map(q => q[0])) - LEVEL_PAD), x1 = Math.min(pr.bed_x, Math.max(...pts.map(q => q[0])) + LEVEL_PAD);
       const y0 = Math.max(0, Math.min(...pts.map(q => q[1])) - LEVEL_PAD), y1 = Math.min(pr.bed_y, Math.max(...pts.map(q => q[1])) + LEVEL_PAD);
       let r = [x0, y0, x1, y1];
@@ -944,23 +953,29 @@
       "; place the paper: the first letter goes right under the pen holder", ...sound("pause"), wait(pr.paper_pause_s),
       ...sound("resume"), touch, "; attach the pen: slide it down until it touches the paper, then clamp it", ...sound("pause"),
       wait(pr.pen_pause_s), up, ...sound("resume")); // resume tune only once the pen is lifted off the paper
-    passes.forEach((ps, k) => {
-      out.push(`; PASS ${k + 1} of ${passes.length}: paper slid ${ps.shift} mm toward the back`);
-      if (ps.hover) out.push(z(Math.max(pr.z_lift + dz, pr.z_draw + SLIDE_HOVER)), // clear of wet ink
-        `G0 ${xy(ps.hover, ps.shift)} ${travel}`,
-        `; slide the paper ${ps.shift - passes[k - 1].shift} mm toward the back until the last mark written is right under the pen`,
-        ...sound("pause"), wait(pr.shift_pause_s), ...sound("resume"), up);
-      for (const s of order(ps)) {
-        // Pen change, like the start: head well up while pen 1 comes out, then down to the writing height for pen 2.
-        // The only tune plays with the head up, never with a pen on the paper.
-        if (s === firstPen2) out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), `G0 ${xy(s[0], ps.shift)} ${travel}`,
-          "; PEN CHANGE: take pen 1 out of the holder", ...sound("pause"), wait(pr.pen_pause_s),
-          z(pr.z_draw - press(s[0], ps.shift)), "; put pen 2 in: slide it down until it touches the paper, then clamp it", wait(pr.pen_pause_s), up, ...sound("resume"));
-        out.push(`G0 ${xy(s[0], ps.shift)} ${travel}`, down(s[0], ps.shift), ...settle);
-        const feed = Math.min(12000, pr.draw_feed * (0.85 + 0.3 * frac(++strokeNo))); // a hand's speed varies stroke to stroke
-        for (let j = 1; j < s.length; j++) out.push(`G1 ${xy(s[j], ps.shift)}` + (j === 1 ? ` F${i(feed)}` : ""));
-        out.push(up, ...settle);
-      }
+    book.forEach((passes, pg) => {
+      if (pg) out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), `G0 ${xy(order(passes[0])[0][0], 0)} ${travel}`, // pen well up
+        `; PAGE ${pg + 1} of ${book.length}: take the written page out (the pen stays clamped) and put a new sheet exactly where it was, tape it down,`,
+        "; then resume the print on the printer. While it waits the printer parks the head, and brings it back here when resumed.",
+        ...sound("finish"), "M400 U1", ...sound("resume"), up);
+      passes.forEach((ps, k) => {
+        out.push(`; PASS ${k + 1} of ${passes.length}: paper slid ${ps.shift} mm toward the back`);
+        if (ps.hover) out.push(z(Math.max(pr.z_lift + dz, pr.z_draw + SLIDE_HOVER)), // clear of wet ink
+          `G0 ${xy(ps.hover, ps.shift)} ${travel}`,
+          `; slide the paper ${ps.shift - passes[k - 1].shift} mm toward the back until the last mark written is right under the pen`,
+          ...sound("pause"), wait(pr.shift_pause_s), ...sound("resume"), up);
+        for (const s of order(ps)) {
+          // Pen change, like the start: head well up while pen 1 comes out, then down to the writing height for pen 2.
+          // The only tune plays with the head up, never with a pen on the paper.
+          if (s === firstPen2) out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), `G0 ${xy(s[0], ps.shift)} ${travel}`,
+            "; PEN CHANGE: take pen 1 out of the holder", ...sound("pause"), wait(pr.pen_pause_s),
+            z(pr.z_draw - press(s[0], ps.shift)), "; put pen 2 in: slide it down until it touches the paper, then clamp it", wait(pr.pen_pause_s), up, ...sound("resume"));
+          out.push(`G0 ${xy(s[0], ps.shift)} ${travel}`, down(s[0], ps.shift), ...settle);
+          const feed = Math.min(12000, pr.draw_feed * (0.85 + 0.3 * frac(++strokeNo))); // a hand's speed varies stroke to stroke
+          for (let j = 1; j < s.length; j++) out.push(`G1 ${xy(s[j], ps.shift)}` + (j === 1 ? ` F${i(feed)}` : ""));
+          out.push(up, ...settle);
+        }
+      });
     });
     out.push(`G1 Z${f(pr.z_lift + 10)} F${i(pr.z_feed)}`, ...sound("finish"));
     return out.join("\n") + "\n";

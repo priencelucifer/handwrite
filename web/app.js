@@ -347,15 +347,16 @@
     syncMore();
     const v = cur(), n = state.view ? state.view.pages.length : 0;
     $("pager").hidden = n < 2; $("saveAll").hidden = n < 2;
+    syncOneFile(v, n);
     const tags = [state.dryRun && "dry run", v && startLine(v) > 1 && `from line ${startLine(v)}`].filter(Boolean).join(", ");
     $("save").textContent = (n > 1 ? `Save page ${state.page + 1}` : "Save G-code") + (tags ? ` (${tags})` : "");
-    if (n > 1) { $("pageLabel").textContent = `Page ${state.page + 1} of ${n}`; $("saveAll").textContent = `Save all ${n} pages` + (state.dryRun ? " (dry run)" : ""); }
+    if (n > 1) { $("pageLabel").textContent = `Page ${state.page + 1} of ${n}`; $("saveAll").textContent = `Save all ${n} pages` + (v && oneFile(v.cfg) ? " in one file" : "") + (state.dryRun ? " (dry run)" : ""); }
     if (v) $("startLine").max = v.lines.length;
     $("prevPage").disabled = state.page <= 0; $("nextPage").disabled = state.page >= n - 1;
     $("summary").hidden = !v || !!state.error;
     if (!v || state.error) return;
-    const t = eta(v), all = n > 1 ? eta(state.view.pages.reduce((sum, p) => sum + estimate({ cfg: v.cfg, passes: p.passes }), 0)) : null;
-    $("summary").innerHTML = (all ? `⏱ Page ${state.page + 1}: about <b>${t.dur}</b> · all ${n} pages: about <b>${all.dur}</b> (plus changing paper)<br>`
+    const t = eta(v), all = n > 1 ? eta(allPagesTime(v.cfg, state.view.pages)) : null;
+    $("summary").innerHTML = (all ? `⏱ Page ${state.page + 1}: about <b>${t.dur}</b> · all ${n} pages${oneFile(v.cfg) ? " in one file" : ""}: about <b>${all.dur}</b> (plus changing paper)<br>`
       : `⏱ Writing takes about <b>${t.dur}</b> · done around <b>${t.at}</b> if you start now<br>`) +
       `${v.cfg.printer.model} · ${v.cfg.paper.size} ${v.cfg.paper.orientation}` +
       (v.passes.length > 1 ? `<br>${escapeHtml(G.passNote(v.passes))}` : "");
@@ -364,6 +365,14 @@
 
   /** True if the file swaps pens: pen 1 and pen 2 (*marked*) strokes in it (only ever in one pass). */
   const penChange = passes => passes.length === 1 && passes[0].strokes.some(s => s.pen === G.PEN2) && passes[0].strokes.some(s => s.pen !== G.PEN2);
+  /** What a file spends before it writes: homing (+40 s), measuring the bed (about a minute and a half), the paper and pen pauses. */
+  const startTime = pr => 40 + pr.paper_pause_s + pr.pen_pause_s +
+    (pr.level && G.LEVEL_PRINTERS.has(pr.model) && !G.LEVEL_SAVED.has(G.LEVEL_PRINTERS.get(pr.model)) ? 90 : 0);
+  /** All pages in one file (Bambu Lab printers): one start for every page, a pause after each until it's resumed. */
+  const oneFile = cfg => cfg.printer.one_file === true && cfg.printer.dialect === "bambu";
+  /** Rough time for all pages: one file starts once, separate files once each (the paper changes not counted). */
+  const allPagesTime = (cfg, pages) => pages.reduce((sum, p) => sum + estimate({ cfg, passes: p.passes }), 0) -
+    (oneFile(cfg) ? (pages.length - 1) * startTime(cfg.printer) : 0);
   /** Rough print time: drawing + travel + pen up/down + pauses. */
   function estimate({ cfg, passes }) {
     const pr = cfg.printer, d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -376,8 +385,7 @@
     const zTime = 2 * Math.abs(pr.z_lift - pr.z_draw) / pr.z_feed * 60 + 2 * pr.settle_ms / 1000;
     const change = penChange(passes) ? 1 : 0;
     const sec = draw / pr.draw_feed * 60 * 1.3 + travel / pr.travel_feed * 60 * 1.5 + lifts * zTime +
-      pr.paper_pause_s + pr.pen_pause_s * (1 + 2 * change) + (passes.length - 1) * pr.shift_pause_s + 40 + // +40 s homing
-      (pr.level && G.LEVEL_PRINTERS.has(pr.model) && !G.LEVEL_SAVED.has(G.LEVEL_PRINTERS.get(pr.model)) ? 90 : 0); // measuring the bed: about a minute and a half
+      startTime(pr) + pr.pen_pause_s * 2 * change + (passes.length - 1) * pr.shift_pause_s;
     if (pr.sounds && G.SOUND_PRINTERS.has(pr.model)) { // each tune: a 1 s wait, then its lines (10 ms units, the longest channel)
       const t = name => 1 + G.tuneOf(pr.model, name).reduce((a, s) => a + Math.max(s[1], s[4], s[7]), 0) / 100;
       return sec + t("start") + t("finish") + (2 + (passes.length - 1) + change) * (t("pause") + t("resume"));
@@ -943,6 +951,15 @@
   };
   $("level").onchange = () => { PR_().level = $("level").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncLevel);
+  /** All pages in one file: shown once there are pages to put together; Bambu Lab printers only (their own pause). */
+  function syncOneFile(v, n) {
+    $("oneFileRow").hidden = n < 2;
+    const ok = !!v && v.cfg.printer.dialect === "bambu";
+    $("oneFile").checked = ok && PR_().one_file === true; $("oneFile").disabled = !ok;
+    $("oneFileNote").textContent = ok ? "Save all pages as one file instead of one per page: the bed is levelled and the pen clamped once. After each page the pen lifts, the printer plays its tune and pauses: put in a new sheet where the last one was, then resume on the printer."
+      : "Bambu Lab A1, A1 mini, P1, P2S and X1 only: they pause after each page until you resume them. On this printer each page is its own file.";
+  }
+  $("oneFile").onchange = () => { PR_().one_file = $("oneFile").checked; scheduleRender(0); };
   $("slide").checked = P_().slide === true;
   $("slide").onchange = () => { P_().slide = $("slide").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncSounds);
@@ -1292,7 +1309,8 @@
       "All clear? Save the page and write it."]) { const li = document.createElement("li"); li.textContent = s; $("savedSteps").append(li); }
     $("savedDlg").showModal();
   };
-  function showSteps(v, extra) {
+  /** pages: how many pages one file writes, pausing after each (all pages in one file). */
+  function showSteps(v, extra, pages = 1) {
     const pr = v.cfg.printer, steps = [...extra];
     if (state.dryRun) steps.unshift(`Dry run: the pen is clamped as usual, then every stroke is drawn ${G.DRY_RUN_LIFT} mm above the paper, so nothing gets written.`);
     const how = pr.level && G.LEVEL_PRINTERS.get(pr.model);
@@ -1304,13 +1322,14 @@
       `The head lowers and waits ${pr.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`);
     if (penChange(v.passes)) steps.push(`When the first pen is done, the head rises and waits ${pr.pen_pause_s} s: take that pen out. Then it lowers and waits ${pr.pen_pause_s} s: slide the second pen in until it touches the paper, and clamp it.`);
     if (v.passes.length > 1) steps.push(G.passNote(v.passes) + ` You have ${pr.shift_pause_s} s each time.`);
+    if (pages > 1) steps.push(`After each page the pen lifts, the printer plays its tune and pauses (${pages - 1} times). Take the page out, leaving the pen clamped, put a new sheet where the last one was and tape it, then press Resume on the printer or in Bambu Handy. While it waits the printer parks the head, and brings it back when resumed.`);
     steps.push("Stay with the printer for the first run.");
     $("savedSteps").textContent = "";
     for (const s of steps) { const li = document.createElement("li"); li.textContent = s; $("savedSteps").append(li); }
     $("savedDlg").showModal();
   }
 
-  // ---------- save all pages: one zip into Downloads ----------
+  // ---------- save all pages: one zip into Downloads, or one file that pauses between pages ----------
   $("saveAll").onclick = async () => {
     const view = state.view;
     if (!view || state.error || state.busy) return;
@@ -1320,6 +1339,15 @@
       const cfg = G.resolve(state.settings);
       if (JSON.stringify(cfg) !== JSON.stringify(view.cfg)) { await render(); return $("saveAll").click(); }
       const out = outCfg(cfg);
+      if (oneFile(out)) {
+        const [first, ...rest] = view.pages.map(p => G.planPasses(p.lines, out)), name = tagged(`handwriting-${n}-pages.gcode`, 1);
+        const gcode = G.toGcode(first, out, [...G.describe(out, state.seed), `all ${n} pages in one file: it pauses after each page until resumed on the printer`,
+          `estimated time: about ${eta(allPagesTime(out, view.pages)).dur} (including pauses, not the paper changes)`], { pages: rest });
+        const where = await download(gcode, name, "text/plain");
+        if (!where) return;
+        $("savedWhere").textContent = `${where} Only run it on the ${view.cfg.printer.model}. All ${n} pages take about ${eta(allPagesTime(view.cfg, view.pages)).dur}, plus changing the paper.`;
+        return showSteps({ cfg: view.cfg, passes: [] }, ["Before you start, mark where the paper goes on the plate (tape at two corners), so every sheet goes in the same place."], n);
+      }
       files = view.pages.map((p, k) => ({ name: tagged(pageFile(k, n), 1), text: G.toGcode(G.planPasses(p.lines, out), out,
         [...G.describe(out, state.seed), `page ${k + 1} of ${n}`, `estimated time: about ${eta({ cfg: out, passes: p.passes }).dur} (including pauses)`]) }));
     } catch (e) { return fail(e); }

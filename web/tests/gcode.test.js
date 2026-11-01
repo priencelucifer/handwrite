@@ -136,14 +136,15 @@ test("text edge cases", () => {
 
 test("fuzz: thousands of random setups -> every produced file passes the independent simulator", () => {
   const rng = mulberry(12345), pick = a => a[Math.floor(rng.random() * a.length)], U = (a, b) => a + rng.random() * (b - a);
-  const models = Object.keys(G.PRINTERS), papers = Object.keys(G.PAPERS);
+  const models = Object.keys(G.PRINTERS), papers = Object.keys(G.PAPERS), bambu = models.filter(m => G.PRINTERS[m] && G.PRINTERS[m][5] === "bambu");
   const vocab = "the quick brown fox jumps over a lazy dog and writes letters home to friends each day HELLO, NASA OK I _the fox_ *dog day* _*both*_ 2024 3.14 10:30 85, x x2 (12)".split(" ");
   // code: drawn symbols, ALL-CAPS names with drawn X and Z, and (in code mode) indents and names longer than a word
   const code = "#include <stdio.h> int main() { } a[i] = b * c / d; x_y && || != >= <= += -> @d $v ~a ^b \\n %d MAX_SIZE ZERO {x} [0]".split(" ");
-  const tally = { ok: 0, refused: 0, edited: 0, code: 0, levelled: 0, pressed: 0 };
+  const tally = { ok: 0, refused: 0, edited: 0, code: 0, levelled: 0, pressed: 0, books: 0 };
   for (let c = 0; c < 4000; c++) {
     const s = structuredClone(G.DEFAULT_SETTINGS);
-    s.printer.model = rng.random() < 0.25 ? pick([...G.LEVEL_PRINTERS.keys()]) : pick(models); // levelling runs on these
+    const r = rng.random(); // Bambu Lab (pages in one file), printers that level, any printer
+    s.printer.model = r < 0.15 ? pick(bambu) : r < 0.35 ? pick([...G.LEVEL_PRINTERS.keys()]) : pick(models);
     if (s.printer.model === "Custom") Object.assign(s.printer, { bed_x: U(80, 350), bed_y: U(80, 350), bed_z: U(60, 300) });
     s.paper.size = pick(papers);
     if (s.paper.size === "Custom") Object.assign(s.paper, { width: U(40, 400), height: U(40, 500) });
@@ -179,10 +180,18 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     if (s.writing.code) tally.code++;
     if (/^(G29|M420|M555|BED_MESH_)/m.test(out.gcode)) tally.levelled++;
     if (s.printer.press_bottom > 0) tally.pressed++;
+    if (cfg.printer.dialect === "bambu" && rng.random() < 0.9) { // and as the first of several pages in one file
+      let book;
+      try { book = G.toGcode(out.passes, cfg, ["t"], { pages: [1, 2].slice(0, 1 + Math.floor(rng.random() * 2)).map(k => run(s, pick(words) + " " + text, c + 97 * k).passes) }); }
+      catch (e) { if (!(e instanceof G.WriteError)) throw e; continue; } // (a second pen, or a page that doesn't fit, is refused)
+      try { simulate(book, { ...s, printer: cfg.printer, paper: cfg.paper }); }
+      catch (e) { throw new Error(`case ${c} UNSAFE as one file of pages: ${e.message}\n${JSON.stringify(s)}`); }
+      tally.books++;
+    }
   }
   test.diagnostic?.(`fuzz: ${tally.ok} files simulated safely, ${tally.refused} setups refused`);
-  console.log(`fuzz: ${tally.ok} files simulated safely (${tally.edited} with edited words, ${tally.code} code, ${tally.levelled} levelled, ${tally.pressed} pressing harder), ${tally.refused} setups refused`);
-  assert.ok(tally.ok > 500 && tally.edited > 100 && tally.code > 150 && tally.levelled > 30 && tally.pressed > 100, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
+  console.log(`fuzz: ${tally.ok} files simulated safely (${tally.edited} with edited words, ${tally.code} code, ${tally.levelled} levelled, ${tally.pressed} pressing harder, ${tally.books} more as one file of pages), ${tally.refused} setups refused`);
+  assert.ok(tally.ok > 500 && tally.edited > 100 && tally.code > 150 && tally.levelled > 30 && tally.pressed > 100 && tally.books > 30, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
 });
 
 test("page capacity estimate: plausible, grows with paper, counts paragraph lines", () => {
@@ -581,6 +590,35 @@ test("bed levelling, each maker's own way: after homing, pen out, cold, before t
   assert.throws(() => simulate(se.gcode.replace(/^M104 S0$/m, "M104 S0\nM420 S1 Z0"), se.cfg), /levelling where it can't be/);
   assert.throws(() => simulate(se.gcode.replace(/^G28$/m, "G28 W"), se.cfg), /G28 W on a printer/);
   assert.throws(() => G.resolve(withSet({ "printer.level": "yes" })), /on or off/);
+});
+
+test("all pages in one file (Bambu Lab): one start, then after each page the pen well up, a tune and Bambu's own pause", () => {
+  const texts = ["Dear friend,\nThis is the first page of three.", "The second page, written after a pause.", "And the third, the last one."];
+  const s = withSet({ "printer.model": "Bambu Lab A1" }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
+  const pages = texts.map((t, k) => run(s, t, 5 + k)), cfg = pages[0].cfg, pr = cfg.printer;
+  const book = G.toGcode(pages[0].passes, cfg, ["t"], { pages: pages.slice(1).map(p => p.passes) }), g = book.split("\n");
+  simulate(book, cfg);
+  const count = re => g.filter(l => re.test(l)).length;
+  assert.ok(count(/^G28$/) === 1 && count(/^G29 A1 /) === 1 && count(/^; attach the pen/) === 1, "homed, levelled and the pen clamped once");
+  assert.strictEqual(count(/^M400 U1$/), 2, "a pause after pages 1 and 2, none after the last");
+  // each page is written exactly as its own file writes it (but for the hand's speed, which runs on stroke by stroke)
+  const draws = text => text.split("\n").filter(l => /^G1 X/.test(l)).map(l => l.replace(/ F\d+$/, ""));
+  assert.deepStrictEqual(draws(book), pages.flatMap(p => draws(p.gcode)));
+  g.forEach((l, k) => { // before each pause: the finish tune, with the pen at least 15 mm above the paper
+    if (l !== "M400 U1") return;
+    const zs = g.slice(0, k).filter(x => /^G1 Z/.test(x)), lastZ = +zs[zs.length - 1].match(/Z(\S+)/)[1];
+    assert.ok(lastZ >= pr.z_draw + 15 - 1e-9 && g.slice(k - 30, k).some(x => /^M1006 A/.test(x)), `pen at Z${lastZ}, and a tune`);
+  });
+  const [, x, y, i, j] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(g.find(l => l.startsWith("G29 A1 "))).map(Number); // levelled under every page
+  assert.ok(draws(book).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number)).every(([dx, dy]) => dx >= x && dx <= x + i && dy >= y && dy <= y + j));
+  // Bambu Lab printers only (their own pause), and no second pen across pages
+  const other = withSet({ "printer.model": "Prusa MK4" }); Object.assign(other.paper, G.placePaper(G.resolve(other)));
+  const op = [run(other, texts[0], 5), run(other, texts[1], 6)];
+  assert.throws(() => G.toGcode(op[0].passes, op[0].cfg, ["t"], { pages: [op[1].passes] }), /Bambu Lab printers/);
+  assert.throws(() => G.toGcode(pages[0].passes, cfg, ["t"], { pages: [run(s, "Hello *there*", 8).passes] }), /second pen/);
+  // the simulator refuses Bambu's pause on another printer, or with the pen at the paper
+  assert.throws(() => simulate(op[0].gcode.replace(/^(G1 Z\S+ F\d+)$/m, "$1\nM400 U1"), op[0].cfg), /pause where it can't be/);
+  assert.throws(() => simulate(pages[0].gcode.replace(/^(G1 X\S+ Y\S+ F\d+)$/m, "$1\nM400 U1"), cfg), /pause where it can't be/);
 });
 
 test("every printer OrcaSlicer knows: a page is safe in its own coordinates, and its firmware gets G-code it reads", () => {
