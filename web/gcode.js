@@ -11,30 +11,31 @@
 
   class WriteError extends Error {}
 
-  // [bed_x, bed_y, max Z, nozzle keep-outs [[x0, y0, x1, y1], ...], origin [x, y], dialect, plate]. Layout works in bed
+  // [bed_x, bed_y, max Z, nozzle keep-outs [[x0, y0, x1, y1], ...], origin [x, y], dialect, plate, pause]. Layout works in bed
   // coordinates from 0 to bed_x / bed_y; origin is where that 0 is in the printer's own coordinates (added only when
   // a coordinate is written). P1/X1: front-left the toolhead presses the filament-cutter lever against the frame.
   // dialect "bambu": the plain G-code BambuPlot proved on the A1 (G4 S pauses, Bambu's tunes). "generic": G4 P
   // pauses in ms (Klipper ignores G4 S) and no G21 (Klipper doesn't know it; every firmware here defaults to mm).
   // plate: how far the plate reaches past where the nozzle may go [left, front, right, back] (exclusions at its edges,
-  // a second nozzle): the offset test's paper goes into the plate's own corner.
+  // a second nozzle): the offset test's paper goes into the plate's own corner. pause: the printer's own command that waits
+  // until resumed on the printer (Bambu Studio's M400 U1; OrcaSlicer's profiles), or "": between pages in one file.
   const CUTTER = [0, 0, 18, 28];
   const PRINTERS = {
-    "Bambu Lab A1": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0]],
-    "Bambu Lab A1 mini": [180, 180, 180, [], [0, 0], "bambu", [0, 0, 0, 0]],
-    "Bambu Lab P1P / P1S": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0]],
-    "Bambu Lab P2S": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0]],
-    "Bambu Lab X1 Carbon / X1E": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0]],
+    "Bambu Lab A1": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
+    "Bambu Lab A1 mini": [180, 180, 180, [], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
+    "Bambu Lab P1P / P1S": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
+    "Bambu Lab P2S": [256, 256, 256, [], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
+    "Bambu Lab X1 Carbon / X1E": [256, 256, 250, [CUTTER], [0, 0], "bambu", [0, 0, 0, 0], "M400 U1"],
   };
   const PRINTER_GROUPS = [["Bambu Lab", Object.keys(PRINTERS)]]; // vendor -> printer names, for the printer list
-  { // every other printer OrcaSlicer knows: [x0, y0, x1, y1, max Z, firmware, keep-outs], in its own coordinates
+  { // every other printer OrcaSlicer knows: [x0, y0, x1, y1, max Z, firmware, keep-outs, pause], in its own coordinates
     const orca = typeof HW_PRINTERS !== "undefined" ? HW_PRINTERS : typeof require === "function" ? require("./printers.js") : {};
     for (const [vendor, list] of Object.entries(orca)) {
       const names = [];
-      for (const [name, [x0, y0, x1, y1, z, , keep, plate = [x0, y0, x1, y1]]] of Object.entries(list)) {
+      for (const [name, [x0, y0, x1, y1, z, , keep, pause, plate = [x0, y0, x1, y1]]] of Object.entries(list)) {
         if (Object.hasOwn(PRINTERS, name)) continue;
         PRINTERS[name] = [x1 - x0, y1 - y0, Math.min(z, 1000) /* our moves stay low anyway */, keep.map(([a, b, c, d]) => [a - x0, b - y0, c - x0, d - y0]),
-          [x0, y0], "generic", [x0 - plate[0], y0 - plate[1], plate[2] - x1, plate[3] - y1]];
+          [x0, y0], "generic", [x0 - plate[0], y0 - plate[1], plate[2] - x1, plate[3] - y1], pause];
         names.push(name);
       }
       const group = PRINTER_GROUPS.find(g => g[0] === vendor);
@@ -261,8 +262,8 @@
     const pr = cfg.printer, p = cfg.paper;
     if (!Object.hasOwn(PRINTERS, pr.model) || !Object.hasOwn(PAPERS, p.size))
       throw new WriteError(`Unknown printer ${JSON.stringify(pr.model)} or paper ${JSON.stringify(p.size)}`);
-    pr.keepouts = []; pr.origin = [0, 0]; pr.dialect = "generic"; pr.plate = [0, 0, 0, 0];
-    if (PRINTERS[pr.model]) [pr.bed_x, pr.bed_y, pr.bed_z, pr.keepouts, pr.origin, pr.dialect, pr.plate] = PRINTERS[pr.model];
+    pr.keepouts = []; pr.origin = [0, 0]; pr.dialect = "generic"; pr.plate = [0, 0, 0, 0]; pr.pause = "";
+    if (PRINTERS[pr.model]) [pr.bed_x, pr.bed_y, pr.bed_z, pr.keepouts, pr.origin, pr.dialect, pr.plate, pr.pause] = PRINTERS[pr.model];
     if (PAPERS[p.size]) [p.width, p.height] = PAPERS[p.size];
     const [short, long] = [p.width, p.height].sort((a, b) => a - b);
     [p.width, p.height] = p.orientation === "landscape" ? [long, short] : [short, long];
@@ -869,15 +870,16 @@
   /** BambuPlot-style plain G-code (known to run on the A1) with timed pauses, in the printer's dialect. Strokes marked .pen = PEN2 are written
    *  last, after a pen change. With printer.dry_run the pen is still clamped at the writing height, but every stroke
    *  is drawn DRY_RUN_LIFT mm higher, so the same file runs without touching the paper.
-   *  opts.pages: the next pages' passes, written in the same file (Bambu Lab printers): after each page the pen goes
-   *  well up over the next page's first letter, a tune plays and the printer waits (M400 U1, Bambu Studio's own pause)
-   *  until the user has put in a new sheet where the last one was and resumed it on the printer. Homing, levelling and
-   *  clamping the pen happen once. */
+   *  opts.pages: the next pages' passes, written in the same file (printers with a pause, pr.pause): after each page
+   *  the pen goes well up over the next page's first letter, a tune plays (Bambu) and the printer waits until the user
+   *  has put in a new sheet where the last one was and resumed it on the printer. Homing, levelling and clamping the
+   *  pen happen once. The paper and pen pauses stay timed: a printer's pause may park the head (Bambu's does), and
+   *  those need it to stay put, over the first letter and at the writing height. */
   function toGcode(passes, cfg, header, opts = {}) {
     const p = cfg.paper, pr = cfg.printer, dz = pr.dry_run ? DRY_RUN_LIFT : 0, [ox, oy] = pr.origin;
     const book = [passes, ...(opts.pages || [])];
-    if (book.length > 1 && (opts.reach || pr.dialect !== "bambu"))
-      throw new WriteError("All pages in one file is for Bambu Lab printers: they pause after each page and go on when you resume. Save the pages one by one instead.");
+    if (book.length > 1 && (opts.reach || !/^(M400 U1|M0|M25|M226|M601|PAUSE)$/.test(pr.pause))) // the only pauses ever written
+      throw new WriteError("All pages in one file needs a printer that pauses until you resume it, and this one has no pause command Handplot can rely on. Save the pages one by one instead.");
     if (book.length > 1 && book.some(ps => ps.some(s => s.strokes.some(st => st.pen === PEN2))))
       throw new WriteError("A second pen can't be used with all pages in one file. Save the pages one by one, or remove the *second pen* marks.");
     const f = v => v.toFixed(2), i = v => String(Math.round(v)); // pauses and feeds as whole numbers
@@ -956,8 +958,8 @@
     book.forEach((passes, pg) => {
       if (pg) out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), `G0 ${xy(order(passes[0])[0][0], 0)} ${travel}`, // pen well up
         `; PAGE ${pg + 1} of ${book.length}: take the written page out (the pen stays clamped) and put a new sheet exactly where it was, tape it down,`,
-        "; then resume the print on the printer. While it waits the printer parks the head, and brings it back here when resumed.",
-        ...sound("finish"), "M400 U1", ...sound("resume"), up);
+        "; then resume the print on the printer. While it waits the printer may park the head; it brings it back here when resumed.",
+        ...sound("finish"), pr.pause, ...sound("resume"), up);
       passes.forEach((ps, k) => {
         out.push(`; PASS ${k + 1} of ${passes.length}: paper slid ${ps.shift} mm toward the back`);
         if (ps.hover) out.push(z(Math.max(pr.z_lift + dz, pr.z_draw + SLIDE_HOVER)), // clear of wet ink

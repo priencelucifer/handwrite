@@ -368,8 +368,8 @@
   /** What a file spends before it writes: homing (+40 s), measuring the bed (about a minute and a half), the paper and pen pauses. */
   const startTime = pr => 40 + pr.paper_pause_s + pr.pen_pause_s +
     (pr.level && G.LEVEL_PRINTERS.has(pr.model) && !G.LEVEL_SAVED.has(G.LEVEL_PRINTERS.get(pr.model)) ? 90 : 0);
-  /** All pages in one file (Bambu Lab printers): one start for every page, a pause after each until it's resumed. */
-  const oneFile = cfg => cfg.printer.one_file === true && cfg.printer.dialect === "bambu";
+  /** All pages in one file (printers with a pause): one start for every page, a pause after each until it's resumed. */
+  const oneFile = cfg => cfg.printer.one_file === true && !!cfg.printer.pause;
   /** Rough time for all pages: one file starts once, separate files once each (the paper changes not counted). */
   const allPagesTime = (cfg, pages) => pages.reduce((sum, p) => sum + estimate({ cfg, passes: p.passes }), 0) -
     (oneFile(cfg) ? (pages.length - 1) * startTime(cfg.printer) : 0);
@@ -951,13 +951,13 @@
   };
   $("level").onchange = () => { PR_().level = $("level").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncLevel);
-  /** All pages in one file: shown once there are pages to put together; Bambu Lab printers only (their own pause). */
+  /** All pages in one file: shown once there are pages to put together; only on printers with a pause to rely on. */
   function syncOneFile(v, n) {
     $("oneFileRow").hidden = n < 2;
-    const ok = !!v && v.cfg.printer.dialect === "bambu";
+    const ok = !!v && !!v.cfg.printer.pause;
     $("oneFile").checked = ok && PR_().one_file === true; $("oneFile").disabled = !ok;
-    $("oneFileNote").textContent = ok ? "Save all pages as one file instead of one per page: the bed is levelled and the pen clamped once. After each page the pen lifts, the printer plays its tune and pauses: put in a new sheet where the last one was, then resume on the printer."
-      : "Bambu Lab A1, A1 mini, P1, P2S and X1 only: they pause after each page until you resume them. On this printer each page is its own file.";
+    $("oneFileNote").textContent = ok ? `Save all pages as one file instead of one per page: the bed is levelled and the pen clamped once. After each page the pen lifts${G.SOUND_PRINTERS.has(v.cfg.printer.model) ? ", a tune plays" : ""} and the printer pauses (${v.cfg.printer.pause}): put in a new sheet where the last one was, then resume on the printer.`
+      : "Not on this printer: it has no pause command Handplot can rely on to wait until you resume it, so each page is its own file.";
   }
   $("oneFile").onchange = () => { PR_().one_file = $("oneFile").checked; scheduleRender(0); };
   $("slide").checked = P_().slide === true;
@@ -1322,7 +1322,9 @@
       `The head lowers and waits ${pr.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`);
     if (penChange(v.passes)) steps.push(`When the first pen is done, the head rises and waits ${pr.pen_pause_s} s: take that pen out. Then it lowers and waits ${pr.pen_pause_s} s: slide the second pen in until it touches the paper, and clamp it.`);
     if (v.passes.length > 1) steps.push(G.passNote(v.passes) + ` You have ${pr.shift_pause_s} s each time.`);
-    if (pages > 1) steps.push(`After each page the pen lifts, the printer plays its tune and pauses (${pages - 1} times). Take the page out, leaving the pen clamped, put a new sheet where the last one was and tape it, then press Resume on the printer or in Bambu Handy. While it waits the printer parks the head, and brings it back when resumed.`);
+    if (pages > 1) steps.push(`After each page the pen lifts${G.SOUND_PRINTERS.has(pr.model) ? ", a tune plays" : ""} and the printer pauses (${pages - 1} times). ` +
+      "Wait until it shows it's paused, then take the page out, leaving the pen clamped, put a new sheet where the last one was and tape it, " +
+      `and resume the print on the printer${pr.dialect === "bambu" ? " or in Bambu Handy" : " (its screen, or its web page)"}. While it waits it may park the head; it brings it back when resumed.`);
     steps.push("Stay with the printer for the first run.");
     $("savedSteps").textContent = "";
     for (const s of steps) { const li = document.createElement("li"); li.textContent = s; $("savedSteps").append(li); }

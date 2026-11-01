@@ -180,7 +180,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     if (s.writing.code) tally.code++;
     if (/^(G29|M420|M555|BED_MESH_)/m.test(out.gcode)) tally.levelled++;
     if (s.printer.press_bottom > 0) tally.pressed++;
-    if (cfg.printer.dialect === "bambu" && rng.random() < 0.9) { // and as the first of several pages in one file
+    if (cfg.printer.pause && rng.random() < 0.9) { // and as the first of several pages in one file (printers with a pause)
       let book;
       try { book = G.toGcode(out.passes, cfg, ["t"], { pages: [1, 2].slice(0, 1 + Math.floor(rng.random() * 2)).map(k => run(s, pick(words) + " " + text, c + 97 * k).passes) }); }
       catch (e) { if (!(e instanceof G.WriteError)) throw e; continue; } // (a second pen, or a page that doesn't fit, is refused)
@@ -592,7 +592,7 @@ test("bed levelling, each maker's own way: after homing, pen out, cold, before t
   assert.throws(() => G.resolve(withSet({ "printer.level": "yes" })), /on or off/);
 });
 
-test("all pages in one file (Bambu Lab): one start, then after each page the pen well up, a tune and Bambu's own pause", () => {
+test("all pages in one file: one start, then after each page the pen well up, a tune (Bambu) and the printer's own pause", () => {
   const texts = ["Dear friend,\nThis is the first page of three.", "The second page, written after a pause.", "And the third, the last one."];
   const s = withSet({ "printer.model": "Bambu Lab A1" }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
   const pages = texts.map((t, k) => run(s, t, 5 + k)), cfg = pages[0].cfg, pr = cfg.printer;
@@ -611,24 +611,33 @@ test("all pages in one file (Bambu Lab): one start, then after each page the pen
   });
   const [, x, y, i, j] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(g.find(l => l.startsWith("G29 A1 "))).map(Number); // levelled under every page
   assert.ok(draws(book).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number)).every(([dx, dy]) => dx >= x && dx <= x + i && dy >= y && dy <= y + j));
-  // Bambu Lab printers only (their own pause), and no second pen across pages
-  const other = withSet({ "printer.model": "Prusa MK4" }); Object.assign(other.paper, G.placePaper(G.resolve(other)));
-  const op = [run(other, texts[0], 5), run(other, texts[1], 6)];
-  assert.throws(() => G.toGcode(op[0].passes, op[0].cfg, ["t"], { pages: [op[1].passes] }), /Bambu Lab printers/);
+  // every other printer with a pause it can rely on uses its own (Klipper, Prusa, Marlin's two, a Duet), once per page break
+  const two = model => { const o = withSet({ "printer.model": model }); Object.assign(o.paper, G.placePaper(G.resolve(o))); return [run(o, texts[0], 5), run(o, texts[1], 6)]; };
+  for (const [model, cmd] of [["Voron 2.4 350", "PAUSE"], ["Prusa MK4", "M601"], ["Creality Ender-3", "M25"], ["Artillery Sidewinder X2", "M0"], ["Meltingplot MBL 133", "M226"]]) {
+    const [a, b] = two(model), file = G.toGcode(a.passes, a.cfg, ["t"], { pages: [b.passes] });
+    simulate(file, a.cfg);
+    assert.ok(file.split("\n").filter(l => l === cmd).length === 1 && !/^(M400 U1|M1006 .*)$/m.test(file), `${model}: ${cmd} once, no Bambu pause or tune`);
+    // the simulator refuses another printer's pause there (Bambu's)
+    assert.throws(() => simulate(file.replace(new RegExp(`^${cmd}$`, "m"), "M400 U1"), a.cfg), /pause where it can't be/);
+  }
+  // none where the printer's pause can't be relied on (Lulzbot's is a filament change), and no second pen across pages
+  const [la, lb] = two("Lulzbot Taz 6");
+  assert.throws(() => G.toGcode(la.passes, la.cfg, ["t"], { pages: [lb.passes] }), /no pause command/);
   assert.throws(() => G.toGcode(pages[0].passes, cfg, ["t"], { pages: [run(s, "Hello *there*", 8).passes] }), /second pen/);
-  // the simulator refuses Bambu's pause on another printer, or with the pen at the paper
-  assert.throws(() => simulate(op[0].gcode.replace(/^(G1 Z\S+ F\d+)$/m, "$1\nM400 U1"), op[0].cfg), /pause where it can't be/);
+  // the simulator refuses a pause with the pen at the paper
   assert.throws(() => simulate(pages[0].gcode.replace(/^(G1 X\S+ Y\S+ F\d+)$/m, "$1\nM400 U1"), cfg), /pause where it can't be/);
 });
 
 test("every printer OrcaSlicer knows: a page is safe in its own coordinates, and its firmware gets G-code it reads", () => {
   const ORCA = require("../printers.js");
   // the data: sane rectangles, keep-outs inside the bed, the plate around the bed, known firmware
-  for (const list of Object.values(ORCA)) for (const [name, [x0, y0, x1, y1, z, fw, keep, plate]] of Object.entries(list)) {
+  for (const list of Object.values(ORCA)) for (const [name, [x0, y0, x1, y1, z, fw, keep, pause, plate]] of Object.entries(list)) {
     assert.ok(x1 - x0 >= 50 && y1 - y0 >= 50 && x1 - x0 <= 1000 && y1 - y0 <= 1000 && z >= 50, name);
     assert.ok(["klipper", "marlin", "marlin2", "reprapfirmware", "repetier"].includes(fw), `${name}: firmware ${fw}`);
     for (const k of keep) assert.ok(k[0] >= x0 && k[1] >= y0 && k[2] <= x1 && k[3] <= y1 && k[2] > k[0] && k[3] > k[1], `${name}: keep-out`);
     if (plate) assert.ok(plate[0] <= x0 && plate[1] <= y0 && plate[2] >= x1 && plate[3] >= y1, `${name}: plate`);
+    const firmware = { "": /./, PAUSE: /^klipper$/, M0: /^marlin2?$/, M25: /^marlin2?$/, M226: /^reprapfirmware$/, M601: /^marlin2?$/ }[pause];
+    assert.ok(firmware && firmware.test(fw) && (pause !== "M601" || name.startsWith("Prusa ")), `${name}: pause ${pause} on ${fw}`); // its own firmware's
   }
   let made = 0, refused = 0;
   for (const model of Object.keys(G.PRINTERS).filter(m => G.PRINTERS[m])) {

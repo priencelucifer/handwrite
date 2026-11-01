@@ -35,9 +35,11 @@ and word gaps are never the same twice.
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
 - **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.
-- **All pages in one file** (Bambu Lab printers): the bed is levelled and the pen clamped once. After each page the pen
-  lifts, the printer plays its tune and pauses (`M400 U1`, Bambu Studio's own pause) until you've put in a new sheet and
-  pressed Resume.
+- **All pages in one file** (about 220 printers: those with a pause command that waits until resumed): the bed is
+  levelled and the pen clamped once. After each page the pen lifts and the printer pauses with its own command (Bambu
+  `M400 U1` with its tune, Klipper `PAUSE`, Prusa `M601`, Marlin `M0` or `M25`, Duet `M226`) until you've put in a new
+  sheet and resumed it. The paper and pen pauses stay timed: a printer's pause may park the head, and those two need it to
+  stay put.
 - **Lined paper**: pick the ruling and every line of writing sits on a printed line, right of the margin line.
 - **Underlines and a second pen**: `_like this_` is underlined by hand, `*like this*` is written with a second pen after a pen change.
   A `*` or `_` on its own, as in `5 * 3`, is simply written.

@@ -1131,9 +1131,9 @@
       </figure>
       <p class="note">Change the pause lengths in <span class="ui">Printer settings → Pauses during printing</span>. For long pages with <span class="ui">Long pages</span> ticked,
         there's a third pause: the pen stops over the last mark it wrote; slide the paper toward the back until that mark is right under the pen tip.</p>
-      <p class="note"><b>Several pages on a Bambu Lab printer?</b> Turn on <span class="ui">Printing → All pages in one file</span> and save them as one file: the bed is levelled and the pen clamped only once.
-        After each page the pen lifts, the printer plays its tune and pauses. Take the page out (the pen stays clamped), put a new sheet where the last one was, then press Resume on the printer or in Bambu Handy.
-        Mark where the paper goes before you start, so every sheet lands in the same place. Off, each page is its own file, as before.</p>
+      <p class="note"><b>Several pages?</b> Turn on <span class="ui">Printing → All pages in one file</span> and save them as one file: the bed is levelled and the pen clamped only once.
+        After each page the pen lifts and the printer pauses with its own pause command (Bambu Lab printers play a tune first). Wait until it shows it's paused, take the page out (the pen stays clamped), put a new sheet where the last one was, then resume it on the printer.
+        Mark where the paper goes before you start, so every sheet lands in the same place. Off, each page is its own file, as before. It's offered on Bambu Lab, Prusa, Duet and most Klipper and Marlin printers: those whose pause command waits until resumed.</p>
       <p class="note warn"><b>First time on a printer?</b> Click <span class="ui">Printing → Save reach check</span> and run that file with no pen and no paper: the head visits the far corners of the page's writing at the height it travels at, slowly, so you can see the pen holder clears the bed clips, wiper and frame.
         Then do a dry run: tick <span class="ui">Printing → Dry run</span> and save: the pen is clamped as usual, then stays 8 mm above the paper the whole way. Watch it with a hand near the stop button.</p>
     </div>
@@ -1322,7 +1322,7 @@
     <div class="wrap">
       <div class="sec-head" data-stagger>
         <p class="kicker">Supported printers</p>
-        <h2>Works with 404 printers</h2>
+        <h2>Works with 406 printers</h2>
         <p class="intro">Bambu Lab, and every printer OrcaSlicer knows with a rectangular bed, each with its own writing area, keep-out areas
           and firmware. Among them: Bambu Lab A1, P1P / P1S and X1 Carbon / X1E, Prusa MK4, MINI and CORE One, Creality Ender-3 V3, Ender-3 Neo and K1, Anycubic Kobra Neo, Kobra 2 and Kobra 3, Elegoo Centauri Carbon and Neptune 4, Voron 2.4 350 and Trident 300, Qidi Q1 Pro, Sovol SV06 and SV07, Flashforge Adventurer 5M and Artillery Sidewinder X2.</p>
       </div>
@@ -1333,14 +1333,14 @@
         <li><a href="printers.html#anycubic"><b>Anycubic</b><span>20 printers</span></a></li>
         <li><a href="printers.html#elegoo"><b>Elegoo</b><span>18 printers</span></a></li>
         <li><a href="printers.html#voron"><b>Voron</b><span>8 printers</span></a></li>
-        <li><a href="printers.html#qidi"><b>Qidi</b><span>12 printers</span></a></li>
+        <li><a href="printers.html#qidi"><b>Qidi</b><span>13 printers</span></a></li>
         <li><a href="printers.html#sovol"><b>Sovol</b><span>13 printers</span></a></li>
         <li><a href="printers.html#flashforge"><b>Flashforge</b><span>9 printers</span></a></li>
         <li><a href="printers.html#artillery"><b>Artillery</b><span>9 printers</span></a></li>
         <li><a href="printers.html#snapmaker"><b>Snapmaker</b><span>19 printers</span></a></li>
         <li><a href="printers.html#ratrig"><b>Ratrig</b><span>15 printers</span></a></li>
       </ul>
-      <p class="printers-more"><a class="btn" href="printers.html">See all 404 printers and find yours →</a></p>
+      <p class="printers-more"><a class="btn" href="printers.html">See all 406 printers and find yours →</a></p>
     </div>
   </section>
 <!--/PRINTERS-->
