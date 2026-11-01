@@ -111,7 +111,7 @@ ${shared}
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
       <nav class="site-menu" id="siteMenu" aria-label="Site"><a href="index.html">How to use</a><a href="index.html#edit">Edit words</a>
-        <a href="index.html#guide">The guide</a><a href="index.html#faq">FAQ</a><a href="app.html">Open the app</a></nav>
+        <a href="index.html#guide">The guide</a><a href="index.html#faq">FAQ</a><a href="https://discord.gg/knwsvtPMGE">Join the Discord</a><a href="app.html">Open the app</a></nav>
     </div>
   </div>
 </header>
@@ -146,7 +146,7 @@ ${sections}
 </main>
 <footer>
   <div class="wrap">Made by <b>Ricky Kashyap</b> · <a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener">LinkedIn</a> ·
-    <a href="https://github.com/priencelucifer/handwrite">Source code</a>. Printer data from <a href="https://github.com/OrcaSlicer/OrcaSlicer">OrcaSlicer</a> (AGPL-3.0).</div>
+    <a href="https://discord.gg/knwsvtPMGE">Discord</a> · <a href="https://github.com/priencelucifer/handwrite">Source code</a>. Printer data from <a href="https://github.com/OrcaSlicer/OrcaSlicer">OrcaSlicer</a> (AGPL-3.0).</div>
 </footer>
 <script>
 "use strict";

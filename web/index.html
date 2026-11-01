@@ -156,6 +156,8 @@
   .brand { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; color: var(--text); text-decoration: none; font: 400 22px/1 var(--font-display); letter-spacing: -.01em; }
   .brand svg { color: var(--accent); }
   .top-cta { margin-left: auto; }
+  .top-link { display: none; } /* phones: the Discord link is in the menu */
+  @media (min-width: 640px) { .top-link { display: inline-flex; margin-left: auto; } .top-link + .top-cta { margin-left: 0; } }
   .menu-btn, .menu-close { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-strong);
     border-radius: var(--r-pill); background: var(--surface); color: var(--text); cursor: pointer; transition: background-color var(--d1), border-color var(--d1); }
   .menu-btn:hover, .menu-close:hover { background: var(--surface-2); border-color: var(--field); }
@@ -755,6 +757,7 @@
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       Handplot
     </a>
+    <a class="btn ghost small top-link" href="https://discord.gg/knwsvtPMGE" target="_blank" rel="noopener">Discord</a>
     <a class="btn primary small top-cta" href="app.html">Open the app</a>
     <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="menu">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -769,6 +772,7 @@
   <a href="#how">How it works</a><a href="#edit">Edit words</a><a href="#holder">Pen holder</a><a href="#calibrate">Calibrate</a><a href="#paper">Paper</a><a href="#printing">Printing</a><a href="#settings">Settings</a><a href="#more">Extras</a><a href="#printers">Printers</a><a href="#faq">FAQ</a>
   <hr>
   <a href="printers.html">All supported printers</a>
+  <a href="https://discord.gg/knwsvtPMGE" target="_blank" rel="noopener">Join the Discord</a>
   <a class="btn primary" href="app.html">Open the app</a>
 </nav>
 
@@ -1369,6 +1373,7 @@
       <details><summary>Can I move a word, or make one line bigger?</summary><p>Yes. Click the word in the preview: a bar opens under it to move it (drag it or use the arrow keys), make it bigger or smaller, give it another handwriting, write it again or add words after it. Switch the bar to <span class="ui">Whole line</span> to change its whole line or add a new line under it. See <a href="#edit">Edit any word or line</a>.</p></details>
       <details><summary>Which printers does it work with?</summary><p>Bambu Lab printers (A1, A1 mini, P1P / P1S, P2S and X1, checked by hand; it was built on an A1), and every printer OrcaSlicer knows that has a rectangular bed: Prusa, Creality, Voron, Elegoo, Qidi, Anycubic, Sovol and many more, over 400 in all. Each one's bed size, keep-out areas and firmware come from OrcaSlicer's printer profiles, and Klipper printers get pauses written the way Klipper reads them. Round (delta) and belt printers aren't supported. On a printer for the first time, save a <span class="ui">reach check</span> and a <span class="ui">dry run</span> before using ink: the data comes from OrcaSlicer, and only you can see how the pen holder fits. See the <a href="printers.html">full list of supported printers</a>. For any other printer, pick <span class="ui">Custom</span> and enter its bed size.</p></details>
       <details><summary>Is the G-code safe for my printer?</summary><p>Every setting is range-checked, and every move in the file is checked against the chosen printer's bed (and the P1/X1 filament-cutter corner) before it is saved. If anything is unsafe, the app refuses to save and says why. Only run a file on the printer named at the top of it, and do a dry run first.</p></details>
+      <details><summary>Where can I ask a question or show what I wrote?</summary><p>In the <a href="https://discord.gg/knwsvtPMGE" target="_blank" rel="noopener">Handplot Discord</a>: ask about your printer, share a photo of a page, or suggest what to add next.</p></details>
       </div>
     </div>
   </section>
@@ -1384,7 +1389,7 @@
 </main>
 <footer>
   <div class="wrap foot">
-    <p class="maker">Made by <b>Ricky Kashyap</b> · <a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener" target="_blank">LinkedIn</a> · <a href="https://github.com/priencelucifer" rel="me noopener" target="_blank">GitHub</a> · <a href="https://github.com/priencelucifer/handwrite" target="_blank" rel="noopener">Source code</a></p>
+    <p class="maker">Made by <b>Ricky Kashyap</b> · <a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener" target="_blank">LinkedIn</a> · <a href="https://github.com/priencelucifer" rel="me noopener" target="_blank">GitHub</a> · <a href="https://github.com/priencelucifer/handwrite" target="_blank" rel="noopener">Source code</a> · <a href="https://discord.gg/knwsvtPMGE" target="_blank" rel="noopener">Discord</a></p>
     <p class="credits">Handwriting model and weights from <a href="https://github.com/sjvasquez/handwriting-synthesis">sjvasquez/handwriting-synthesis</a> (trained on IAM-OnDB),
     inference ported from <a href="https://github.com/tibordp/kurvengefahr">tibordp/kurvengefahr</a>, G-code conventions from
     <a href="https://github.com/Joep648/BambuPlot">BambuPlot</a>, printer tunes from <a href="https://github.com/bambulab/BambuStudio">Bambu Studio</a>, printer beds from <a href="https://github.com/OrcaSlicer/OrcaSlicer">OrcaSlicer</a>.</p>
