@@ -202,7 +202,7 @@
   // paper x/y: placePaper() of these defaults, so the first page sits where the pen reaches.
   const DEFAULT_SETTINGS = {
     printer: { model: "Bambu Lab A1", bed_x: 256, bed_y: 256, bed_z: 150, offset_x: 1, offset_y: -25,
-      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, page_pause_s: 60, z_draw: 10, z_lift: 12, press_bottom: 0, level: true, one_file: false,
+      paper_pause_s: 30, pen_pause_s: 30, shift_pause_s: 45, page_pause_s: 60, z_draw: 10, z_lift: 12, press_bottom: 0, level: true,
       z_feed: 600, draw_feed: 1500, travel_feed: 6000, settle_ms: 60, sounds: true, dry_run: false },
     // press_bottom: mm the pen goes lower by the bottom of the page than where it was clamped (no bed levelling with a
     // pen fitted, so a bed a little lower toward the front leaves the last lines faint). level: on LEVEL_PRINTERS, level
@@ -233,8 +233,8 @@
           throw new WriteError(`Setting ${key.replace(/_/g, " ")} = ${JSON.stringify(v)} must be a number from ${lo} to ${hi}.`);
       }
     const pr = cfg.printer, w = cfg.writing;
-    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, pr.one_file, w.page_numbers, w.code].some(v => typeof v !== "boolean"))
-      throw new WriteError("Settings sounds, slide, dry run, bed levelling, all pages in one file, page numbers and code must be on or off.");
+    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, w.page_numbers, w.code].some(v => typeof v !== "boolean"))
+      throw new WriteError("Settings sounds, slide, dry run, bed levelling, page numbers and code must be on or off.");
     if (!["portrait", "landscape"].includes(cfg.paper.orientation) || typeof w.style !== "string")
       throw new WriteError("Paper orientation must be portrait or landscape, and style a name.");
     if (typeof w.header !== "string" || w.header.length > 80) throw new WriteError("The header must be text, 80 characters at most.");

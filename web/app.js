@@ -318,7 +318,7 @@
     if (sel && !selected().length) select(null); // its words are gone (text changed) or on another page
     draw(); updateSummary(); syncBar();
     if (!load(STORE.toured, false)) startTour(); // first visit: show what each part is for, once the page is there
-    else if (pages.length > 1) tipOnce("pages", `Your text runs onto ${pages.length} pages. Use the arrows above the preview to see each one, and Save all pages to get them all.`);
+    else if (pages.length > 1) tipOnce("pages", `Your text runs onto ${pages.length} pages. Use the arrows above the preview to see each one, and Save all ${pages.length} pages in one file: the printer waits for a new sheet after each page.`);
   }
 
   /** The page on screen: {cfg, lines, passes}, or null. */
@@ -337,7 +337,7 @@
     $("status").className = "pill" + (busy ? " busy" : err ? " err" : "");
     const m = /(\d+) \/ (\d+)/.exec(text); $("status").style.setProperty("--p", busy && m ? (m[1] / m[2]).toFixed(3) : "0"); // pill progress
     $("statusText").textContent = text;
-    $("save").disabled = $("saveAll").disabled = busy || !state.view || !!state.error;
+    $("save").disabled = $("saveBook").disabled = $("saveAll").disabled = busy || !state.view || !!state.error;
   }
   function updateSummary() {
     $("error").hidden = !state.error;
@@ -346,17 +346,26 @@
     if (fix) { const b = document.createElement("button"); b.type = "button"; b.className = "fix"; b.textContent = fix[0]; b.onclick = fix[1]; $("error").append(b); }
     syncMore();
     const v = cur(), n = state.view ? state.view.pages.length : 0;
-    $("pager").hidden = n < 2; $("saveAll").hidden = n < 2;
-    syncOneFile(v, n);
+    // several pages: all of them in one file is the main button; one page, or a zip of one file per page, beside it
+    $("pager").hidden = $("saveBook").hidden = $("bookNote").hidden = $("saveAll").hidden = n < 2;
+    $("save").classList.toggle("primary", n < 2);
     const tags = [state.dryRun && "dry run", v && startLine(v) > 1 && `from line ${startLine(v)}`].filter(Boolean).join(", ");
     $("save").textContent = (n > 1 ? `Save page ${state.page + 1}` : "Save G-code") + (tags ? ` (${tags})` : "");
-    if (n > 1) { $("pageLabel").textContent = `Page ${state.page + 1} of ${n}`; $("saveAll").textContent = `Save all ${n} pages` + (v && oneFile(v.cfg) ? " in one file" : "") + (state.dryRun ? " (dry run)" : ""); }
+    if (n > 1) {
+      $("pageLabel").textContent = `Page ${state.page + 1} of ${n}`;
+      $("saveBook").textContent = `Save all ${n} pages in one file` + (state.dryRun ? " (dry run)" : "");
+      $("saveAll").textContent = `or as ${n} separate files (.zip)`;
+      if (v) { // short here; the whole of it in the button's tooltip and the steps shown after saving
+        $("bookNote").textContent = `One G-code: the bed is levelled and the pen clamped once, then it ${v.cfg.printer.pause ? "pauses" : `waits ${v.cfg.printer.page_pause_s} s`} for a new sheet after each page.`;
+        $("saveBook").title = pageChange(v.cfg.printer);
+      }
+    }
     if (v) $("startLine").max = v.lines.length;
     $("prevPage").disabled = state.page <= 0; $("nextPage").disabled = state.page >= n - 1;
     $("summary").hidden = !v || !!state.error;
     if (!v || state.error) return;
-    const t = eta(v), all = n > 1 ? eta(allPagesTime(v.cfg, state.view.pages)) : null;
-    $("summary").innerHTML = (all ? `⏱ Page ${state.page + 1}: about <b>${t.dur}</b> · all ${n} pages${oneFile(v.cfg) ? " in one file" : ""}: about <b>${all.dur}</b> (plus changing paper)<br>`
+    const t = eta(v), all = n > 1 ? eta(allPagesTime(v.cfg, state.view.pages, true)) : null;
+    $("summary").innerHTML = (all ? `⏱ Page ${state.page + 1}: about <b>${t.dur}</b> · all ${n} pages in one file: about <b>${all.dur}</b> (plus changing paper)<br>`
       : `⏱ Writing takes about <b>${t.dur}</b> · done around <b>${t.at}</b> if you start now<br>`) +
       `${v.cfg.printer.model} · ${v.cfg.paper.size} ${v.cfg.paper.orientation}` +
       (v.passes.length > 1 ? `<br>${escapeHtml(G.passNote(v.passes))}` : "");
@@ -368,11 +377,10 @@
   /** What a file spends before it writes: homing (+40 s), measuring the bed (about a minute and a half), the paper and pen pauses. */
   const startTime = pr => 40 + pr.paper_pause_s + pr.pen_pause_s +
     (pr.level && G.LEVEL_PRINTERS.has(pr.model) && !G.LEVEL_SAVED.has(G.LEVEL_PRINTERS.get(pr.model)) ? 90 : 0);
-  /** All pages in one file: one start for every page, then after each a pause until resumed, or a timed wait. */
-  const oneFile = cfg => cfg.printer.one_file === true;
-  /** Rough time for all pages: one file starts once, separate files once each (the paper changes not counted). */
-  const allPagesTime = (cfg, pages) => pages.reduce((sum, p) => sum + estimate({ cfg, passes: p.passes }), 0) -
-    (oneFile(cfg) ? (pages.length - 1) * (startTime(cfg.printer) - (cfg.printer.pause ? 0 : cfg.printer.page_pause_s)) : 0);
+  /** Rough time for all pages: one file (one) starts once and waits between pages, separate files start once each
+   *  (the paper changes not counted). */
+  const allPagesTime = (cfg, pages, one) => pages.reduce((sum, p) => sum + estimate({ cfg, passes: p.passes }), 0) -
+    (one ? (pages.length - 1) * (startTime(cfg.printer) - (cfg.printer.pause ? 0 : cfg.printer.page_pause_s)) : 0);
   /** Rough print time: drawing + travel + pen up/down + pauses. */
   function estimate({ cfg, passes }) {
     const pr = cfg.printer, d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -951,19 +959,12 @@
   };
   $("level").onchange = () => { PR_().level = $("level").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncLevel);
-  /** All pages in one file: shown once there are pages to put together. */
-  function syncOneFile(v, n) {
-    $("oneFileRow").hidden = n < 2;
-    $("oneFile").checked = PR_().one_file === true;
-    $("oneFileNote").textContent = "Save all pages as one file instead of one per page: the bed is levelled and the pen clamped once. " + (v ? pageChange(v.cfg.printer) : "");
-  }
   /** What happens between pages in one file, for the user. */
   function pageChange(pr) {
     return `After each page the pen lifts to the back of the plate (a bed that slides comes forward)${G.SOUND_PRINTERS.has(pr.model) ? ", a tune plays" : ""} and ` +
       (pr.pause ? `the printer pauses (${pr.pause}): put in a new sheet where the last one was, then resume on the printer.`
         : `the printer waits ${pr.page_pause_s} s: put in a new sheet where the last one was (set the time in Printer settings, Between pages).`);
   }
-  $("oneFile").onchange = () => { PR_().one_file = $("oneFile").checked; scheduleRender(0); };
   $("slide").checked = P_().slide === true;
   $("slide").onchange = () => { P_().slide = $("slide").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncSounds);
@@ -1036,7 +1037,7 @@
     paper_pause_s: ["Pause 1: place the paper", "s", "After homing, the head rises and stops right above where the first letter will be written, then waits this long. Put the paper where the preview shows it and tape it down. The pen is not in the holder yet."],
     pen_pause_s: ["Pause 2: attach the pen", "s", "The head lowers to the writing height over the first letter and waits this long. Slide the pen down through the holder until the tip just touches the paper, then clamp it. Writing starts when the pause ends."],
     shift_pause_s: ["Pause 3: slide the paper", "s", "Only with \"Slide the paper\" on, for pages longer than the pen reaches, like A4 on an A1. The pen stops just above where the last written mark must end up; slide the paper toward the back until that mark is right under the pen tip. Once per extra pass."],
-    page_pause_s: ["Between pages", "s", "Only with \"All pages in one file\" on, on printers that can't pause until resumed (Bambu Lab's pause warms the nozzle beside the pen holder). After each page the pen lifts to the back of the plate (a bed that slides comes forward) and the printer waits this long: take the page out and put a new sheet where it was."],
+    page_pause_s: ["Between pages", "s", "Only for \"Save all pages in one file\", on printers that can't pause until resumed (Bambu Lab's pause warms the nozzle beside the pen holder). After each page the pen lifts to the back of the plate (a bed that slides comes forward) and the printer waits this long: take the page out and put a new sheet where it was."],
     z_draw: ["Writing height", "mm", "Nozzle height while the pen is down. The pen is clamped touching the paper at this height in pause 2, so any height that clears the holder works. At least 2 mm."],
     press_bottom: ["Press harder toward the bottom", "mm", "If the writing gets fainter down the page, the bed sits a little lower there (the printer can't level the bed with a pen fitted). The pen goes this much lower by the bottom of the page, starting from nothing at the first letter. Try 0.3, then more if the last lines are still faint. 0 is off; at most 2."],
     z_lift: ["Pen-up height", "mm", "Nozzle height when moving between strokes. About 2 mm above the writing height: handwriting lifts the pen thousands of times."],
@@ -1336,23 +1337,25 @@
     $("savedDlg").showModal();
   }
 
-  // ---------- save all pages: one zip into Downloads, or one file that pauses between pages ----------
-  $("saveAll").onclick = async () => {
+  // ---------- save all pages: one file that waits for a new sheet after each page, or a zip of one file per page ----------
+  $("saveBook").onclick = () => saveAllPages(true);
+  $("saveAll").onclick = () => saveAllPages(false);
+  async function saveAllPages(one) {
     const view = state.view;
     if (!view || state.error || state.busy) return;
     const n = view.pages.length;
     let files;
     try {
       const cfg = G.resolve(state.settings);
-      if (JSON.stringify(cfg) !== JSON.stringify(view.cfg)) { await render(); return $("saveAll").click(); }
+      if (JSON.stringify(cfg) !== JSON.stringify(view.cfg)) { await render(); return saveAllPages(one); }
       const out = outCfg(cfg);
-      if (oneFile(out)) {
+      if (one) {
         const [first, ...rest] = view.pages.map(p => G.planPasses(p.lines, out)), name = tagged(`handwriting-${n}-pages.gcode`, 1);
-        const gcode = G.toGcode(first, out, [...G.describe(out, state.seed), `all ${n} pages in one file: it pauses after each page until resumed on the printer`,
-          `estimated time: about ${eta(allPagesTime(out, view.pages)).dur} (including pauses, not the paper changes)`], { pages: rest });
+        const gcode = G.toGcode(first, out, [...G.describe(out, state.seed), `all ${n} pages in one file: after each page it waits for a new sheet`,
+          `estimated time: about ${eta(allPagesTime(out, view.pages, true)).dur} (including pauses, not the paper changes)`], { pages: rest });
         const where = await download(gcode, name, "text/plain");
         if (!where) return;
-        $("savedWhere").textContent = `${where} Only run it on the ${view.cfg.printer.model}. All ${n} pages take about ${eta(allPagesTime(view.cfg, view.pages)).dur}, plus changing the paper.`;
+        $("savedWhere").textContent = `${where} Only run it on the ${view.cfg.printer.model}. All ${n} pages take about ${eta(allPagesTime(view.cfg, view.pages, true)).dur}, plus changing the paper.`;
         return showSteps({ cfg: view.cfg, passes: [] }, ["Before you start, mark where the paper goes on the plate (tape at two corners), so every sheet goes in the same place."], n);
       }
       files = view.pages.map((p, k) => ({ name: tagged(pageFile(k, n), 1), text: G.toGcode(G.planPasses(p.lines, out), out,
@@ -1366,7 +1369,7 @@
     $("savedWhere").textContent = `${where} Only run them on the ${view.cfg.printer.model}. All pages together take about ${all.dur}, plus changing the paper.`;
     const changing = view.pages.find(p => penChange(p.passes)); // its passes only tell showSteps to explain the pen change
     showSteps({ cfg: view.cfg, passes: changing ? changing.passes : [] }, [`Print the files in order, ${files[0].name} first. Each page is a complete job: put a fresh sheet in for each one.`]);
-  };
+  }
   function saveBlob(blob, name) {
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);

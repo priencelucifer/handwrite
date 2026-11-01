@@ -383,11 +383,15 @@
   @media (prefers-color-scheme: dark) { .actions { box-shadow: 0 -8px 20px -12px rgba(0,0,0,.6); } }
   .actions .btn { height: auto; min-height: 44px; padding: 6px 12px; gap: 6px; font-size: 14px; white-space: normal; line-height: 1.2; text-align: center; }
   #reroll { white-space: nowrap; }
-  #saveAll { grid-column: 1 / -1; }
-  #save::before, #saveAll::before { content: ""; flex: none; width: 18px; height: 18px; background: currentColor;
+  #saveBook, #bookNote, #saveAll { grid-column: 1 / -1; }
+  #saveBook { min-height: 52px; font-size: 15px; font-weight: 650; } /* several pages: the main way to save them */
+  #bookNote { margin: -4px 2px 0; font-size: 12.5px; line-height: 1.4; }
+  #saveAll { min-height: 36px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); font-size: 13px; }
+  #saveAll:hover { color: var(--text); background: var(--surface-2); }
+  #save::before, #saveBook::before, #saveAll::before { content: ""; flex: none; width: 18px; height: 18px; background: currentColor;
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4v11M7 10l5 5 5-5M5 20h14'/%3E%3C/svg%3E") center / 18px no-repeat;
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4v11M7 10l5 5 5-5M5 20h14'/%3E%3C/svg%3E") center / 18px no-repeat; }
-  body:has(#status.busy) #save:disabled, body:has(#status.busy) #saveAll:disabled { cursor: progress; }
+  body:has(#status.busy) #save:disabled, body:has(#status.busy) #saveBook:disabled, body:has(#status.busy) #saveAll:disabled { cursor: progress; }
   .spin { display: inline-block; font-size: 17px; line-height: 1; transition: transform 400ms var(--e-out); }
   #reroll:active .spin { transform: rotate(-180deg); }
 
@@ -548,6 +552,8 @@
     .scroll { overflow: visible; }
     .card h2 { position: static; }
     .actions { position: sticky; bottom: 0; z-index: 5; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+    #bookNote { display: none; } /* a phone's bar stays short: the tip and the steps after saving say it */
+    #saveAll { min-height: 30px; margin-top: -4px; }
     .row { grid-template-columns: 104px minmax(0,1fr); }
     section.card { padding-inline: 16px; }
     .card h2 { margin-inline: -16px; padding-inline: 16px; }
@@ -643,7 +649,6 @@
       <section class="card">
         <h2>Printing</h2>
         <div class="row toggle"><label for="level">Level the bed first</label><input type="checkbox" id="level"><p class="hint" id="levelNote"></p></div>
-        <div class="row toggle" id="oneFileRow" hidden><label for="oneFile">All pages in one file</label><input type="checkbox" id="oneFile"><p class="hint" id="oneFileNote"></p></div>
         <details class="more" id="morePrint"><summary><span class="more-t">Options</span><span class="more-s" id="morePrintSum"></span></summary>
           <div class="more-body">
           <div class="row toggle"><label for="dryRun">Dry run</label><input type="checkbox" id="dryRun"><p class="hint">The pen stays 8 mm above the paper: test a run without ink</p></div>
@@ -660,7 +665,9 @@
     <div class="actions">
       <button class="btn" id="reroll" type="button" title="Write the whole page again with fresh handwriting (your word changes stay)"><span class="spin" aria-hidden="true">↻</span> New version</button>
       <button class="btn primary" id="save" type="button" title="Save G-code (Ctrl+S)" disabled>Save G-code</button>
-      <button class="btn" id="saveAll" type="button" hidden disabled>Save all pages</button>
+      <button class="btn primary" id="saveBook" type="button" hidden disabled>Save all pages in one file</button>
+      <p class="hint" id="bookNote" hidden></p>
+      <button class="btn" id="saveAll" type="button" hidden disabled>Save all pages as separate files</button>
     </div>
   </aside>
   <div class="stage">

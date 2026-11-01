@@ -35,7 +35,7 @@ and word gaps are never the same twice.
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
 - **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.
-- **All pages in one file**: the bed is levelled and the pen clamped once. After each page the pen lifts to the back
+- **Save all pages in one file** (the main button once text runs onto a second page): the bed is levelled and the pen clamped once. After each page the pen lifts to the back
   of the plate (a sliding bed comes forward) while you put in a new sheet. Printers with a pause that waits until
   resumed use it (Klipper `PAUSE`, Prusa `M601`, Marlin `M0` or `M25`, Duet `M226`), then switch both heaters off again;
   Bambu Lab printers, and any without one, wait a set time instead (Printer settings, Between pages), with Bambu's tune.
