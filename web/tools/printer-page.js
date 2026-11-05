@@ -16,6 +16,13 @@ const index = fs.readFileSync(path.join(WEB, "index.html"), "utf8");
 // the site's shared design tokens and base styles, taken from the guide so the pages stay one product
 const shared = index.slice(index.indexOf("  /* ---------- 1. shared tokens"), index.indexOf("  /* ---------- 3. guide"));
 const icon = /<link rel="icon"[^>]*>/.exec(index)[0];
+// the same menu as the guide (its side panel), with the guide's section links pointing back to it and this page marked as the current one
+const menuCss = index.slice(index.indexOf("  /* menu: side panel"), index.indexOf("  /* menu end */"));
+const menuStart = index.indexOf('<div class="menu-back"');
+const menuHtml = index.slice(menuStart, index.indexOf("</nav>", menuStart) + 6)
+  .replace(/href="#/g, 'href="index.html#').replace('class="drawer guide-nav"', 'class="drawer"')
+  .replace('class="drawer-row" href="printers.html"', 'class="drawer-row" href="printers.html" aria-current="page"');
+if (!menuCss.includes(".drawer {") || !menuHtml.includes('aria-current="page"')) throw new Error("index.html's menu changed: update printer-page.js");
 const title = `Supported 3D printers for handwriting G-code: Bambu Lab, Prusa, Creality, Anycubic, Voron and more | Handplot`;
 const desc = `Write real-looking handwriting with a pen on ${total} 3D printers: Bambu Lab A1, Prusa MK4, Creality Ender-3, Anycubic Kobra, Elegoo, Voron, Qidi and more. Every model with its bed size.`;
 const ld = { "@context": "https://schema.org", "@type": "WebPage", name: `Handwriting on ${total} 3D printers`, url: SITE + "printers", description: desc,
@@ -64,16 +71,7 @@ ${shared}
   .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font: 400 22px var(--font-display); }
   .brand svg { color: var(--accent); }
   .top-cta { margin-left: auto; }
-  .menu-wrap { position: relative; }
-  .menu-btn { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-strong); border-radius: var(--r-pill);
-    background: var(--surface); color: var(--text); cursor: pointer; }
-  .menu-btn:hover { background: var(--surface-2); }
-  .site-menu { position: absolute; right: 0; top: calc(100% + 8px); display: grid; min-width: 220px; padding: 6px; background: var(--surface);
-    border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh-3); }
-  .site-menu a { display: flex; align-items: center; min-height: 42px; padding: 0 12px; border-radius: var(--r-sm); color: var(--text); text-decoration: none; font-size: 15px; }
-  .site-menu a:hover { background: var(--surface-2); }
-  .js .site-menu:not(.open) { display: none; }
-  .intro { padding: 56px 0 24px; }
+${menuCss}  .intro { padding: 56px 0 24px; }
   .kicker { margin: 0 0 10px; font: 650 12px/1 var(--font-sans); letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
   h1 { margin: 0 0 16px; font: 400 clamp(34px, 5vw, 56px)/1.08 var(--font-display-xl); letter-spacing: -.01em; }
   .lead { max-width: 68ch; margin: 0 0 14px; font-size: 18px; color: var(--text-2); }
@@ -127,19 +125,17 @@ ${shared}
 </style>
 </head>
 <body>
+<script>document.documentElement.classList.add("js")</script>
 <header class="top">
   <div class="wrap bar">
     <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Handplot</a>
     <a class="btn primary small top-cta" href="app.html">Open the app</a>
-    <div class="menu-wrap">
-      <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="siteMenu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-      </button>
-      <nav class="site-menu" id="siteMenu" aria-label="Site"><a href="index.html">How to use</a><a href="index.html#edit">Edit words</a>
-        <a href="index.html#guide">The guide</a><a href="index.html#faq">FAQ</a><a href="https://discord.gg/knwsvtPMGE">Join the Discord</a><a href="app.html">Open the app</a></nav>
-    </div>
+    <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
   </div>
 </header>
+${menuHtml}
 <main>
   <div class="wrap intro">
     <p class="kicker">Supported printers</p>
@@ -195,14 +191,21 @@ ${sections}
 </footer>
 <script>
 "use strict";
-// menu: the hamburger opens the site's links (without this script they simply show)
+// menu: the hamburger opens the side panel (without this script its links simply show under the header)
 (() => {
-  document.documentElement.classList.add("js");
-  const btn = document.getElementById("menuBtn"), menu = document.getElementById("siteMenu");
-  const set = open => { menu.classList.toggle("open", open); btn.setAttribute("aria-expanded", open); };
-  btn.addEventListener("click", e => { e.stopPropagation(); set(!menu.classList.contains("open")); });
-  document.addEventListener("click", e => { if (!e.target.closest(".menu-wrap")) set(false); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") set(false); });
+  const btn = document.getElementById("menuBtn"), nav = document.getElementById("menu"), back = document.getElementById("menuBack"), root = document.documentElement;
+  const set = open => {
+    root.classList.toggle("menu-open", open);
+    btn.setAttribute("aria-expanded", open); nav.setAttribute("aria-hidden", !open);
+    if (open) nav.querySelector("a").focus({ preventScroll: true });
+    else if (nav.contains(document.activeElement)) btn.focus({ preventScroll: true });
+  };
+  btn.addEventListener("click", () => set(!root.classList.contains("menu-open")));
+  back.addEventListener("click", () => set(false));
+  document.getElementById("menuClose").addEventListener("click", () => set(false));
+  nav.addEventListener("click", e => { if (e.target.closest("a")) set(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && root.classList.contains("menu-open")) set(false); });
+  set(false);
 })();
 // find a printer: filters the list as you type (the full list is in the page without this)
 (() => {
