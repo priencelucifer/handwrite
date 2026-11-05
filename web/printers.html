@@ -160,8 +160,33 @@
   .models p { margin: 0; font: 12.5px/1.5 var(--font-mono); color: var(--text-3); }
   .none { padding: 40px 0; color: var(--text-2); }
   .cta { margin: 48px 0 0; padding: 36px 0; border-top: 1px solid var(--line); }
-  footer { padding: 28px 0 44px; border-top: 1px solid var(--line); color: var(--text-3); font-size: 13.5px; }
-  footer a { color: var(--text-2); }
+  footer { padding: 64px 0 36px; background: var(--bg-band); border-top: 1px solid var(--line); }
+  .foot-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; margin-bottom: 20px; }
+  .foot-title { margin: 0; font: 400 28px/1.2 var(--font-display); letter-spacing: -.01em; color: var(--text); }
+  .foot-sub { margin: 0; font-size: 14px; color: var(--text-3); }
+  .credit-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+  .credit-cards a { display: block; height: 100%; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+    color: var(--text); text-decoration: none; transition: border-color var(--d1), transform var(--d2) var(--e-out), box-shadow var(--d2); }
+  .credit-cards a:hover { border-color: var(--line-strong); transform: translateY(-2px); box-shadow: var(--sh-2); }
+  .credit-cards .k { display: block; font: 650 11px/1.3 var(--font-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); }
+  .credit-cards .n { display: block; margin-top: 10px; font: 400 19px/1.25 var(--font-display); overflow-wrap: anywhere; }
+  .credit-cards .r { display: block; margin-top: 4px; font: 12.5px/1.45 var(--font-mono); color: var(--text-3); }
+  .foot-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); }
+  .foot-made { margin: 0; font-size: 15px; color: var(--text-2); }
+  .foot-made b { color: var(--text); font-weight: 600; }
+  .foot-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .foot-links a { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border: 1px solid var(--line-strong); border-radius: var(--r-pill);
+    background: var(--surface); color: var(--text); font-size: 14px; text-decoration: none; white-space: nowrap; transition: border-color var(--d1), color var(--d1); }
+  .foot-links a:hover { border-color: var(--accent); color: var(--accent); }
+  @media (max-width: 600px) {
+    footer { padding-top: 48px; }
+    .credit-cards { gap: 10px; }
+    .credit-cards a { padding: 13px 16px; }
+    .credit-cards .n { margin-top: 6px; font-size: 18px; }
+    .foot-bottom { margin-top: 32px; }
+    .foot-links { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } /* two even rows, no button left alone */
+    .foot-links a { width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -984,8 +1009,28 @@
   </div>
 </main>
 <footer>
-  <div class="wrap">Made by <b>Ricky Kashyap</b> · <a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener">LinkedIn</a> ·
-    <a href="https://discord.gg/knwsvtPMGE">Discord</a> · <a href="https://github.com/priencelucifer/handwrite">Source code</a>. Printer data from <a href="https://github.com/OrcaSlicer/OrcaSlicer">OrcaSlicer</a> (AGPL-3.0).</div>
+  <div class="wrap">
+    <div class="foot-head">
+      <h2 class="foot-title" id="credits">Built on open work</h2>
+      <p class="foot-sub">Handplot stands on these projects. Thank you.</p>
+    </div>
+    <ul class="credit-cards" aria-labelledby="credits">
+      <li><a href="https://github.com/sjvasquez/handwriting-synthesis"><span class="k">Handwriting model</span><span class="n">handwriting-synthesis</span><span class="r">by sjvasquez, trained on IAM-OnDB</span></a></li>
+      <li><a href="https://github.com/tibordp/kurvengefahr"><span class="k">Inference code</span><span class="n">kurvengefahr</span><span class="r">by tibordp</span></a></li>
+      <li><a href="https://github.com/Joep648/BambuPlot"><span class="k">G-code conventions</span><span class="n">BambuPlot</span><span class="r">by Joep648</span></a></li>
+      <li><a href="https://github.com/bambulab/BambuStudio"><span class="k">Printer tunes</span><span class="n">Bambu Studio</span><span class="r">by Bambu Lab</span></a></li>
+      <li><a href="https://github.com/OrcaSlicer/OrcaSlicer"><span class="k">Printer data</span><span class="n">OrcaSlicer</span><span class="r">by the OrcaSlicer team, AGPL-3.0</span></a></li>
+    </ul>
+    <div class="foot-bottom">
+      <p class="foot-made">Made by <b>Ricky Kashyap</b></p>
+      <ul class="foot-links" aria-label="Links">
+        <li><a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener">LinkedIn</a></li>
+        <li><a href="https://github.com/priencelucifer" rel="me noopener">GitHub</a></li>
+        <li><a href="https://github.com/priencelucifer/handwrite">Source code</a></li>
+        <li><a href="https://discord.gg/knwsvtPMGE">Discord</a></li>
+      </ul>
+    </div>
+  </div>
 </footer>
 <script>
 "use strict";
