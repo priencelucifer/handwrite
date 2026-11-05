@@ -16,13 +16,15 @@ const index = fs.readFileSync(path.join(WEB, "index.html"), "utf8");
 // the site's shared design tokens and base styles, taken from the guide so the pages stay one product
 const shared = index.slice(index.indexOf("  /* ---------- 1. shared tokens"), index.indexOf("  /* ---------- 3. guide"));
 const icon = /<link rel="icon"[^>]*>/.exec(index)[0];
-// the same menu as the guide (its side panel), with the guide's section links pointing back to it and this page marked as the current one
-const menuCss = index.slice(index.indexOf("  /* menu: side panel"), index.indexOf("  /* menu end */"));
+// the same menu as the guide (its styles, markup and script), with the guide's section links pointing back to it and this page marked as the current one
+const menuCss = index.slice(index.indexOf("  /* menu: "), index.indexOf("  /* menu end */"));
 const menuStart = index.indexOf('<div class="menu-back"');
 const menuHtml = index.slice(menuStart, index.indexOf("</nav>", menuStart) + 6)
   .replace(/href="#/g, 'href="index.html#').replace('class="drawer guide-nav"', 'class="drawer"')
-  .replace('class="drawer-row" href="printers.html"', 'class="drawer-row" href="printers.html" aria-current="page"');
-if (!menuCss.includes(".drawer {") || !menuHtml.includes('aria-current="page"')) throw new Error("index.html's menu changed: update printer-page.js");
+  .replace('class="drawer-tile" href="printers.html"', 'class="drawer-tile" href="printers.html" aria-current="page"');
+const jsStart = index.indexOf("// menu: the hamburger opens"), menuJs = index.slice(jsStart, index.indexOf("\n})();", jsStart) + 6);
+if (!menuCss.includes(".drawer {") || !menuHtml.includes('aria-current="page"') || !menuJs.includes('getElementById("menuBtn")'))
+  throw new Error("index.html's menu changed: update printer-page.js");
 const title = `Supported 3D printers for handwriting G-code: Bambu Lab, Prusa, Creality, Anycubic, Voron and more | Handplot`;
 const desc = `Write real-looking handwriting with a pen on ${total} 3D printers: Bambu Lab A1, Prusa MK4, Creality Ender-3, Anycubic Kobra, Elegoo, Voron, Qidi and more. Every model with its bed size.`;
 const ld = { "@context": "https://schema.org", "@type": "WebPage", name: `Handwriting on ${total} 3D printers`, url: SITE + "printers", description: desc,
@@ -191,22 +193,7 @@ ${sections}
 </footer>
 <script>
 "use strict";
-// menu: the hamburger opens the side panel (without this script its links simply show under the header)
-(() => {
-  const btn = document.getElementById("menuBtn"), nav = document.getElementById("menu"), back = document.getElementById("menuBack"), root = document.documentElement;
-  const set = open => {
-    root.classList.toggle("menu-open", open);
-    btn.setAttribute("aria-expanded", open); nav.setAttribute("aria-hidden", !open);
-    if (open) nav.querySelector("a").focus({ preventScroll: true });
-    else if (nav.contains(document.activeElement)) btn.focus({ preventScroll: true });
-  };
-  btn.addEventListener("click", () => set(!root.classList.contains("menu-open")));
-  back.addEventListener("click", () => set(false));
-  document.getElementById("menuClose").addEventListener("click", () => set(false));
-  nav.addEventListener("click", e => { if (e.target.closest("a")) set(false); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && root.classList.contains("menu-open")) set(false); });
-  set(false);
-})();
+${menuJs}
 // find a printer: filters the list as you type (the full list is in the page without this)
 (() => {
   const q = document.getElementById("q"), hits = document.getElementById("hits"), none = document.getElementById("none");
