@@ -5,6 +5,7 @@ from pathlib import Path
 
 WEB = Path(__file__).resolve().parents[1]
 RENAME = {"app.html": "Handwrite.html", "index.html": "Guide.html"}
+LINKS = {"/app": "Handwrite.html", "/printers": "printers.html", "/": "Guide.html"}  # the website links to its clean addresses
 FILES = ["app.html", "index.html", "guide-app.png", "app.js", "engine.js", "gcode.js", "weights.js", "styles.js", "printers.js", "printers.html", "README.txt", "moved.js", "favicon.svg", "apple-touch-icon.png"]
 
 out = WEB.parent / "dist" / "Handwrite-web.zip"
@@ -13,8 +14,9 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     for f in FILES:
         if f.endswith(".html"):
             html = (WEB / f).read_text(encoding="utf-8")
-            for old, new in RENAME.items():
-                html = html.replace(f'href="{old}', f'href="{new}')  # also page.html#section
+            for old, new in LINKS.items():
+                html = html.replace(f'href="{old}"', f'href="{new}"').replace(f'href="{old}#', f'href="{new}#')  # also /page#section
+            assert 'href="/' not in html, f"{f}: a site link the zip can't follow"
             z.writestr("Handwrite/" + RENAME.get(f, f), html)
         else:
             z.write(WEB / f, "Handwrite/" + f)

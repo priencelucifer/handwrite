@@ -19,6 +19,6 @@ test("printers.html lists every supported printer as plain HTML, and nothing els
 test("the home page links the list and gives the right count; the sitemap has the page", () => {
   const index = read("index.html");
   assert.match(index, new RegExp(`<h2>Works with ${names.length} printers</h2>`), "re-run: node web/tools/printer-page.js");
-  assert.ok(index.includes('href="printers.html"') && index.includes('href="#printers"'));
+  assert.ok(index.includes('href="/printers"') && index.includes('href="#printers"'));
   assert.ok(read("sitemap.xml").includes("<loc>https://handplot.org/printers</loc>"));
 });

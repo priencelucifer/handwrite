@@ -20,8 +20,8 @@ const icon = /<link rel="icon"[^>]*>/.exec(index)[0];
 const menuCss = index.slice(index.indexOf("  /* menu: "), index.indexOf("  /* menu end */"));
 const menuStart = index.indexOf('<div class="menu-back"');
 const menuHtml = index.slice(menuStart, index.indexOf("</nav>", menuStart) + 6)
-  .replace(/href="#/g, 'href="index.html#').replace('class="drawer guide-nav"', 'class="drawer"')
-  .replace('class="drawer-tile" href="printers.html"', 'class="drawer-tile" href="printers.html" aria-current="page"');
+  .replace(/href="#/g, 'href="/#').replace('class="drawer guide-nav"', 'class="drawer"')
+  .replace('class="drawer-tile" href="/printers"', 'class="drawer-tile" href="/printers" aria-current="page"');
 const jsStart = index.indexOf("// menu: the hamburger opens"), menuJs = index.slice(jsStart, index.indexOf("\n})();", jsStart) + 6);
 if (!menuCss.includes(".drawer {") || !menuHtml.includes('aria-current="page"') || !menuJs.includes('getElementById("menuBtn")'))
   throw new Error("index.html's menu changed: update printer-page.js");
@@ -130,8 +130,8 @@ ${menuCss}  .intro { padding: 56px 0 24px; }
 <script>document.documentElement.classList.add("js")</script>
 <header class="top">
   <div class="wrap bar">
-    <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Handplot</a>
-    <a class="btn primary small top-cta" href="app.html">Open the app</a>
+    <a class="brand" href="/"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Handplot</a>
+    <a class="btn primary small top-cta" href="/app">Open the app</a>
     <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="menu">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
@@ -147,7 +147,7 @@ ${menuHtml}
       Sovol and ${groups.length - 8} more makers. Each printer's writing area, keep-out areas and firmware come from
       <a href="https://github.com/OrcaSlicer/OrcaSlicer">OrcaSlicer</a>'s printer profiles; Bambu Lab's are checked by hand.</p>
     <p class="note"><b>First time on a printer?</b> Pick it in the app, run the offset test, then save a <b>reach check</b> (no pen, no paper)
-      and a <b>dry run</b> before using ink. <a href="index.html#calibrate">How to calibrate</a></p>
+      and a <b>dry run</b> before using ink. <a href="/#calibrate">How to calibrate</a></p>
     <ul class="makers" aria-label="Makers">
 ${groups.map(([v, n]) => `      <li><a href="#${slug(v)}">${esc(v)} <span>${n.length}</span></a></li>`).join("\n")}
     </ul>
@@ -164,7 +164,7 @@ ${sections}
       <p>Round (delta) printers such as FLSun and SeeMeCNC, belt printers such as the IdeaFormer IR3, and printers that need a file format
         of their own (Dremel, older Flashforge models, UltiMaker S5). Printer not listed? Pick <b>Custom</b> in the app and enter its bed size.</p>
     </section>
-    <div class="cta"><a class="btn primary lg" href="app.html">Open the app</a> <a class="btn lg" href="index.html">How it works</a></div>
+    <div class="cta"><a class="btn primary lg" href="/app">Open the app</a> <a class="btn lg" href="/">How it works</a></div>
   </div>
 </main>
 <footer>
@@ -238,9 +238,9 @@ const block = `<!--PRINTERS-->
           and firmware. Among them: ${and(POPULAR.map(([maker, models]) => `${maker} ${and(models)}`))}.</p>
       </div>
       <ul class="printer-makers" data-stagger>
-${top.map(([v, n]) => `        <li><a href="printers.html#${slug(v)}"><b>${esc(v)}</b><span>${n.length} printer${n.length === 1 ? "" : "s"}</span></a></li>`).join("\n")}
+${top.map(([v, n]) => `        <li><a href="/printers#${slug(v)}"><b>${esc(v)}</b><span>${n.length} printer${n.length === 1 ? "" : "s"}</span></a></li>`).join("\n")}
       </ul>
-      <p class="printers-more"><a class="btn" href="printers.html">See all ${total} printers and find yours →</a></p>
+      <p class="printers-more"><a class="btn" href="/printers">See all ${total} printers and find yours →</a></p>
     </div>
   </section>
 <!--/PRINTERS-->`;
