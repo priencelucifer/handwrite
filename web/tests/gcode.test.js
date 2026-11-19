@@ -698,6 +698,23 @@ test("all pages in one file: one start, then after each page the pen well up at 
   assert.throws(() => simulate(va.gcode.replace(/^(G1 X\S+ Y\S+ F\d+)$/m, "$1\nPAUSE"), va.cfg), /pause where it can't be/);
 });
 
+test("a very long text: all pages in one file and a reach check still work with hundreds of thousands of points", () => {
+  // the levelled area and the reach check's corners once spread every point into Math.min(...): "Maximum call stack size exceeded"
+  const s = withSet({ "printer.model": "Bambu Lab A1", "writing.code": true }); Object.assign(s.paper, G.placePaper(G.resolve(s)));
+  const cfg = G.resolve(s), rng = mulberry(11);
+  const dense = ({ word }) => [Array.from({ length: 200 * word.length }, (_, j) => [0.6 * word.length * j / (200 * word.length), rng.random() * 1.8 - 0.6])];
+  const code = "def clean(df):\n    df = df.dropna(subset=[\"id\"])\n    return df.sort_values(\"id\")\n";
+  const pages = G.layoutPages(G.words(code.repeat(30), 11, true), dense, cfg, rng).map(lines => G.planPasses(lines, cfg));
+  const points = pages.flat().reduce((n, ps) => n + ps.strokes.reduce((m, st) => m + st.length, 0), 0);
+  assert.ok(pages.length >= 2 && points > 300000, `${pages.length} pages, ${points} points`);
+  const book = G.toGcode(pages[0], cfg, ["t"], { pages: pages.slice(1) });
+  simulate(book, cfg);
+  const [, x, y, i, j] = /X(\S+) Y(\S+) I(\S+) J(\S+)/.exec(book.split("\n").find(l => l.startsWith("G29 A1 "))).map(Number);
+  const draws = book.split("\n").filter(l => /^G1 X/.test(l)).map(l => l.match(/X(\S+) Y(\S+)/).slice(1).map(Number));
+  assert.ok(draws.every(([dx, dy]) => dx >= x && dx <= x + i && dy >= y && dy <= y + j), "levelled under every page");
+  simulate(G.reachCheck(pages[0], cfg, ["r"]), cfg, { reach: true });
+});
+
 test("every printer OrcaSlicer knows: a page is safe in its own coordinates, and its firmware gets G-code it reads", () => {
   const ORCA = require("../printers.js");
   // the data: sane rectangles, keep-outs inside the bed, the plate around the bed, known firmware

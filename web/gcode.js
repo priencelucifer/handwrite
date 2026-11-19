@@ -1073,7 +1073,7 @@
       const pts = passes.flatMap(ps => ps.strokes.flatMap(s => s.map(pt => ({ pt, shift: ps.shift,
         x: p.x + pt[0] - pr.offset_x, y: p.y + ps.shift + p.height - pt[1] - pr.offset_y }))));
       if (!pts.length) throw new WriteError("Nothing to write.");
-      const xs = pts.map(q => q.x), ys = pts.map(q => q.y), [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+      const [x0, y0, x1, y1] = extent([pts.map(q => [q.x, q.y])]); // not Math.min(...xs): a full page overflows the call stack
       const near = (cx, cy) => pts.reduce((b, q) => (Math.hypot(q.x - cx, q.y - cy) < Math.hypot(b.x - cx, b.y - cy) ? q : b));
       const corners = [[x0, y1, "back left"], [x1, y1, "back right"], [x1, y0, "front right"], [x0, y0, "front left"]].map(([cx, cy, name]) => [near(cx, cy), name]);
       out.push("; REACH CHECK, no paper: after homing the head visits the written points nearest the four corners of this page's",
@@ -1098,8 +1098,9 @@
     out.push("M104 S0"); // nozzle heater off: nothing here needs heat, and the pen holder sits next to the hotend
     const area = (w, h) => { // the nozzle positions of everything written (every page), a little wider, on the bed
       const pts = book.flat().flatMap(ps => ps.strokes.flatMap(s => s.map(pt => [p.x + pt[0] - pr.offset_x, bedY(pt, ps.shift)])));
-      const x0 = Math.max(0, Math.min(...pts.map(q => q[0])) - LEVEL_PAD), x1 = Math.min(pr.bed_x, Math.max(...pts.map(q => q[0])) + LEVEL_PAD);
-      const y0 = Math.max(0, Math.min(...pts.map(q => q[1])) - LEVEL_PAD), y1 = Math.min(pr.bed_y, Math.max(...pts.map(q => q[1])) + LEVEL_PAD);
+      const [px0, py0, px1, py1] = extent([pts]); // not Math.min(...pts): many pages are hundreds of thousands of points
+      const x0 = Math.max(0, px0 - LEVEL_PAD), x1 = Math.min(pr.bed_x, px1 + LEVEL_PAD);
+      const y0 = Math.max(0, py0 - LEVEL_PAD), y1 = Math.min(pr.bed_y, py1 + LEVEL_PAD);
       let r = [x0, y0, x1, y1];
       for (const k of pr.keepouts) if (r[0] <= k[2] && r[2] >= k[0] && r[1] <= k[3] && r[3] >= k[1]) {
         // a part of the plate the nozzle must never touch (a purge chute): step back from it on the side that keeps the most
