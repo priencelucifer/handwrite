@@ -214,7 +214,7 @@
   function updateCapacity() {
     let cfg;
     try { cfg = G.resolve(state.settings); } catch { $("capacity").textContent = ""; return null; }
-    const paras = G.words(source().clean, state.seed, state.settings.writing.code === true), n = paras.flat().length;
+    const paras = G.words(source().clean, state.seed, state.settings.writing.code === true, cfg.writing.mistakes), n = paras.flat().filter(w => !w.struck).length;
     const cap = G.capacity(cfg, charWidth(cfg.writing.style), paras);
     cap.pages = Math.max(1, Math.ceil(cap.needed / Math.max(1, cap.lines)));
     const over = n > 0 && cap.pages > G.MAX_PAGES;
@@ -251,7 +251,7 @@
     for (const c of head.dropped) dropped.add(c);
     $("skipped").hidden = !dropped.size;
     $("skipped").textContent = dropped.size ? `Skipped characters the handwriting can't write: ${[...dropped].join(" ")}` : "";
-    const paras = applyEdits(G.words(clean, state.seed, cfg.writing.code)), all = rerolled(paras.flat());
+    const paras = applyEdits(G.words(clean, state.seed, cfg.writing.code, cfg.writing.mistakes)), all = rerolled(paras.flat());
     const changed = all.filter(w => state.edits.has(w.key)).length;
     $("editsNote").hidden = !changed;
     $("editsCount").textContent = `${changed} word${changed === 1 ? "" : "s"} changed in the preview.`;
@@ -263,8 +263,13 @@
     const long = all.find(w => (w.parts || [w]).some(p => !p.glyph && p.word.length > G.MAX_WORD));
     if (long) return fail(new Error(`The word "${long.word.slice(0, 20)}…" is too long (${G.MAX_WORD} letters at most).`));
 
-    const bias = cfg.writing.bias;
-    const keyOf = w => inkKey(w.style || style.key, bias, w); // a word can have its own handwriting
+    // No hand is equally careful over every word: each is a little neater or looser than the setting, and a long text
+    // gets a little looser toward its end, like a tiring hand (scaled by line wobble; 0 = every word exactly as set).
+    const k = cfg.writing.wobble, at = new Map();
+    all.forEach((w, i) => { for (const p of w.parts || [w]) at.set(p, i); }); // which word of the text
+    const wiggle = s => (((s & 1023) + (s >>> 10 & 1023) + (s >>> 20 & 1023)) / 1023 - 1.5) * 2; // about normal, -3..3
+    const biasOf = w => Math.round(Math.min(2, Math.max(0, cfg.writing.bias * (1 + 0.06 * k * wiggle(w.seed) - 0.12 * k * Math.min(1, (at.get(w) || 0) / 300)))) * 100) / 100;
+    const keyOf = w => inkKey(w.style || style.key, biasOf(w), w); // a word can have its own handwriting
     const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !w.glyph && !inkCache.has(keyOf(w))).map(w => [keyOf(w), w])).values()]; // drawn symbols need no model
     /** Have the workers write these words into inkCache. False if this render was replaced or failed (fail() shown). */
     const generate = async list => {
@@ -272,7 +277,7 @@
       let done = 0;
       setBusy(true, `Writing 0 / ${list.length} words`);
       try {
-        await Promise.all(list.map(w => pool.word(styleOf(w.style) || style, w.word, w.seed, bias, false, "page").then(ink => {
+        await Promise.all(list.map(w => pool.word(styleOf(w.style) || style, w.word, w.seed, biasOf(w), false, "page").then(ink => {
           inkCache.set(keyOf(w), ink);
           if (token === renderToken) setBusy(true, `Writing ${++done} / ${list.length} words`);
         })));
@@ -893,14 +898,17 @@
   const syncCode = () => { const on = W_().code === true; $("codeMode").checked = on; $("text").classList.toggle("code", on); $("text").spellcheck = !on; $("markupTip").hidden = on; };
   syncCode();
   $("codeMode").onchange = () => { W_().code = $("codeMode").checked; if (W_().code) $("tipToast").hidden = true; syncCode(); syncIndent(); scheduleRender(0); }; // the tip said to do this
-  for (const [id, key] of [["bias", "bias"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"], ["indent", "indent"]]) {
+  for (const [id, key] of [["bias", "bias"], ["mistakes", "mistakes"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"], ["indent", "indent"]]) {
     const el = $(id), out = el.nextElementSibling;
-    const show = () => { out.textContent = key === "indent" ? `${(el.value * 4 * (+$("xh").value || W_().x_height)).toFixed(1)} mm` : (+el.value).toFixed(2); }; // indent: a tab's width
+    const show = () => {
+      if (key === "mistakes") { out.textContent = +el.value ? el.value : "off"; $("mistakesN").textContent = el.value; $("mistakesHint").hidden = !+el.value; return; }
+      out.textContent = key === "indent" ? `${(el.value * 4 * (+$("xh").value || W_().x_height)).toFixed(1)} mm` : (+el.value).toFixed(2); // indent: a tab's width
+    };
     const fill = () => el.style.setProperty("--fill", (el.value - el.min) / (el.max - el.min) * 100 + "%");
     el.value = W_()[key]; show(); fill();
     if (key === "indent") $("xh").addEventListener("input", show);
-    // only neatness needs new handwriting; the others just re-lay the cached words
-    el.addEventListener("input", () => { W_()[key] = +el.value; show(); fill(); scheduleRender(key === "bias" ? 400 : 60); });
+    // only neatness and mistakes need new handwriting; the others just re-lay the cached words
+    el.addEventListener("input", () => { W_()[key] = +el.value; show(); fill(); scheduleRender(key === "bias" || key === "mistakes" ? 400 : 60); });
   }
   /** The indent slider shows once the text has an indented line, or is code. */
   function syncIndent() { $("indentRow").hidden = !(W_().code === true || /^[^\S\n]+\S/m.test(state.text)); }

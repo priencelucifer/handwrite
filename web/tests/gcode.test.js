@@ -24,7 +24,7 @@ const mulberry = seed => { let a = seed | 0; const random = () => { a = (a + 0x6
 function run(settings, text, seed, edit) {
   const cfg = G.resolve(settings);
   const rng = mulberry(seed);
-  const paras = G.words(text, seed, G.resolve(settings).writing.code);
+  const paras = G.words(text, seed, cfg.writing.code, cfg.writing.mistakes);
   if (edit) edit(paras.flat(), rng); // word changes made in the preview: size, move
   const lines = G.layout(paras, fakeInk(rng), cfg, rng);
   const passes = G.planPasses(lines, cfg);
@@ -158,6 +158,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3), indent: U(0, 1.5) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
     s.writing.code = rng.random() < 0.35;
+    if (rng.random() < 0.5) s.writing.mistakes = U(0, 10); // crossed-out slips
     const words = s.writing.code ? [...vocab, ...code, ...code, 'System.out.println("Hello,World!");'] : rng.random() < 0.5 ? vocab : [...vocab, ...code];
     const text = Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () => " ".repeat(s.writing.code || rng.random() < 0.3 ? Math.floor(rng.random() * 17) : 0) +
       Array.from({ length: Math.floor(rng.random() * 25) }, () => pick(words)).join(" ")).join("\n");
@@ -192,6 +193,28 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
   test.diagnostic?.(`fuzz: ${tally.ok} files simulated safely, ${tally.refused} setups refused`);
   console.log(`fuzz: ${tally.ok} files simulated safely (${tally.edited} with edited words, ${tally.code} code, ${tally.levelled} levelled, ${tally.pressed} pressing harder, ${tally.books} more as one file of pages), ${tally.refused} setups refused`);
   assert.ok(tally.ok > 500 && tally.edited > 100 && tally.code > 150 && tally.levelled > 30 && tally.pressed > 100 && tally.books > 30, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
+});
+
+test("mistakes: some words get a crossed-out slip just before them, as many as set per 100 words; never in code", () => {
+  const text = Array.from({ length: 400 }, (_, i) => ["hello", "world", "writing", "the", "pen", "at", "7:30", "Paris,"][i % 8]).join(" ");
+  assert.deepStrictEqual(G.words(text, 5, false, 0), G.words(text, 5)); // off: exactly as before
+  const all = G.words(text, 5, false, 3).flat(), slips = all.filter(w => w.struck);
+  assert.strictEqual(slips.length, 12); // 3 per 100 of 400 words
+  assert.strictEqual(G.words("hello there", 5, false, 10).flat().filter(w => w.struck).length, 0); // 0.2 rounds to none
+  assert.deepStrictEqual(all.filter(w => !w.struck), G.words(text, 5).flat()); // every word of the text is still there, in order
+  for (const s of slips) {
+    const right = all[all.indexOf(s) + 1];
+    assert.ok(/^[A-Za-z]{3,}$/.test(right.word) && s.word !== right.word && s.word[0] === right.word[0], `${s.word} before ${right.word}`);
+    assert.ok(["line", "scribble"].includes(s.struck) && s.key === `slip:${right.key}`);
+  }
+  assert.deepStrictEqual(G.words(text, 5, false, 3), G.words(text, 5, false, 3)); // the same page seed, the same slips
+  assert.ok(!G.words(text, 5, true, 10).flat().some(w => w.struck));
+  // laid out: one more stroke per slip, through or over that word, inside the writing area
+  const cfg = G.resolve(withSet({ "writing.mistakes": 3 })), ink = () => [[[0, 0], [1, 1]]];
+  const short = G.words(text.split(" ").filter(t => t !== "7:30").slice(0, 60).join(" "), 5, false, 10), lines = G.layoutPages(short, ink, cfg, mulberry(1)).flat();
+  const n = short.flat().filter(w => w.struck).length, strokes = lines.flat();
+  assert.ok(n > 0 && strokes.length === short.flat().length + n, `${strokes.length} strokes for ${short.flat().length} words and ${n} slips`);
+  G.checkBounds(lines.flat(), cfg);
 });
 
 test("page capacity estimate: plausible, grows with paper, counts paragraph lines", () => {

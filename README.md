@@ -10,7 +10,7 @@ It runs in your browser, works offline, and needs no install.
 
 **Use it now: [handplot.org](https://handplot.org)**
 
-![Tests](https://img.shields.io/badge/tests-54_passing-2ea043)
+![Tests](https://img.shields.io/badge/tests-55_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
 ![Printers](https://img.shields.io/badge/printers-Bambu_Lab_%2B_400%2B_from_OrcaSlicer-e08a00)
 [![Discord](https://img.shields.io/badge/Discord-join_the_chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/knwsvtPMGE)
@@ -34,6 +34,8 @@ and word gaps are never the same twice.
 
 - **45 handwriting styles**, neat to casual, based on 13 real writers.
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
+- **Mistakes** (off by default): a few words started wrong or misspelt, crossed out, then written right, as people do.
+  Each word's neatness also varies a little, and long texts loosen toward the end like a tiring hand.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
 - **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.
 - **Save all pages in one file** (the main button once text runs onto a second page): the bed is levelled and the pen clamped once. After each page the pen lifts to the back

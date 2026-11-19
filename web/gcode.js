@@ -212,7 +212,7 @@
     paper: { size: "A5", orientation: "portrait", x: 55, y: 10, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
       ruling: 0, first_line: 20, margin_line: 0 },
     writing: { style: "s:neat-1", bias: 1.8, wobble: 1, x_height: 2.8, line_spacing: 8, word_spacing: 1, header: "", page_numbers: false,
-      code: false, indent: 0.55 }, // code: the text is a program (words(): _ and * written); indent: x-heights per space a line starts with
+      code: false, indent: 0.55, mistakes: 0 }, // code: the text is a program (words(): _ and * written); indent: x-heights per space a line starts with; mistakes: crossed-out slips per 100 words
   };
   // Every number that reaches the G-code: [min, max]. Values must be real, finite numbers.
   const LIMITS = {
@@ -221,7 +221,7 @@
       paper_pause_s: [5, 600], pen_pause_s: [5, 600], shift_pause_s: [5, 600], page_pause_s: [5, 600], settle_ms: [0, 2000], press_bottom: [0, 2] },
     paper: { x: [-1000, 1000], y: [-1000, 1000], width: [30, 600], height: [30, 600], margin: [0, 50], margin_y: [0, 80],
       ruling: [0, 30], first_line: [0, 600], margin_line: [0, 300] },
-    writing: { bias: [0, 2], wobble: [0, 2], x_height: [1, 20], line_spacing: [1, 100], word_spacing: [0.2, 5], indent: [0, 1.5] },
+    writing: { bias: [0, 2], wobble: [0, 2], x_height: [1, 20], line_spacing: [1, 100], word_spacing: [0.2, 5], indent: [0, 1.5], mistakes: [0, 10] },
   };
 
   /** Refuse any setting that could put an unsafe or garbled command into the G-code. */
@@ -509,10 +509,11 @@
    *  Markup (kept by cleanText(text, "_*")): _like this_ is underlined, *like this* is written with a second pen;
    *  each runs to its closing mark or the end of the line. Words get underline: true / pen: PEN2.
    *  A line that starts with spaces is indented by them (para.indent). code: the text is a program: no markup (_ and *
-   *  are written), and a line's run-on lines are indented 4 spaces more (para.runOn). */
-  function words(text, pageSeed, code = false) {
+   *  are written), and a line's run-on lines are indented 4 spaces more (para.runOn).
+   *  mistakes: about that many slips per 100 words, each crossed out and then written right (addMistakes; not in code). */
+  function words(text, pageSeed, code = false, mistakes = 0) {
     const seen = new Map();
-    return text.split("\n").map(para => {
+    const paras = text.split("\n").map(para => {
       let underline = false, pen2 = false;
       const out = [];
       for (const token of para.split(" ")) {
@@ -539,6 +540,40 @@
       else if (indent) out.indent = indent; // typed text: the line starts further in, the lines it runs on to don't
       return out;
     });
+    return mistakes > 0 && !code ? addMistakes(paras, pageSeed, mistakes) : paras;
+  }
+  /** A writer's slips: before some words, a wrong start or a misspelling of it (wd.struck: "line" or "scribble"), which
+   *  the layout crosses out. Only words of plain letters, so a slip always reads as a try at that word. The words picked
+   *  depend on the page seed and the word (like its handwriting): `rate` per 100 words of the whole text, rounded. */
+  function addMistakes(paras, pageSeed, rate) {
+    const all = paras.flat(), can = all.filter(w => !w.parts && !w.glyph && /^[A-Za-z]{3,}$/.test(w.word));
+    if (!can.length) return paras;
+    const m = Math.min(can.length, Math.round(rate * all.length / 100)), by = new Map(can.map(w => [w, chance(`${pageSeed}|slip|${w.key}`)]));
+    const picked = new Set([...can].sort((a, b) => by.get(a) - by.get(b)).slice(0, m));
+    return paras.map(para => {
+      const out = para.flatMap(w => picked.has(w) ? [slip(w, pageSeed), w] : [w]);
+      if (para.indent) out.indent = para.indent;
+      return out;
+    });
+  }
+  /** 0..1 from a string, evenly spread even for strings that differ in one last character (hash alone isn't, in its top bits). */
+  function chance(str) {
+    let h = hash(str);
+    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  function slip(w, pageSeed) {
+    const r = k => chance(`${pageSeed}|slip|${w.key}|${k}`), s = w.word, n = s.length;
+    let wrong;
+    if (r(0) < 0.4) wrong = s.slice(0, 1 + Math.floor(r(1) * Math.min(3, n - 1))); // started it, then thought better of it
+    else { // misspelt, never at the first letter
+      const i = 1 + Math.floor(r(1) * (n - 2)), kind = Math.floor(r(2) * 3);
+      wrong = kind === 0 && s[i] !== s[i + 1] ? s.slice(0, i) + s[i + 1] + s[i] + s.slice(i + 2) // two letters swapped
+        : kind === 1 && n < MAX_WORD ? s.slice(0, i + 1) + s.slice(i) // a letter twice
+        : s.slice(0, i) + s.slice(i + 1); // a letter left out
+    }
+    return { word: wrong, key: `slip:${w.key}`, seed: hash(`${pageSeed}|slip|${w.key}`), struck: r(3) < 0.75 ? "line" : "scribble",
+      ...(w.underline && { underline: true }), ...(w.pen && { pen: w.pen }) };
   }
   /** Words of the header line on sheet k (0-based): [left: the header text, right: "Page k+1"]. Every sheet's header
    *  is written afresh, like a person writing it again. text: cleaned like the page text. */
@@ -706,10 +741,30 @@
         a = b;
       }
     }
+    /** Each crossed-out slip (wd.struck): a line through the middle of its letters, or a scribble back and forth over it. */
+    function strike(strokes, placed, f) {
+      for (const p of placed) {
+        if (!p.wd.struck) continue;
+        const u = f.lxh * p.size, x0 = Math.max(areaLeft, p.x0 - 0.12 * u), x1 = Math.min(right, p.x1 + 0.12 * u);
+        const at = (px, h) => { px = clip(px, x0, x1); return [px + p.dx, f.baseline(px) + p.drift * xh - h * u + p.dy]; };
+        let st;
+        if (p.wd.struck === "scribble") {
+          const n = Math.max(3, Math.round((x1 - x0) / (0.3 * u)));
+          st = Array.from({ length: n + 1 }, (_, q) => at(x0 + (x1 - x0) * q / n + N() * 0.05 * u, (q % 2 ? 0.85 : 0.1) + N() * 0.08));
+        } else {
+          const e0 = N() * 0.08, e1 = N() * 0.08, n = Math.max(2, Math.ceil((x1 - x0) / (0.5 * xh)));
+          st = Array.from({ length: n + 1 }, (_, q) => at(x0 + (x1 - x0) * q / n, 0.45 + e0 + (e1 - e0) * q / n));
+        }
+        if (p.wd.pen) st.pen = p.wd.pen;
+        if (p.dx || p.dy) st.moved = true;
+        strokes.push(st);
+      }
+    }
     const shift = (strokes, d) => { for (const s of strokes) for (const pt of s) pt[1] += d; y += d; };
     /** Underline, keep the line in the writing area and clear of the ink above, then add it. False: it would end
      *  below the bottom of the writing area, so it belongs on the next sheet. */
     function finish(strokes, placed, f) {
+      strike(strokes, placed, f);
       underline(strokes, placed, f);
       // Moved words are drawn where the user put them; the line itself is laid out from the others.
       const fixed = strokes.filter(s => !s.moved), moved = strokes.filter(s => s.moved);
