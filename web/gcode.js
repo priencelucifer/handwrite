@@ -678,10 +678,10 @@
   function shapeWord(wd, inkOf, k, N, hand) {
     const ws = clip(1 + N() * 0.04 * k, 0.9, 1.1), shear = clip(N() * 0.05 * k, -0.12, 0.12), rot = clip(N() * 0.012 * k, -0.03, 0.03);
     const cr = Math.cos(rot), sr = Math.sin(rot);
-    // a smooth wobble through the word, its own each time: no two copies of a word share every loop and join, and its
-    // baseline wanders a little mid-word instead of the whole word sitting on one straight line
-    const wx = N() * 0.035 * k, wy = N() * 0.045 * k, px = N() * 3, py = N() * 3, lx = 1.1 + 0.6 * Math.abs(N()), ly = 2.2 + Math.abs(N());
-    const wave = ([sx, sy]) => [sx + wx * Math.sin(sy * 2 * Math.PI / lx + px), sy + wy * Math.sin(sx * 2 * Math.PI / ly + py)];
+    // the word's baseline wanders a little along it (a slow wave, up and down only), instead of the whole word sitting on
+    // one straight line; never sideways with height, which bends a tall straight stroke (an I, an l) into a curl
+    const wy = clip(N() * 0.04 * k, -0.08, 0.08), py = N() * 3, ly = 3 + 1.5 * Math.abs(N());
+    const wave = ([sx, sy]) => [sx, sy + wy * Math.sin(sx * 2 * Math.PI / ly + py)];
     const gap = figures => (figures ? clip(FIGURE_GAP + N() * 0.04 * k, 0.2, 0.4) : Math.max(0.06, LETTER_GAP + N() * 0.06 * k));
     let ink = wordInk(wd, inkOf, gap, hand, k).map(st => st.map(pt => { const [sx, sy] = wave(pt), a = (sx + shear * sy) * ws, b = sy * ws; return [a * cr - b * sr, a * sr + b * cr]; }));
     let xmin = Infinity, width = 0;
@@ -833,7 +833,7 @@
             pts.push(body(x1 - 0.05 * w, h(1) + 0.5 * d), body(x0 + 0.5 * w, h(0.5) + d + N() * 0.03), body(x0 + (0.1 + 0.25 * a(N())) * w, h(0.2) + 1.1 * d));
           } else if (N() > 0) pts.push(body(x1 + 0.12 * u, h(1) + (N() < 0 ? 0.15 : -0.15))); // or the pen flicks as it leaves
         }
-        if (pts.length < 2) pts.push(body(x1, 0));
+        if (pts.length < 2) pts.splice(0, pts.length, body(p.x0, 0), body(p.x1, 0)); // no room past the word (at the edge): straight across it
         const st = spline(pts, 0.3 * xh);
         if (p.wd.pen) st.pen = p.wd.pen;
         if (p.dx || p.dy) st.moved = true;

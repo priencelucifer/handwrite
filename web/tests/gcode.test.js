@@ -741,7 +741,8 @@ test("a printer whose bed starts elsewhere gets the very same moves, shifted int
 });
 
 test("reach check: no drawing, the written points nearest the corners at pen-up height, on every kind of printer", () => {
-  const text = "Dear friend,\nA page that reaches out to the corners of its writing area.\nThird line here.";
+  // first and last lines long, so each corner of the writing has its own nearest point
+  const text = "Dear friend, a first line that runs right across the page\nA page that reaches out to the corners of its writing area.\nand a last line that also runs all the way across";
   for (const model of ["Bambu Lab A1", "Bambu Lab P1P / P1S", "Voron 2.4 350", "Flashforge Adventurer 5M", "Elegoo Centauri Carbon", "Prusa MK4"]) {
     const s = withSet({ "printer.model": model, "printer.dry_run": true }); // a dry run setting must not leak in
     Object.assign(s.paper, G.placePaper(G.resolve(s)));
