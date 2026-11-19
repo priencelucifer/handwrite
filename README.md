@@ -34,7 +34,8 @@ and word gaps are never the same twice.
 
 - **45 handwriting styles**, neat to casual, based on 13 real writers.
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
-- **Mistakes** (off by default): a few words started wrong or misspelt, crossed out, then written right, as people do.
+- **Mistakes** (off by default): a few words started wrong or misspelt (by ear, like a pen does: *hapened*, *beleive*),
+  crossed out, then written right; now and then a small word is left out and added above the line with a caret.
   Each word's neatness also varies a little, and long texts loosen toward the end like a tiring hand.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
 - **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.

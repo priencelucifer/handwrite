@@ -268,7 +268,7 @@
     const k = cfg.writing.wobble, at = new Map();
     all.forEach((w, i) => { for (const p of w.parts || [w]) at.set(p, i); }); // which word of the text
     const wiggle = s => (((s & 1023) + (s >>> 10 & 1023) + (s >>> 20 & 1023)) / 1023 - 1.5) * 2; // about normal, -3..3
-    const biasOf = w => Math.round(Math.min(2, Math.max(0, cfg.writing.bias * (1 + 0.06 * k * wiggle(w.seed) - 0.12 * k * Math.min(1, (at.get(w) || 0) / 300)))) * 100) / 100;
+    const biasOf = w => Math.round(Math.min(2, Math.max(0, cfg.writing.bias * (1 + 0.1 * k * wiggle(w.seed) - 0.12 * k * Math.min(1, (at.get(w) || 0) / 300)))) * 100) / 100;
     const keyOf = w => inkKey(w.style || style.key, biasOf(w), w); // a word can have its own handwriting
     const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !w.glyph && !inkCache.has(keyOf(w))).map(w => [keyOf(w), w])).values()]; // drawn symbols need no model
     /** Have the workers write these words into inkCache. False if this render was replaced or failed (fail() shown). */

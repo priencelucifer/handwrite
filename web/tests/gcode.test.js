@@ -195,13 +195,14 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
   assert.ok(tally.ok > 500 && tally.edited > 100 && tally.code > 150 && tally.levelled > 30 && tally.pressed > 100 && tally.books > 30, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
 });
 
-test("mistakes: some words get a crossed-out slip just before them, as many as set per 100 words; never in code", () => {
+test("mistakes: crossed-out slips and words added above the line, as many as set per 100 words; never in code", () => {
   const text = Array.from({ length: 400 }, (_, i) => ["hello", "world", "writing", "the", "pen", "at", "7:30", "Paris,"][i % 8]).join(" ");
   assert.deepStrictEqual(G.words(text, 5, false, 0), G.words(text, 5)); // off: exactly as before
-  const all = G.words(text, 5, false, 3).flat(), slips = all.filter(w => w.struck);
-  assert.strictEqual(slips.length, 12); // 3 per 100 of 400 words
+  const all = G.words(text, 5, false, 3).flat(), slips = all.filter(w => w.struck), added = all.filter(w => w.inserted);
+  assert.ok(slips.length + added.length === 12 && added.length >= 1, `${slips.length} slips, ${added.length} added`); // 3 per 100 of 400 words
+  assert.ok(added.every(w => /^(the|at)$/.test(w.word)), "only small words are forgotten");
   assert.strictEqual(G.words("hello there", 5, false, 10).flat().filter(w => w.struck).length, 0); // 0.2 rounds to none
-  assert.deepStrictEqual(all.filter(w => !w.struck), G.words(text, 5).flat()); // every word of the text is still there, in order
+  assert.deepStrictEqual(all.filter(w => !w.struck).map(w => w.key), G.words(text, 5).flat().map(w => w.key)); // every word of the text is still there, in order
   for (const s of slips) {
     const right = all[all.indexOf(s) + 1];
     assert.ok(/^[A-Za-z]{3,}$/.test(right.word) && s.word !== right.word && s.word[0] === right.word[0], `${s.word} before ${right.word}`);
@@ -209,11 +210,14 @@ test("mistakes: some words get a crossed-out slip just before them, as many as s
   }
   assert.deepStrictEqual(G.words(text, 5, false, 3), G.words(text, 5, false, 3)); // the same page seed, the same slips
   assert.ok(!G.words(text, 5, true, 10).flat().some(w => w.struck));
-  // laid out: one more stroke per slip, through or over that word, inside the writing area
+  // laid out: one or two more strokes per slip (through or over it), a caret under each word added above its line, all inside the writing area
   const cfg = G.resolve(withSet({ "writing.mistakes": 3 })), ink = () => [[[0, 0], [1, 1]]];
-  const short = G.words(text.split(" ").filter(t => t !== "7:30").slice(0, 60).join(" "), 5, false, 10), lines = G.layoutPages(short, ink, cfg, mulberry(1)).flat();
-  const n = short.flat().filter(w => w.struck).length, strokes = lines.flat();
-  assert.ok(n > 0 && strokes.length === short.flat().length + n, `${strokes.length} strokes for ${short.flat().length} words and ${n} slips`);
+  const short = G.words(text.split(" ").filter(t => t !== "7:30").slice(0, 80).join(" "), 5, false, 10), lines = G.layoutPages(short, ink, cfg, mulberry(1)).flat();
+  const n = short.flat().filter(w => w.struck).length, ins = short.flat().filter(w => w.inserted), strokes = lines.flat();
+  const raised = ins.filter(w => lines.some(l => l.words.some(b => b.key === w.key && b.box[3] < l.baseline - 0.5 * cfg.writing.x_height)));
+  const extra = strokes.length - short.flat().length - raised.length;
+  assert.ok(n > 0 && raised.length > 0 && extra >= n && extra <= 2 * n,
+    `${strokes.length} strokes for ${short.flat().length} words, ${n} slips, ${raised.length} of ${ins.length} added words above the line`);
   G.checkBounds(lines.flat(), cfg);
 });
 
@@ -424,13 +428,13 @@ test("pen offset test: safe on every printer, and measuring it gives the offset 
 });
 
 test("word and line spacing set the average gaps; each gap still varies with wobble", () => {
-  const flat = () => [[[0, 0], [1.5, 1]]]; // one stroke per word, 1.5 letter heights wide
+  const flat = () => [[[0, 0], [0, 1], [1.5, 1], [1.5, 0]]]; // one box-shaped stroke per word, 1.5 letter heights wide (gaps by shape = by box)
   const text = Array.from({ length: 6 }, () => Array(30).fill("word").join(" ")).join("\n");
   const gaps = (ws, ls, wobble) => {
     const cfg = G.resolve(withSet({ "writing.word_spacing": ws, "writing.line_spacing": ls, "writing.wobble": wobble }));
     const lines = G.layoutPages(G.words(text, 1), flat, cfg, mulberry(7))[0], words = [], rows = [];
     for (const l of lines) {
-      for (let i = 1; i < l.length; i++) words.push((l[i][0][0] - l[i - 1][1][0]) / cfg.writing.x_height);
+      for (let i = 1; i < l.length; i++) words.push((G.extent([l[i]])[0] - G.extent([l[i - 1]])[2]) / cfg.writing.x_height);
       rows.push(l[0][0][1]);
     }
     const lineGaps = rows.slice(1).map((y, i) => y - rows[i]);
@@ -729,14 +733,19 @@ test("bed keep-outs from OrcaSlicer are never entered (Elegoo purge corner, Qidi
   for (const [model, corner] of [["Elegoo Centauri Carbon", "front-right"], ["Qidi X-Max 4", "front-left"]]) {
     const pr = G.resolve(withSet({ "printer.model": model })).printer;
     assert.ok(pr.keepouts.length > 0, model);
-    const s = withSet({ "printer.model": model, "paper.size": "A6", "printer.offset_x": 0, "printer.offset_y": 0 });
+    const s = withSet({ "printer.model": model, "paper.size": "A6", "printer.offset_x": 0, "printer.offset_y": 0, "paper.margin": 2, "paper.margin_y": 2 }); // writing reaches the corner
     s.paper.x = corner === "front-left" ? 0 : pr.bed_x - 105; s.paper.y = 0; // the page's first letters over the keep-out
-    let refused = 0, made = 0;
+    let made = 0, nearest = Infinity;
+    const [kx0, ky0, kx1, ky1] = pr.keepouts[0];
     for (let seed = 1; seed <= 6; seed++) {
-      try { const out = run(s, Array(12).fill("words written in the corner of the bed").join("\n"), seed); simulate(out.gcode, out.cfg); made++; }
-      catch (e) { if (!(e instanceof G.WriteError)) throw e; refused++; }
+      try {
+        const out = run(s, Array(12).fill("words written in the corner of the bed").join("\n"), seed);
+        simulate(out.gcode, out.cfg); made++; // the simulator refuses any move into a keep-out
+        for (const [, x, y] of out.gcode.matchAll(/^G1 X(\S+) Y(\S+)/gm))
+          nearest = Math.min(nearest, Math.hypot(Math.max(kx0 - x, 0, x - kx1), Math.max(ky0 - y, 0, y - ky1)));
+      } catch (e) { if (!(e instanceof G.WriteError)) throw e; }
     }
-    assert.ok(refused > 0, `${model}: writing over the keep-out is refused`);
+    assert.ok(made === 6 && nearest > 0, `${model}: ${made} of 6 written, ${nearest.toFixed(1)} mm from the keep-out at the closest, never in it`);
   }
 });
 
@@ -888,8 +897,12 @@ test("editing words: a moved word lands exactly that far away and nothing else m
   assert.ok(Math.abs(width(small, "CSE|1") / width(base, "CSE|1") - 0.5) < 1e-9);
   // a big word in the middle of the page pushes the next lines down instead of writing into them
   const tall = lay(ws => { ws.find(w => w.key === "Ricky|1").size = 3; });
-  const gapBelow = ls => ls[1].baseline - ls[0].baseline;
-  assert.ok(gapBelow(tall) > gapBelow(base), "room for the big word");
+  const closest = ls => { // the least room, pen centre to centre, between the first line's ink and the second's in any 0.5 mm column
+    const col = (l, f) => { const m = new Map(); for (const st of l) for (const [x, y] of st) { const c = Math.floor(x / 0.5); m.set(c, f(m.get(c) ?? y, y)); } return m; };
+    const low = col(ls[0], Math.max), high = col(ls[1], Math.min);
+    return Math.min(...[...high].map(([c, y]) => Math.min(...[-1, 0, 1].map(d => low.has(c + d) ? y - low.get(c + d) : Infinity))));
+  };
+  assert.ok(tall[0].baseline > base[0].baseline && closest(tall) >= 0.8 - 1e-9, "room for the big word, above and below");
   const lows = G.extent(tall[0])[3], tops = G.extent(tall[1])[1];
   assert.ok(tops > lows - 1e-9 || G.extent([tall[1][0]])[1] > lows - 3, "the line under it keeps clear");
 
