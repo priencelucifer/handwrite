@@ -64,6 +64,8 @@
     if (num(e.dy) && Math.abs(e.dy) >= 0.005) o.dy = Math.round(Math.min(Math.max(e.dy, -999), 999) * 100) / 100;
     if (num(e.size) && Math.abs(e.size - 1) >= 0.005) o.size = Math.round(Math.min(Math.max(e.size, G.WORD_SIZE[0]), G.WORD_SIZE[1]) * 100) / 100;
     if (typeof e.style === "string" && e.style) o.style = e.style;
+    if (["cut", "forgot", "none"].includes(e.slip)) o.slip = e.slip;
+    if (Number.isInteger(e.slipTry) && e.slipTry > 0 && e.slipTry < 1000 && o.slip === "cut") o.slipTry = e.slipTry;
     return Object.keys(o).length ? o : null;
   }
   /** Change the edits of these word keys: f(edit) returns the new edit; empty ones are dropped. */
@@ -73,6 +75,9 @@
     keep(STORE.edits, Object.fromEntries(state.edits));
     syncBar(); scheduleRender(0);
   }
+  /** What G.words needs to make the mistakes: the kinds switched on, and each word's own choice from the preview. */
+  const slipsOf = w => ({ kinds: { cut: w.slip_cut, scribble: w.slip_scribble, forgot: w.slip_forgot },
+    forced: new Map([...state.edits].filter(([, e]) => e.slip).map(([k, e]) => [k, { kind: e.slip, n: e.slipTry || 0 }])) });
   /** The text's words with their edits applied (G.words output, changed in place). */
   function applyEdits(paras) {
     for (const w of paras.flat()) {
@@ -214,7 +219,7 @@
   function updateCapacity() {
     let cfg;
     try { cfg = G.resolve(state.settings); } catch { $("capacity").textContent = ""; return null; }
-    const paras = G.words(source().clean, state.seed, state.settings.writing.code === true, cfg.writing.mistakes), n = paras.flat().filter(w => !w.struck).length;
+    const paras = G.words(source().clean, state.seed, state.settings.writing.code === true, cfg.writing.mistakes, slipsOf(cfg.writing)), n = paras.flat().filter(w => !w.struck).length;
     const cap = G.capacity(cfg, charWidth(cfg.writing.style), paras);
     cap.pages = Math.max(1, Math.ceil(cap.needed / Math.max(1, cap.lines)));
     const over = n > 0 && cap.pages > G.MAX_PAGES;
@@ -251,7 +256,7 @@
     for (const c of head.dropped) dropped.add(c);
     $("skipped").hidden = !dropped.size;
     $("skipped").textContent = dropped.size ? `Skipped characters the handwriting can't write: ${[...dropped].join(" ")}` : "";
-    const paras = applyEdits(G.words(clean, state.seed, cfg.writing.code, cfg.writing.mistakes)), all = rerolled(paras.flat());
+    const paras = applyEdits(G.words(clean, state.seed, cfg.writing.code, cfg.writing.mistakes, slipsOf(cfg.writing))), all = rerolled(paras.flat());
     const changed = all.filter(w => state.edits.has(w.key)).length;
     $("editsNote").hidden = !changed;
     $("editsCount").textContent = `${changed} word${changed === 1 ? "" : "s"} changed in the preview.`;
@@ -761,6 +766,10 @@
     $("wbSize").textContent = `${Math.round((e.size || 1) * 100)}%`;
     const styles = new Set(sel.keys.map(k => (state.edits.get(k) || {}).style || ""));
     $("wbStyle").value = styles.size === 1 ? [...styles][0] : "";
+    const slips = new Set(slipKeys().map(k => (state.edits.get(k) || {}).slip || ""));
+    $("wbSlip").value = slips.size === 1 ? [...slips][0] : "";
+    const shown = new Set((cur() ? cur().lines : []).flatMap(ln => (ln.words || []).map(w => w.key)));
+    $("wbSlipAgain").hidden = !slipKeys().some(k => shown.has("slip:" + k)); // only when a crossed-out try is on the page
   }
   /** A move (mm, y down) cut short so the selected words stay on the paper. */
   function fitMove(dx, dy) {
@@ -793,6 +802,10 @@
   $("wbSmaller").onclick = () => resizeBy(-0.1); $("wbBigger").onclick = () => resizeBy(0.1);
   $("wbStyle").onchange = e => { const v = e.target.value; changeEdits(sel ? sel.keys : [], ed => ({ ...ed, style: v || undefined })); };
   $("wbReset").onclick = () => changeEdits(sel ? sel.keys : [], () => null);
+  /** The words a mistake choice applies to: a crossed-out try stands for the word it was a try at. */
+  function slipKeys() { return sel ? [...new Set(sel.keys.map(k => k.replace(/^slip:/, "")))] : []; }
+  $("wbSlip").onchange = e => { const v = e.target.value; changeEdits(slipKeys(), ed => ({ ...ed, slip: v || undefined, slipTry: undefined })); };
+  $("wbSlipAgain").onclick = () => changeEdits(slipKeys(), ed => ({ ...ed, slip: "cut", slipTry: (ed.slipTry || 0) + 1 }));
   $("wbAgain").onclick = () => rewriteWords(selected().map(w => w.seed));
   $("wbWord").onclick = () => setLine(false); $("wbLine").onclick = () => setLine(true);
   $("wbClose").onclick = () => { select(null); draw(); };
@@ -901,7 +914,7 @@
   for (const [id, key] of [["bias", "bias"], ["mistakes", "mistakes"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"], ["indent", "indent"]]) {
     const el = $(id), out = el.nextElementSibling;
     const show = () => {
-      if (key === "mistakes") { out.textContent = +el.value ? el.value : "off"; $("mistakesN").textContent = el.value; $("mistakesHint").hidden = !+el.value; return; }
+      if (key === "mistakes") { out.textContent = +el.value ? el.value : "off"; $("mistakesN").textContent = el.value; $("mistakesMore").hidden = !+el.value; return; }
       out.textContent = key === "indent" ? `${(el.value * 4 * (+$("xh").value || W_().x_height)).toFixed(1)} mm` : (+el.value).toFixed(2); // indent: a tab's width
     };
     const fill = () => el.style.setProperty("--fill", (el.value - el.min) / (el.max - el.min) * 100 + "%");
@@ -909,6 +922,10 @@
     if (key === "indent") $("xh").addEventListener("input", show);
     // only neatness and mistakes need new handwriting; the others just re-lay the cached words
     el.addEventListener("input", () => { W_()[key] = +el.value; show(); fill(); scheduleRender(key === "bias" || key === "mistakes" ? 400 : 60); });
+  }
+  for (const [id, key] of [["slipCut", "slip_cut"], ["slipScribble", "slip_scribble"], ["slipForgot", "slip_forgot"]]) {
+    $(id).checked = W_()[key] !== false;
+    $(id).onchange = () => { W_()[key] = $(id).checked; scheduleRender(400); };
   }
   /** The indent slider shows once the text has an indented line, or is code. */
   function syncIndent() { $("indentRow").hidden = !(W_().code === true || /^[^\S\n]+\S/m.test(state.text)); }

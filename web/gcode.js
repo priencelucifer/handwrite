@@ -212,7 +212,7 @@
     paper: { size: "A5", orientation: "portrait", x: 55, y: 10, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
       ruling: 0, first_line: 20, margin_line: 0 },
     writing: { style: "s:neat-1", bias: 1.8, wobble: 1, x_height: 2.8, line_spacing: 8, word_spacing: 1, header: "", page_numbers: false,
-      code: false, indent: 0.55, mistakes: 0 }, // code: the text is a program (words(): _ and * written); indent: x-heights per space a line starts with; mistakes: crossed-out slips per 100 words
+      code: false, indent: 0.55, mistakes: 0, slip_cut: true, slip_scribble: true, slip_forgot: true }, // code: the text is a program (words(): _ and * written); indent: x-heights per space a line starts with; mistakes: crossed-out slips per 100 words
   };
   // Every number that reaches the G-code: [min, max]. Values must be real, finite numbers.
   const LIMITS = {
@@ -233,8 +233,8 @@
           throw new WriteError(`Setting ${key.replace(/_/g, " ")} = ${JSON.stringify(v)} must be a number from ${lo} to ${hi}.`);
       }
     const pr = cfg.printer, w = cfg.writing;
-    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, w.page_numbers, w.code].some(v => typeof v !== "boolean"))
-      throw new WriteError("Settings sounds, slide, dry run, bed levelling, page numbers and code must be on or off.");
+    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, w.page_numbers, w.code, w.slip_cut, w.slip_scribble, w.slip_forgot].some(v => typeof v !== "boolean"))
+      throw new WriteError("Settings sounds, slide, dry run, bed levelling, page numbers, code and the kinds of mistakes must be on or off.");
     if (!["portrait", "landscape"].includes(cfg.paper.orientation) || typeof w.style !== "string")
       throw new WriteError("Paper orientation must be portrait or landscape, and style a name.");
     if (typeof w.header !== "string" || w.header.length > 80) throw new WriteError("The header must be text, 80 characters at most.");
@@ -510,8 +510,10 @@
    *  each runs to its closing mark or the end of the line. Words get underline: true / pen: PEN2.
    *  A line that starts with spaces is indented by them (para.indent). code: the text is a program: no markup (_ and *
    *  are written), and a line's run-on lines are indented 4 spaces more (para.runOn).
-   *  mistakes: about that many slips per 100 words, each crossed out and then written right (addMistakes; not in code). */
-  function words(text, pageSeed, code = false, mistakes = 0) {
+   *  mistakes: about that many slips per 100 words, each crossed out and then written right (addMistakes; not in code);
+   *  slips: {kinds: {cut, scribble, forgot} (false: never that kind), forced: Map key -> {kind: "cut"|"forgot"|"none", n}}
+   *  for slips chosen in the preview (n: which try). A letter's sign-off ("With love,") and the name under it go to the right. */
+  function words(text, pageSeed, code = false, mistakes = 0, slips = {}) {
     const seen = new Map();
     const paras = text.split("\n").map(para => {
       let underline = false, pen2 = false;
@@ -540,33 +542,46 @@
       else if (indent) out.indent = indent; // typed text: the line starts further in, the lines it runs on to don't
       return out;
     });
-    return mistakes > 0 && !code ? addMistakes(paras, pageSeed, mistakes) : paras;
+    if (!code) { // the sign-off near the end and up to two short lines under it (a name)
+      const at = paras.findIndex((para, i) => i >= paras.length - 6 && SIGNOFF.test(para.map(w => w.word).join(" ")));
+      if (at >= 0) for (let i = at; i < paras.length && i <= at + 2 && paras[i].length && paras[i].length <= 4; i++) paras[i].signoff = true;
+    }
+    return !code && (mistakes > 0 || slips.forced?.size) ? addMistakes(paras, pageSeed, mistakes, slips) : paras;
   }
   /** A writer's slips: before some words, a wrong start or a misspelling of it (wd.struck: "line" or "scribble"), which
    *  the layout crosses out; and about one in four a small word left out and added above the line with a caret
    *  (wd.inserted). Only words of plain letters, so a slip always reads as a try at that word. `rate` per 100 words of
    *  the whole text (rounded), long words more often than short ones, never in the first words and never two close
    *  together; which words depends on the page seed and the word (like its handwriting). */
-  function addMistakes(paras, pageSeed, rate) {
+  function addMistakes(paras, pageSeed, rate, { kinds = {}, forced = new Map() } = {}) {
+    const ok = { cut: true, scribble: true, forgot: true, ...kinds }, want = w => forced.get(w.key);
     const all = paras.flat(), index = new Map(all.map((w, i) => [w, i])), m = Math.round(rate * all.length / 100);
     const inside = new Set(paras.flatMap(para => para.slice(1, -1))); // a forgotten word sits between two others
-    const can = all.filter((w, i) => i >= SLIP_APART && !w.parts && !w.glyph && /^[A-Za-z]{3,}$/.test(w.word));
-    const small = all.filter((w, i) => i >= SLIP_APART && inside.has(w) && !w.underline && !w.pen && FORGOTTEN.test(w.word));
+    const plain = w => !w.parts && !w.glyph && /^[A-Za-z]{3,}$/.test(w.word), free = (w, i) => i >= SLIP_APART && !want(w);
     const score = w => chance(`${pageSeed}|slip|${w.key}`) * 6 / Math.min(10, w.word.length);
     const picked = new Set(), at = [], room = w => !at.some(i => Math.abs(i - index.get(w)) < SLIP_APART);
-    for (const w of small.sort((a, b) => chance(`${pageSeed}|left|${a.key}`) - chance(`${pageSeed}|left|${b.key}`)).slice(0, Math.round(m / 4)))
-      if (room(w)) { w.inserted = true; at.push(index.get(w)); }
-    for (const w of can.sort((a, b) => score(a) - score(b))) {
-      if (at.length >= m) break;
+    for (const w of all) { // the ones chosen in the preview come first, wherever they are
+      const f = want(w);
+      if (f && f.kind === "forgot" && inside.has(w) && !w.parts && !w.glyph) { w.inserted = true; at.push(index.get(w)); }
+      else if (f && f.kind === "cut" && plain(w)) { picked.add(w); at.push(index.get(w)); }
+    }
+    let auto = 0; // then `rate` per 100 words more
+    if (ok.forgot) for (const w of all.filter((w, i) => free(w, i) && inside.has(w) && !w.underline && !w.pen && FORGOTTEN.test(w.word))
+      .sort((a, b) => chance(`${pageSeed}|left|${a.key}`) - chance(`${pageSeed}|left|${b.key}`)).slice(0, Math.round(m / 4)))
+      if (room(w)) { w.inserted = true; at.push(index.get(w)); auto++; }
+    if (ok.cut || ok.scribble) for (const w of all.filter((w, i) => free(w, i) && plain(w)).sort((a, b) => score(a) - score(b))) {
+      if (auto >= m) break;
       if (w.inserted || !room(w)) continue;
-      picked.add(w); at.push(index.get(w));
+      picked.add(w); at.push(index.get(w)); auto++;
     }
     return paras.map(para => {
-      const out = para.flatMap(w => picked.has(w) ? [slip(w, pageSeed), w] : [w]);
-      if (para.indent) out.indent = para.indent;
+      const out = para.flatMap(w => picked.has(w) ? [slip(w, pageSeed, (want(w) || {}).n || 0, ok), w] : [w]);
+      for (const k of ["indent", "runOn", "signoff"]) if (para[k]) out[k] = para[k];
       return out;
     });
   }
+  // the usual ways to end a letter; what follows (a name) goes with it
+  const SIGNOFF = /^(with (love|best wishes|thanks)|(lots of |all my )?love|yours( sincerely| faithfully| truly| ever)?|(best|kind|warm(est)?) (wishes|regards)|regards|sincerely|cheers|thanks( again)?|many thanks|thank you|take care|all the best|best),?$/i;
   const SLIP_APART = 8; // words
   const FORGOTTEN = /^(the|a|an|to|of|and|in|is|it|at|on|for|so|but|was|my|we)$/i; // small words a hand leaves out
   /** 0..1 from a string, evenly spread even for strings that differ in one last character (hash alone isn't, in its top bits). */
@@ -581,18 +596,20 @@
   const MISSPELL = [[/([a-z])\1/i, "$1"], [/ie/, "ei"], [/ei/, "ie"], [/(?<=[^aeiou]{1,2}[aeiou][^aeiou]+)[ae](?=[a-z])/, v => v === "a" ? "e" : "a"],
     [/(?<=[^aeiou]{1,2}[aeiou][^aeiou]+)i(?=[a-z])/, "e"], [/e(?=(ly|ful|ment|ness)$)/, ""], [/(?<=w)h/, ""], [/(?<=[aeiou])[nlrst](?=[^aeiou])/, ""]];
   const SOUNDALIKE = { a: "e", e: "a", i: "e", o: "u", u: "o" };
-  function slip(w, pageSeed) {
-    const r = k => chance(`${pageSeed}|slip|${w.key}|${k}`), s = w.word, n = s.length;
+  /** A wrong try at word w: try 0 is the page's own, a higher try another (Another slip in the preview); kinds: as addMistakes. */
+  function slip(w, pageSeed, attempt = 0, kinds = {}) {
+    const tag = `${pageSeed}|slip|${w.key}${attempt ? "|" + attempt : ""}`, r = k => chance(`${tag}|${k}`), s = w.word, n = s.length;
     const ways = MISSPELL.map(([re, to]) => s[0] + s.slice(1).replace(re, to)).filter(x => x !== s && x.length >= 2);
     let wrong;
     if (n >= 5 && ways.length && r(0) < 0.65) wrong = ways[Math.floor(r(1) * ways.length)];
-    else if (n >= 4 && /[^aeiou]/i.test(s[2]) && s[2] !== s[1] && r(2) < 0.25) wrong = s[0] + s[2]; // the hand ran ahead of itself: "tl" for talked
+    else if (n >= 4 && /[^aeiou]/i.test(s[2]) && s[2] !== s[1] && s[2].toLowerCase() !== s[0].toLowerCase() && r(2) < 0.25) wrong = s[0] + s[2]; // the hand ran ahead of itself: "tl" for talked
     else { // started it and went wrong at once: a sound-alike vowel, or the hand ran ahead; never a right start (that a hand just carries on)
       const k = 1 + Math.floor(r(1) * Math.min(2, n - 2)), c = s[k], vowel = SOUNDALIKE[c.toLowerCase()];
       wrong = s.slice(0, k) + (vowel ? (c === c.toUpperCase() ? vowel.toUpperCase() : vowel) : s[k + 1]);
       if (wrong === s.slice(0, k + 1)) wrong = s.slice(0, k) + (s[k + 2] || "e"); // (a doubled letter ran ahead to itself)
     }
-    return { word: wrong, key: `slip:${w.key}`, seed: hash(`${pageSeed}|slip|${w.key}`), struck: wrong.length >= 3 && wrong.length <= 6 && r(3) < 0.25 ? "scribble" : "line",
+    const scribble = kinds.scribble !== false && (kinds.cut === false || (wrong.length >= 3 && wrong.length <= 6 && r(3) < 0.25));
+    return { word: wrong, key: `slip:${w.key}`, seed: hash(tag), struck: scribble ? "scribble" : "line",
       ...(w.underline && { underline: true }), ...(w.pen && { pen: w.pen }) };
   }
   /** Words of the header line on sheet k (0-based): [left: the header text, right: "Page k+1"]. Every sheet's header
@@ -790,6 +807,8 @@
         const x0 = Math.max(areaLeft, p.x0 + clip(0.15 * N() - 0.05, -0.35, 0.2) * u), x1 = Math.min(right, Math.max(p.x0 + 0.7 * span, p.x1 + (0.15 + 0.3 * N()) * u)), w = x1 - x0;
         // h: x-heights above the middle of the word's letters, which follows the line's slope
         const at = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, c + f.baseline(px) - f.baseline(xm) - h * u]; };
+        // a line goes through the bodies of the letters (the x-height band), never down by the baseline where it would read as an underline
+        const body = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - (0.47 + clip(h, -0.16, 0.2)) * u]; };
         const pts = [];
         if (p.wd.struck === "scribble") {
           // over the letters' bodies, slanted like writing, loose enough for paper to show, smaller where it starts and ends
@@ -802,19 +821,19 @@
         } else {
           const base = N() * 0.05, rise = clip(0.025 + 0.04 * N(), -0.04, 0.09), arch = N() * 0.12;
           const h = t => base + rise * (t - 0.5) * w / u + arch * 4 * t * (1 - t);
-          for (let k = 0; k <= 4; k++) pts.push(at(x0 + w * k / 4, h(k / 4) + (k % 4 ? N() * 0.035 : 0)));
+          for (let k = 0; k <= 4; k++) pts.push(body(x0 + w * k / 4, h(k / 4) + (k % 4 ? N() * 0.035 : 0)));
           if (N() > 0.8) { // or two lines, the second one a separate stroke a little lower and shorter
-            const d = -(0.13 + 0.05 * a(N())), s0 = x0 + (0.05 + 0.1 * a(N())) * w, two = [0, 1, 2, 3].map(k => at(s0 + (x1 - s0) * (0.92 * k / 3), h(k / 3) + d + N() * 0.03));
+            const d = -(0.13 + 0.05 * a(N())), s0 = x0 + (0.05 + 0.1 * a(N())) * w, two = [0, 1, 2, 3].map(k => body(s0 + (x1 - s0) * (0.92 * k / 3), h(k / 3) + d + N() * 0.03));
             const st2 = spline(two, 0.3 * xh);
             if (p.wd.pen) st2.pen = p.wd.pen;
             if (p.dx || p.dy) st2.moved = true;
             strokes.push(st2);
           } else if (N() > 0.3) { // and back again, a little higher or lower, stopping short
             const d = (N() < 0 ? -1 : 1) * (0.12 + 0.05 * a(N()));
-            pts.push(at(x1 - 0.05 * w, h(1) + 0.5 * d), at(x0 + 0.5 * w, h(0.5) + d + N() * 0.03), at(x0 + (0.1 + 0.25 * a(N())) * w, h(0.2) + 1.1 * d));
-          } else if (N() > 0) pts.push(at(x1 + 0.12 * u, h(1) + (N() < 0 ? 0.15 : -0.15))); // or the pen flicks as it leaves
+            pts.push(body(x1 - 0.05 * w, h(1) + 0.5 * d), body(x0 + 0.5 * w, h(0.5) + d + N() * 0.03), body(x0 + (0.1 + 0.25 * a(N())) * w, h(0.2) + 1.1 * d));
+          } else if (N() > 0) pts.push(body(x1 + 0.12 * u, h(1) + (N() < 0 ? 0.15 : -0.15))); // or the pen flicks as it leaves
         }
-        if (pts.length < 2) pts.push(at(x1, 0));
+        if (pts.length < 2) pts.push(body(x1, 0));
         const st = spline(pts, 0.3 * xh);
         if (p.wd.pen) st.pen = p.wd.pen;
         if (p.dx || p.dy) st.moved = true;
@@ -890,6 +909,7 @@
         // indents (at most half a line); in code a line too long for the paper runs on one step further in
         const indent = lineStart ? para.runOn : para.indent;
         if (indent) x += Math.min(indent * w.indent * f.lxh, 0.5 * (f.lineRight - f.left));
+        if (para.signoff) x = Math.max(x, f.left + (0.42 + 0.04 * N()) * (f.lineRight - f.left));
         const x0 = x, strokes = [], placed = [];
         while (i < para.length) {
           const wd = para[i];
@@ -928,7 +948,7 @@
               ...spline([tip, [(cx + hw + tip[0]) / 2 + 0.02 * L, (feet + tip[1]) / 2], [cx + hw, feet + N() * 0.04 * L]], 0.2 * xh).slice(1)]);
             left = null;
           }
-          prev = { ...it, x }; gapMm = wordGap(f.lxh);
+          prev = { ...it, x }; gapMm = wordGap(f.lxh) * (/[.!?]["')\]]*$/.test(wd.word) ? 1.35 : 1); // a little more room after a full stop
           x += it.width + gapMm;
         }
         if (strokes.length) {
@@ -1068,7 +1088,8 @@
     // height), never higher: a bed a little lower toward the front would otherwise leave the last lines faint.
     const bedY = (pt, shift) => p.y + shift + p.height - pt[1] - pr.offset_y, firstPt = order(passes[0])[0][0];
     const clampY = bedY(firstPt, 0), press = (pt, shift) => pr.press_bottom * clip((clampY - bedY(pt, shift)) / p.height, 0, 1);
-    const down = (pt, shift) => z(pr.z_draw + dz - press(pt, shift));
+    // from the writing height as the file writes it, rounded up: never deeper than that height less press_bottom
+    const down = (pt, shift) => z(Math.ceil((round2(pr.z_draw) + dz - press(pt, shift)) * 100 - 1e-6) / 100);
     const firstPen2 = passes.length === 1 && passes[0].strokes.some(s => s.pen !== PEN2) ? passes[0].strokes.find(s => s.pen === PEN2) : null;
     out.push("G90", ...(pr.dialect === "bambu" ? ["G21"] : []), ...sound("start"), home); // always home: every move after this assumes a known position
     out.push("M104 S0"); // nozzle heater off: nothing here needs heat, and the pen holder sits next to the hotend

@@ -605,7 +605,12 @@
           <div class="slider"><input type="range" id="bias" min="0" max="2" step="0.05"><output for="bias"></output></div></div>
         <div class="row"><label for="mistakes" title="About this many words in every 100 are first started wrong or misspelt, crossed out, then written right, or left out and added above the line with a caret, as people do. Off: none.">Mistakes</label>
           <div class="slider"><input type="range" id="mistakes" min="0" max="10" step="1"><output for="mistakes"></output></div></div>
-        <p class="hint" id="mistakesHint" hidden>About <span id="mistakesN"></span> in 100 words get a slip: started wrong or misspelt and crossed out, or left out and added above the line with a ^.</p>
+        <div id="mistakesMore" hidden>
+          <p class="hint">About <span id="mistakesN"></span> in 100 words get a slip. Click a word in the preview to give it one, take one away, or try another.</p>
+          <div class="row toggle"><label for="slipCut">Crossed out</label><input type="checkbox" id="slipCut"><p class="hint">A misspelt word or a wrong start, with a line through it</p></div>
+          <div class="row toggle"><label for="slipScribble">Scribbled out</label><input type="checkbox" id="slipScribble"><p class="hint">Some slips scribbled over instead</p></div>
+          <div class="row toggle"><label for="slipForgot">Forgotten words</label><input type="checkbox" id="slipForgot"><p class="hint">A small word left out, then added above the line with a ^</p></div>
+        </div>
         <div class="row"><label for="xh">Letter size</label>
           <div class="unit" data-unit="mm"><input type="number" id="xh" min="1" max="20" step="0.1"></div></div>
         <details class="more" id="moreHand"><summary><span class="more-t">More options</span><span class="more-s" id="moreHandSum"></span></summary>
@@ -705,6 +710,8 @@
           <button class="btn" id="wbSmaller" type="button" aria-label="Smaller" title="Smaller (−)">A−</button><output id="wbSize">100%</output><button class="btn" id="wbBigger" type="button" aria-label="Bigger" title="Bigger (+)">A+</button>
         </div>
         <select id="wbStyle" class="wb-edit" aria-label="Handwriting for the selection"></select>
+        <select id="wbSlip" class="wb-edit" aria-label="Mistake for the selection"><option value="">Mistake: as set</option><option value="none">No mistake</option><option value="cut">Crossed out first</option><option value="forgot">Left out, added with ^</option></select>
+        <button class="btn small wb-edit" id="wbSlipAgain" type="button" title="Cross out a different wrong try">↻ Another slip</button>
         <button class="btn small wb-edit" id="wbAdd" type="button">+ Add word</button>
         <button class="btn small" id="wbAgain" type="button">↻ Write again</button>
         <button class="btn small ghost wb-edit" id="wbReset" type="button">Reset</button>

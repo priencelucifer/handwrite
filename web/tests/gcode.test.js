@@ -24,7 +24,7 @@ const mulberry = seed => { let a = seed | 0; const random = () => { a = (a + 0x6
 function run(settings, text, seed, edit) {
   const cfg = G.resolve(settings);
   const rng = mulberry(seed);
-  const paras = G.words(text, seed, cfg.writing.code, cfg.writing.mistakes);
+  const w = cfg.writing, paras = G.words(text, seed, w.code, w.mistakes, { kinds: { cut: w.slip_cut, scribble: w.slip_scribble, forgot: w.slip_forgot } });
   if (edit) edit(paras.flat(), rng); // word changes made in the preview: size, move
   const lines = G.layout(paras, fakeInk(rng), cfg, rng);
   const passes = G.planPasses(lines, cfg);
@@ -158,7 +158,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3), indent: U(0, 1.5) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
     s.writing.code = rng.random() < 0.35;
-    if (rng.random() < 0.5) s.writing.mistakes = U(0, 10); // crossed-out slips
+    if (rng.random() < 0.5) Object.assign(s.writing, { mistakes: U(0, 10), slip_cut: rng.random() < 0.7, slip_scribble: rng.random() < 0.7, slip_forgot: rng.random() < 0.7 }); // slips of any kinds
     const words = s.writing.code ? [...vocab, ...code, ...code, 'System.out.println("Hello,World!");'] : rng.random() < 0.5 ? vocab : [...vocab, ...code];
     const text = Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () => " ".repeat(s.writing.code || rng.random() < 0.3 ? Math.floor(rng.random() * 17) : 0) +
       Array.from({ length: Math.floor(rng.random() * 25) }, () => pick(words)).join(" ")).join("\n");
@@ -219,6 +219,40 @@ test("mistakes: crossed-out slips and words added above the line, as many as set
   assert.ok(n > 0 && raised.length > 0 && extra >= n && extra <= 2 * n,
     `${strokes.length} strokes for ${short.flat().length} words, ${n} slips, ${raised.length} of ${ins.length} added words above the line`);
   G.checkBounds(lines.flat(), cfg);
+});
+
+test("mistakes chosen in the preview, kinds switched off, the sign-off; a strike goes through the letters, never under them", () => {
+  const text = "Dear Sam,\nwe walked along the river and talked about everything that happened this summer and more\nWith love,\nAnna";
+  const keys = ws => ws.flat().filter(w => w.struck).map(w => w.key);
+  const forced = (o, rate = 0) => G.words(text, 3, false, rate, { forced: new Map(Object.entries(o)) }).flat();
+  assert.deepStrictEqual(keys(forced({ "walked|1": { kind: "cut" } })), ["slip:walked|1"]); // even with mistakes off, even in the first words
+  assert.ok(forced({ "the|1": { kind: "forgot" } }).find(w => w.key === "the|1").inserted);
+  const long = text.replace("more", "more ".repeat(3) + "we walked along the river and talked about everything that happened this summer and more".repeat(3));
+  const all = G.words(long, 3, false, 10).flat(), some = all.filter(w => w.struck).map(w => w.key.slice(5)), ins = all.filter(w => w.inserted).map(w => w.key);
+  const none = G.words(long, 3, false, 10, { forced: new Map([...some, ...ins].map(k => [k, { kind: "none" }])) }).flat();
+  assert.ok(some.length > 0 && ins.length > 0, `${some.length} slips, ${ins.length} added`);
+  assert.ok(!none.some(w => (w.struck && some.includes(w.key.slice(5))) || (w.inserted && ins.includes(w.key))), "no mistake there");
+  const tries = new Set([0, 1, 2, 3, 4, 5].map(n => forced({ "everything|1": { kind: "cut", n } }).find(w => w.struck).word));
+  assert.ok(tries.size >= 3, `another slip gives another try: ${[...tries]}`);
+  const only = kinds => G.words(text, 3, false, 10, { kinds }).flat();
+  assert.ok(!only({ cut: false, scribble: false }).some(w => w.struck) && only({ cut: false }).filter(w => w.struck).every(w => w.struck === "scribble"));
+  assert.ok(!only({ forgot: false }).some(w => w.inserted));
+  assert.deepStrictEqual(G.words(text, 3).map(p => !!p.signoff), [false, false, true, true]);
+  const cfg = G.resolve(withSet({ "writing.wobble": 1 })), xh = cfg.writing.x_height, ink = () => [[[0, 0], [0, 1], [3, 1], [3, 0]]];
+  const lines = G.layoutPages(G.words(long, 3, false, 10, { kinds: { scribble: false } }), ink, cfg, mulberry(2))[0];
+  const words = lines.flatMap(l => l.words), last = lines.filter(l => l.words.some(w => /^(With|love,|Anna)\|/.test(w.key)));
+  assert.ok(last.every(l => l.words[0].box[0] > 0.35 * (cfg.paper.width - 2 * cfg.paper.margin) + cfg.paper.margin), "sign-off and name to the right");
+  let n = 0;
+  for (const l of lines) l.forEach((st, i) => {
+    if (l.words.some(w => i >= w.s0 && i < w.s1)) return; // a word's own ink
+    if (st.length < 5) return; // a caret
+    const mx = st.reduce((s, p) => s + p[0], 0) / st.length, w = l.words.find(w => w.key.startsWith("slip:") && w.box[0] <= mx && w.box[2] >= mx);
+    if (!w) return;
+    n++; // through the middle of its letters (box: baseline at the bottom, x-height at the top): never down at the baseline like an underline
+    const h = w.box[3] - w.box[1];
+    for (const [, y] of st) assert.ok(y > w.box[1] + 0.2 * h && y < w.box[3] - 0.25 * h, `strike at ${((w.box[3] - y) / h).toFixed(2)} of the letters' height`);
+  });
+  assert.ok(n > 0 && words.length > 0);
 });
 
 test("page capacity estimate: plausible, grows with paper, counts paragraph lines", () => {
@@ -537,7 +571,7 @@ test("extra pressure at the bottom: the pen goes lower line by line down the pag
   assert.strictEqual(d[0][1], pr.z_draw, "clamped and first stroke at the writing height");
   for (const [y, z] of d) {
     const want = pr.z_draw - 0.6 * Math.min(1, Math.max(0, (clampY - y) / out.cfg.paper.height));
-    assert.ok(Math.abs(z - want) < 0.006, `at Y${y}: Z${z}, expected ${want.toFixed(3)}`);
+    assert.ok(z >= want - 1e-9 && z - want < 0.011, `at Y${y}: Z${z}, expected ${want.toFixed(3)} (never deeper, at most 0.01 mm less)`);
   }
   const last = d[d.length - 1];
   assert.ok(pr.z_draw - last[1] > 0.25 && pr.z_draw - last[1] <= 0.6, `the last line presses harder: ${last[1]}`);
