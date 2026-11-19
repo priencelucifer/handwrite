@@ -555,9 +555,11 @@
    *  together; which words depends on the page seed and the word (like its handwriting). */
   function addMistakes(paras, pageSeed, rate, { kinds = {}, forced = new Map() } = {}) {
     const ok = { cut: true, scribble: true, forgot: true, ...kinds }, want = w => forced.get(w.key);
-    const all = paras.flat(), index = new Map(all.map((w, i) => [w, i])), m = Math.round(rate * all.length / 100);
+    const all = paras.flat(), index = new Map(all.map((w, i) => [w, i]));
+    // `rate` per 100 words, but a short text with mistakes on still gets one; none in its first words (fewer in a short text)
+    const m = rate > 0 ? Math.max(all.length >= 6 ? 1 : 0, Math.round(rate * all.length / 100)) : 0, first = Math.min(SLIP_APART, Math.floor(all.length / 4));
     const inside = new Set(paras.flatMap(para => para.slice(1, -1))); // a forgotten word sits between two others
-    const plain = w => !w.parts && !w.glyph && /^[A-Za-z]{3,}$/.test(w.word), free = (w, i) => i >= SLIP_APART && !want(w);
+    const plain = w => !w.parts && !w.glyph && /^[A-Za-z]{3,}[.,;:!?]?$/.test(w.word), free = (w, i) => i >= first && !want(w);
     const score = w => chance(`${pageSeed}|slip|${w.key}`) * 6 / Math.min(10, w.word.length);
     const picked = new Set(), at = [], room = w => !at.some(i => Math.abs(i - index.get(w)) < SLIP_APART);
     for (const w of all) { // the ones chosen in the preview come first, wherever they are
@@ -598,7 +600,8 @@
   const SOUNDALIKE = { a: "e", e: "a", i: "e", o: "u", u: "o" };
   /** A wrong try at word w: try 0 is the page's own, a higher try another (Another slip in the preview); kinds: as addMistakes. */
   function slip(w, pageSeed, attempt = 0, kinds = {}) {
-    const tag = `${pageSeed}|slip|${w.key}${attempt ? "|" + attempt : ""}`, r = k => chance(`${tag}|${k}`), s = w.word, n = s.length;
+    // (a word's comma or full stop isn't part of the try: the hand stopped before it)
+    const tag = `${pageSeed}|slip|${w.key}${attempt ? "|" + attempt : ""}`, r = k => chance(`${tag}|${k}`), s = w.word.replace(/[.,;:!?]$/, ""), n = s.length;
     const ways = MISSPELL.map(([re, to]) => s[0] + s.slice(1).replace(re, to)).filter(x => x !== s && x.length >= 2);
     let wrong;
     if (n >= 5 && ways.length && r(0) < 0.65) wrong = ways[Math.floor(r(1) * ways.length)];

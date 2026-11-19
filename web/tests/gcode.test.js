@@ -202,10 +202,14 @@ test("mistakes: crossed-out slips and words added above the line, as many as set
   assert.ok(slips.length + added.length === 12 && added.length >= 1, `${slips.length} slips, ${added.length} added`); // 3 per 100 of 400 words
   assert.ok(added.every(w => /^(the|at)$/.test(w.word)), "only small words are forgotten");
   assert.strictEqual(G.words("hello there", 5, false, 10).flat().filter(w => w.struck).length, 0); // 0.2 rounds to none
+  for (let seed = 1; seed <= 20; seed++) { // but a short text with mistakes on always gets one, even at the lowest setting
+    const short = G.words("Introduction\nThis report explains how the machine works today.", seed, false, 1).flat();
+    assert.strictEqual(short.filter(w => w.struck || w.inserted).length, 1, `seed ${seed}`);
+  }
   assert.deepStrictEqual(all.filter(w => !w.struck).map(w => w.key), G.words(text, 5).flat().map(w => w.key)); // every word of the text is still there, in order
   for (const s of slips) {
     const right = all[all.indexOf(s) + 1];
-    assert.ok(/^[A-Za-z]{3,}$/.test(right.word) && s.word !== right.word && s.word[0] === right.word[0], `${s.word} before ${right.word}`);
+    assert.ok(/^[A-Za-z]{3,}[.,;:!?]?$/.test(right.word) && s.word !== right.word && s.word[0] === right.word[0], `${s.word} before ${right.word}`);
     assert.ok(["line", "scribble"].includes(s.struck) && s.key === `slip:${right.key}`);
   }
   assert.deepStrictEqual(G.words(text, 5, false, 3), G.words(text, 5, false, 3)); // the same page seed, the same slips
