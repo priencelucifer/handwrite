@@ -22,3 +22,9 @@ test("the home page links the list and gives the right count; the sitemap has th
   assert.ok(index.includes('href="/printers"') && index.includes('href="#printers"'));
   assert.ok(read("sitemap.xml").includes("<loc>https://handplot.org/printers</loc>"));
 });
+
+test("app.html loads each script by its current version, so browsers can't keep running an old copy", () => {
+  const { stamped, PAGE } = require(path.join(WEB, "tools", "stamp.js")), html = fs.readFileSync(PAGE, "utf8");
+  assert.equal((html.match(/<script src="[\w-]+\.js\?v=\w{8}">/g) || []).length, 7);
+  assert.ok(html === stamped(html), "a script changed: run node web/tools/stamp.js");
+});
