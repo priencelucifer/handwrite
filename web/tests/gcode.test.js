@@ -24,7 +24,7 @@ const mulberry = seed => { let a = seed | 0; const random = () => { a = (a + 0x6
 function run(settings, text, seed, edit) {
   const cfg = G.resolve(settings);
   const rng = mulberry(seed);
-  const w = cfg.writing, paras = G.words(text, seed, w.code, w.mistakes, { kinds: { cut: w.slip_cut, scribble: w.slip_scribble, forgot: w.slip_forgot } });
+  const w = cfg.writing, paras = G.words(text, seed, w.code, w.mistakes, { kinds: { cut: w.slip_cut, scribble: w.slip_scribble, forgot: w.slip_forgot, touch: w.slip_touch } });
   if (edit) edit(paras.flat(), rng); // word changes made in the preview: size, move
   const lines = G.layout(paras, fakeInk(rng), cfg, rng);
   const passes = G.planPasses(lines, cfg);
@@ -158,7 +158,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3), indent: U(0, 1.5) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
     s.writing.code = rng.random() < 0.35;
-    if (rng.random() < 0.5) Object.assign(s.writing, { mistakes: U(0, 10), slip_cut: rng.random() < 0.7, slip_scribble: rng.random() < 0.7, slip_forgot: rng.random() < 0.7 }); // slips of any kinds
+    if (rng.random() < 0.5) Object.assign(s.writing, { mistakes: U(0, 10), slip_cut: rng.random() < 0.7, slip_scribble: rng.random() < 0.7, slip_forgot: rng.random() < 0.7, slip_touch: rng.random() < 0.7 }); // slips of any kinds
     const words = s.writing.code ? [...vocab, ...code, ...code, 'System.out.println("Hello,World!");'] : rng.random() < 0.5 ? vocab : [...vocab, ...code];
     const text = Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () => " ".repeat(s.writing.code || rng.random() < 0.3 ? Math.floor(rng.random() * 17) : 0) +
       Array.from({ length: Math.floor(rng.random() * 25) }, () => pick(words)).join(" ")).join("\n");
@@ -199,27 +199,45 @@ test("mistakes: crossed-out slips and words added above the line, as many as set
   const text = Array.from({ length: 400 }, (_, i) => ["hello", "world", "writing", "the", "pen", "at", "7:30", "Paris,"][i % 8]).join(" ");
   assert.deepStrictEqual(G.words(text, 5, false, 0), G.words(text, 5)); // off: exactly as before
   const all = G.words(text, 5, false, 3).flat(), slips = all.filter(w => w.struck), added = all.filter(w => w.inserted);
-  assert.ok(slips.length + added.length === 12 && added.length >= 1, `${slips.length} slips, ${added.length} added`); // 3 per 100 of 400 words
+  assert.ok(slips.length > 0 && added.length >= 1, `${slips.length} slips, ${added.length} added`);
   assert.ok(added.every(w => /^(the|at)$/.test(w.word)), "only small words are forgotten");
+  // about 3 per 100 of 400 words, but like a person: more on one page, fewer on another, a different mix each time
+  const pages = Array.from({ length: 40 }, (_, seed) => G.words(text, seed + 1, false, 3).flat()), count = ws => ws.filter(w => w.struck || w.inserted || w.touch).length;
+  const counts = pages.map(count), mean = counts.reduce((s, n) => s + n, 0) / counts.length, lost = pages.flat().filter(w => w.inserted).length;
+  assert.ok(Math.abs(mean - 12) < 1.5 && new Set(counts).size >= 4 && counts.every(n => n >= 3 && n <= 24), `counts ${counts}`);
+  assert.ok(lost > 0.15 * mean * 40 && lost < 0.35 * mean * 40, `${lost} of ${mean * 40} left out`);
+  const touched = pages.flat().filter(w => w.touch); // and about one in five a letter gone over again, on a word of plain letters
+  assert.ok(touched.length > 0.1 * mean * 40 && touched.length < 0.3 * mean * 40 && touched.every(w => /^[A-Za-z]{3,}[.,;:!?]?$/.test(w.word)), `${touched.length} gone over`);
+  assert.ok(!G.words(text, 5, false, 3, { kinds: { touch: false } }).flat().some(w => w.touch));
   assert.strictEqual(G.words("hello there", 5, false, 10).flat().filter(w => w.struck).length, 0); // 0.2 rounds to none
   for (let seed = 1; seed <= 20; seed++) { // but a short text with mistakes on always gets one, even at the lowest setting
     const short = G.words("Introduction\nThis report explains how the machine works today.", seed, false, 1).flat();
-    assert.strictEqual(short.filter(w => w.struck || w.inserted).length, 1, `seed ${seed}`);
+    assert.strictEqual(short.filter(w => w.struck || w.inserted || w.touch).length, 1, `seed ${seed}`);
   }
   assert.deepStrictEqual(all.filter(w => !w.struck).map(w => w.key), G.words(text, 5).flat().map(w => w.key)); // every word of the text is still there, in order
-  for (const s of slips) {
-    const right = all[all.indexOf(s) + 1];
-    assert.ok(/^[A-Za-z]{3,}[.,;:!?]?$/.test(right.word) && s.word !== right.word && s.word[0] === right.word[0], `${s.word} before ${right.word}`);
+  for (const s of pages.flat().filter(w => w.struck)) { // each reads as a try at the word after it
+    const ws = pages.find(p => p.includes(s)), at = ws.indexOf(s), right = ws[at + 1], bare = right.word.replace(/[.,;:!?]$/, "");
+    assert.ok(/^[A-Za-z]{3,}[.,;:!?]?$/.test(right.word) && s.word !== bare, `${s.word} before ${right.word}`);
+    if (s.how === "again") assert.strictEqual(s.word, ws[at - 1].word); // the last word written again
+    else if (s.how === "ahead") assert.ok(ws[at + 2].word.startsWith(s.word) && s.word.slice(0, 2).toLowerCase() !== right.word.slice(0, 2).toLowerCase(), `${s.word} ahead of ${right.word}`); // the next word begun
+    else assert.ok(s.word[0].toLowerCase() === right.word[0].toLowerCase() && ["start", "spelling"].includes(s.how), `${s.how}: ${s.word} for ${right.word}`);
     assert.ok(["line", "scribble"].includes(s.struck) && s.key === `slip:${right.key}`);
+    assert.ok(!s.stop || (s.stop >= 0.4 && s.stop <= 0.75 && ["start", "ahead"].includes(s.how)));
   }
+  const hows = new Set(pages.flat().map(w => w.how).filter(Boolean));
+  assert.ok(["start", "spelling", "again", "ahead"].every(h => hows.has(h)), `kinds of slip: ${[...hows]}`);
+  // a word that sounds like another is often written as that one first
+  const sounds = Array.from({ length: 30 }, (_, seed) => G.words("we hope you will write to us about the weather there soon", seed, false, 0,
+    { forced: new Map([["write|1", { kind: "cut" }], ["weather|1", { kind: "cut" }], ["there|1", { kind: "cut" }]]) }).flat().filter(w => w.how === "sound").map(w => w.word)).flat();
+  assert.ok(sounds.length > 30 && sounds.every(w => ["right", "whether", "their"].includes(w)), `sound-alikes: ${[...new Set(sounds)]}`);
   assert.deepStrictEqual(G.words(text, 5, false, 3), G.words(text, 5, false, 3)); // the same page seed, the same slips
   assert.ok(!G.words(text, 5, true, 10).flat().some(w => w.struck));
   // laid out: one or two more strokes per slip (through or over it), a caret under each word added above its line, all inside the writing area
   const cfg = G.resolve(withSet({ "writing.mistakes": 3 })), ink = () => [[[0, 0], [1, 1]]];
   const short = G.words(text.split(" ").filter(t => t !== "7:30").slice(0, 80).join(" "), 5, false, 10), lines = G.layoutPages(short, ink, cfg, mulberry(1)).flat();
-  const n = short.flat().filter(w => w.struck).length, ins = short.flat().filter(w => w.inserted), strokes = lines.flat();
+  const n = short.flat().filter(w => w.struck).length, ins = short.flat().filter(w => w.inserted), strokes = lines.flat(), gone = short.flat().filter(w => w.touch).length;
   const raised = ins.filter(w => lines.some(l => l.words.some(b => b.key === w.key && b.box[3] < l.baseline - 0.5 * cfg.writing.x_height)));
-  const extra = strokes.length - short.flat().length - raised.length;
+  const extra = strokes.length - short.flat().length - raised.length - gone; // (a letter gone over: one more stroke in the word)
   assert.ok(n > 0 && raised.length > 0 && extra >= n && extra <= 2 * n,
     `${strokes.length} strokes for ${short.flat().length} words, ${n} slips, ${raised.length} of ${ins.length} added words above the line`);
   G.checkBounds(lines.flat(), cfg);
@@ -242,6 +260,9 @@ test("mistakes chosen in the preview, kinds switched off, the sign-off; a strike
   assert.ok(!only({ cut: false, scribble: false }).some(w => w.struck) && only({ cut: false }).filter(w => w.struck).every(w => w.struck === "scribble"));
   assert.ok(!only({ forgot: false }).some(w => w.inserted));
   assert.deepStrictEqual(G.words(text, 3).map(p => !!p.signoff), [false, false, true, true]);
+  assert.deepStrictEqual(G.words(text, 3).map(p => p.every(w => w.name)), [false, false, false, true]); // the name under it is signed
+  for (let seed = 1; seed <= 30; seed++) // nobody gets "With love," or their own name wrong
+    assert.ok(!G.words(long, seed, false, 10).flat().some(w => (w.struck && /^slip:(With|love,|Anna)\|/.test(w.key)) || (w.inserted && /^(With|love,|Anna)\|/.test(w.key))), `seed ${seed}`);
   const cfg = G.resolve(withSet({ "writing.wobble": 1 })), xh = cfg.writing.x_height, ink = () => [[[0, 0], [0, 1], [3, 1], [3, 0]]];
   const lines = G.layoutPages(G.words(long, 3, false, 10, { kinds: { scribble: false } }), ink, cfg, mulberry(2))[0];
   const words = lines.flatMap(l => l.words), last = lines.filter(l => l.words.some(w => /^(With|love,|Anna)\|/.test(w.key)));
@@ -255,8 +276,37 @@ test("mistakes chosen in the preview, kinds switched off, the sign-off; a strike
     n++; // through the middle of its letters (box: baseline at the bottom, x-height at the top): never down at the baseline like an underline
     const h = w.box[3] - w.box[1];
     for (const [, y] of st) assert.ok(y > w.box[1] + 0.2 * h && y < w.box[3] - 0.25 * h, `strike at ${((w.box[3] - y) / h).toFixed(2)} of the letters' height`);
+    // and it stops before the next word on the line (a word added above the line doesn't count), which came after it
+    const next = Math.min(...l.words.filter(o => o.box[0] >= w.box[2] && o.box[3] > l.baseline - 0.5 * xh).map(o => o.box[0]));
+    assert.ok(Math.max(...st.map(p => p[0])) < next - 0.2 * xh, `strike runs into the next word`);
   });
   assert.ok(n > 0 && words.length > 0);
+});
+
+test("letters vary within a word, but a straight downstroke along the hand's slant stays straight; a signed name is bigger", () => {
+  // every word: a downstroke at the hand's slant, then a flat stroke along the baseline
+  const ink = () => [[[0, 0], [0.15, 0.5], [0.3, 1], [0.45, 1.5], [0.6, 2]], [[0.9, 0], [1.6, 0.4], [2.4, 0]]];
+  const text = "one two three four five six seven eight nine ten\nWith love,\nAnna", unsigned = G.words(text, 4);
+  for (const w of unsigned.flat()) delete w.name;
+  for (const wobble of [1, 2]) {
+    const cfg = G.resolve(withSet({ "writing.wobble": wobble })), xh = cfg.writing.x_height, shapes = [];
+    const lines = G.layoutPages(G.words(text, 4), ink, cfg, mulberry(wobble))[0];
+    const plain = G.layoutPages(unsigned, ink, cfg, mulberry(wobble))[0].flatMap(l => l.words.map(w => [w.key, l[w.s0]])); // the same page, the name not signed
+    for (const l of lines) for (const w of l.words) {
+      const st = l[w.s0], [a, b] = [st[0], st[st.length - 1]], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      for (const p of st) { // no point strays from the straight line through its ends
+        const off = Math.abs((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / len;
+        assert.ok(off < 0.03 * xh, `${w.key}: downstroke bends by ${(off / xh).toFixed(3)} x-heights`);
+      }
+      const flat = l[w.s0 + 1], x0 = st[0][0], y0 = st[0][1];
+      shapes.push({ key: w.key, len, pts: flat.map(([x, y]) => [(x - x0) / len, (y - y0) / len]) });
+    }
+    // the same word shape never comes out twice the same: the flat stroke sits differently against the downstroke
+    const body = shapes.filter(s => !/^(With|love,|Anna)/.test(s.key));
+    for (let i = 1; i < body.length; i++) assert.ok(body[i].pts.some((p, j) => Math.hypot(p[0] - body[i - 1].pts[j][0], p[1] - body[i - 1].pts[j][1]) > 0.01), body[i].key);
+    const [, st] = plain.find(([key]) => key === "Anna|1"), was = Math.hypot(st[st.length - 1][0] - st[0][0], st[st.length - 1][1] - st[0][1]);
+    assert.ok(shapes.find(s => s.key === "Anna|1").len > 1.08 * was, "the name comes out bigger than written plainly");
+  }
 });
 
 test("page capacity estimate: plausible, grows with paper, counts paragraph lines", () => {
@@ -585,6 +635,14 @@ test("extra pressure at the bottom: the pen goes lower line by line down the pag
   assert.throws(() => simulate(bad, out.cfg), /behind its clamping point/);
   assert.throws(() => G.resolve(withSet({ "printer.z_draw": 2.5, "printer.z_lift": 4.5, "printer.press_bottom": 1 })), /at least 2 mm/);
   assert.throws(() => G.resolve(withSet({ "printer.press_bottom": 3 })), /press bottom/);
+  // pen 2 is clamped low on the page too, rounded the same safe way: a writing height with more decimals than the
+  // file writes, and a little extra pressure, once made it 0.005 mm too deep (found by a fuzz)
+  for (const [zd, press, dry] of [[13.365231, 0.0074, true], [13.365231, 0.0074, false], [10.004, 0.3, false], [7.996, 0.6, true], [12.3449, 0.013, false]]) {
+    const s = withSet({ "printer.z_draw": zd, "printer.z_lift": zd + 5, "printer.press_bottom": press, "printer.dry_run": dry });
+    const pen2 = run(s, text + "\nand at the very end *with the second pen*", 5);
+    assert.match(pen2.gcode, /PEN CHANGE/);
+    simulate(pen2.gcode, { ...s, printer: pen2.cfg.printer, paper: pen2.cfg.paper });
+  }
 });
 
 test("bed levelling, each maker's own way: after homing, pen out, cold, before the paper; heaters off again; never saved", () => {

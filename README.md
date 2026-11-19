@@ -35,10 +35,15 @@ and word gaps are never the same twice.
 - **45 handwriting styles**, neat to casual, based on 13 real writers.
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
 - **Mistakes** (off by default): a few words started wrong or misspelt (by ear, like a pen does: *hapened*, *beleive*),
-  crossed out, then written right; now and then a small word is left out and added above the line with a caret.
-  Switch each kind on or off, and click a word in the preview to give it a mistake, take one away or try another.
-  A letter's sign-off (*With love,* and the name) goes to the right.
-  Each word's neatness also varies a little, and long texts loosen toward the end like a tiring hand.
+  written as a word that sounds the same (*right* for *write*), begun with the next word, or the last word written again;
+  crossed out, then written right. A false start often stops in the middle of a letter. Now and then a small word is
+  left out and added above the line with a caret, or part of a letter is gone over again to make it clearer. As with a person, the count varies from page to page around the
+  setting. Switch each kind on or off, and click a word in the preview to give it a mistake, take one away or try another.
+- **No two copies alike**: letters vary within each word (a little wider, taller or more upright than the next), the
+  words you write most are written a little faster and looser, and each page comes out a little different as a whole
+  (size, spacing, slant, where it starts). A letter's sign-off (*With love,*) goes to the right and the name under it is
+  signed: bigger, leaning more, rising a little. Each word's neatness also varies, and long texts loosen toward the end
+  like a tiring hand.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
 - **Long text** flows onto page 2, 3, … (up to 50). Save one page or all of them as a zip.
 - **Save all pages in one file** (the main button once text runs onto a second page): the bed is levelled and the pen clamped once. After each page the pen lifts to the back

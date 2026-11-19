@@ -212,7 +212,7 @@
     paper: { size: "A5", orientation: "portrait", x: 55, y: 10, width: 148, height: 210, margin: 15, margin_y: 15, slide: false,
       ruling: 0, first_line: 20, margin_line: 0 },
     writing: { style: "s:neat-1", bias: 1.8, wobble: 1, x_height: 2.8, line_spacing: 8, word_spacing: 1, header: "", page_numbers: false,
-      code: false, indent: 0.55, mistakes: 0, slip_cut: true, slip_scribble: true, slip_forgot: true }, // code: the text is a program (words(): _ and * written); indent: x-heights per space a line starts with; mistakes: crossed-out slips per 100 words
+      code: false, indent: 0.55, mistakes: 0, slip_cut: true, slip_scribble: true, slip_forgot: true, slip_touch: true }, // code: the text is a program (words(): _ and * written); indent: x-heights per space a line starts with; mistakes: crossed-out slips per 100 words
   };
   // Every number that reaches the G-code: [min, max]. Values must be real, finite numbers.
   const LIMITS = {
@@ -233,7 +233,7 @@
           throw new WriteError(`Setting ${key.replace(/_/g, " ")} = ${JSON.stringify(v)} must be a number from ${lo} to ${hi}.`);
       }
     const pr = cfg.printer, w = cfg.writing;
-    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, w.page_numbers, w.code, w.slip_cut, w.slip_scribble, w.slip_forgot].some(v => typeof v !== "boolean"))
+    if ([pr.sounds, cfg.paper.slide, pr.dry_run, pr.level, w.page_numbers, w.code, w.slip_cut, w.slip_scribble, w.slip_forgot, w.slip_touch].some(v => typeof v !== "boolean"))
       throw new WriteError("Settings sounds, slide, dry run, bed levelling, page numbers, code and the kinds of mistakes must be on or off.");
     if (!["portrait", "landscape"].includes(cfg.paper.orientation) || typeof w.style !== "string")
       throw new WriteError("Paper orientation must be portrait or landscape, and style a name.");
@@ -544,22 +544,32 @@
     });
     if (!code) { // the sign-off near the end and up to two short lines under it (a name)
       const at = paras.findIndex((para, i) => i >= paras.length - 6 && SIGNOFF.test(para.map(w => w.word).join(" ")));
-      if (at >= 0) for (let i = at; i < paras.length && i <= at + 2 && paras[i].length && paras[i].length <= 4; i++) paras[i].signoff = true;
+      if (at >= 0) for (let i = at; i < paras.length && i <= at + 2 && paras[i].length && paras[i].length <= 4; i++) {
+        paras[i].signoff = true;
+        if (i > at) for (const w of paras[i]) w.name = true; // the name under it is signed: bigger, faster, leaning more
+      }
     }
     return !code && (mistakes > 0 || slips.forced?.size) ? addMistakes(paras, pageSeed, mistakes, slips) : paras;
   }
-  /** A writer's slips: before some words, a wrong start or a misspelling of it (wd.struck: "line" or "scribble"), which
-   *  the layout crosses out; and about one in four a small word left out and added above the line with a caret
-   *  (wd.inserted). Only words of plain letters, so a slip always reads as a try at that word. `rate` per 100 words of
-   *  the whole text (rounded), long words more often than short ones, never in the first words and never two close
-   *  together; which words depends on the page seed and the word (like its handwriting). */
+  /** A writer's slips: before some words, a wrong try at it (wd.struck: "line" or "scribble"), which the layout crosses
+   *  out; and now and then a small word left out and added above the line with a caret (wd.inserted). Only words of
+   *  plain letters, so a slip always reads as a try at that word. About `rate` per 100 words of the whole text: like
+   *  a person, more on one page and fewer on another, and a different mix each time; long words more often than short
+   *  ones, never in the first words, the sign-off or two close together; which words depends on the page seed and the
+   *  word (like its handwriting). */
   function addMistakes(paras, pageSeed, rate, { kinds = {}, forced = new Map() } = {}) {
-    const ok = { cut: true, scribble: true, forgot: true, ...kinds }, want = w => forced.get(w.key);
+    const ok = { cut: true, scribble: true, forgot: true, touch: true, ...kinds }, want = w => forced.get(w.key);
     const all = paras.flat(), index = new Map(all.map((w, i) => [w, i]));
-    // `rate` per 100 words, but a short text with mistakes on still gets one; none in its first words (fewer in a short text)
-    const m = rate > 0 ? Math.max(all.length >= 6 ? 1 : 0, Math.round(rate * all.length / 100)) : 0, first = Math.min(SLIP_APART, Math.floor(all.length / 4));
+    // a count around `rate` per 100 words (spread like a Poisson count), but a short text with mistakes on still gets
+    // one (a few words alone get none); none in its first words (fewer of those in a short text)
+    const mean = rate * all.length / 100, z = Math.sqrt(-2 * Math.log(1 - chance(`${pageSeed}|count`))) * Math.cos(2 * Math.PI * chance(`${pageSeed}|count|2`));
+    const m = rate > 0 && all.length >= 6 ? Math.max(1, Math.round(mean + Math.sqrt(mean) * z)) : 0, first = Math.min(SLIP_APART, Math.floor(all.length / 4));
+    // about one in four a small word left out, one in five a letter gone over again, the rest crossed out
+    const kind = Array.from({ length: m }, (_, i) => chance(`${pageSeed}|kind|${i}`)), lost = kind.filter(c => c < 0.25).length, touched = kind.filter(c => c >= 0.25 && c < 0.45).length;
     const inside = new Set(paras.flatMap(para => para.slice(1, -1))); // a forgotten word sits between two others
-    const plain = w => !w.parts && !w.glyph && /^[A-Za-z]{3,}[.,;:!?]?$/.test(w.word), free = (w, i) => i >= first && !want(w);
+    const signed = new Set(paras.filter(para => para.signoff).flat()); // nobody gets "With love" or their own name wrong
+    const plain = w => !w.parts && !w.glyph && /^[A-Za-z]{3,}[.,;:!?]?$/.test(w.word), free = (w, i) => i >= first && !want(w) && !signed.has(w);
+    const bare = w => w.word.replace(/[.,;:!?]$/, "").toLowerCase(), likely = w => plain(w) && (bare(w).length >= 4 || SOUNDS[bare(w)]); // not "you" or "the" (unless it sounds like another word)
     const score = w => chance(`${pageSeed}|slip|${w.key}`) * 6 / Math.min(10, w.word.length);
     const picked = new Set(), at = [], room = w => !at.some(i => Math.abs(i - index.get(w)) < SLIP_APART);
     for (const w of all) { // the ones chosen in the preview come first, wherever they are
@@ -567,17 +577,20 @@
       if (f && f.kind === "forgot" && inside.has(w) && !w.parts && !w.glyph) { w.inserted = true; at.push(index.get(w)); }
       else if (f && f.kind === "cut" && plain(w)) { picked.add(w); at.push(index.get(w)); }
     }
-    let auto = 0; // then `rate` per 100 words more
+    let auto = 0; // then about `rate` per 100 words more
     if (ok.forgot) for (const w of all.filter((w, i) => free(w, i) && inside.has(w) && !w.underline && !w.pen && FORGOTTEN.test(w.word))
-      .sort((a, b) => chance(`${pageSeed}|left|${a.key}`) - chance(`${pageSeed}|left|${b.key}`)).slice(0, Math.round(m / 4)))
+      .sort((a, b) => chance(`${pageSeed}|left|${a.key}`) - chance(`${pageSeed}|left|${b.key}`)).slice(0, lost))
       if (room(w)) { w.inserted = true; at.push(index.get(w)); auto++; }
-    if (ok.cut || ok.scribble) for (const w of all.filter((w, i) => free(w, i) && plain(w)).sort((a, b) => score(a) - score(b))) {
+    if (ok.touch) for (const w of all.filter((w, i) => free(w, i) && plain(w) && !w.inserted && !w.underline)
+      .sort((a, b) => chance(`${pageSeed}|touch|${a.key}`) - chance(`${pageSeed}|touch|${b.key}`)).slice(0, touched))
+      if (room(w)) { w.touch = true; at.push(index.get(w)); auto++; }
+    if (ok.cut || ok.scribble) for (const w of all.filter((w, i) => free(w, i) && likely(w)).sort((a, b) => score(a) - score(b))) {
       if (auto >= m) break;
       if (w.inserted || !room(w)) continue;
       picked.add(w); at.push(index.get(w)); auto++;
     }
     return paras.map(para => {
-      const out = para.flatMap(w => picked.has(w) ? [slip(w, pageSeed, (want(w) || {}).n || 0, ok), w] : [w]);
+      const out = para.flatMap((w, j) => picked.has(w) ? [slip(w, pageSeed, (want(w) || {}).n || 0, ok, para[j - 1], para[j + 1]), w] : [w]);
       for (const k of ["indent", "runOn", "signoff"]) if (para[k]) out[k] = para[k];
       return out;
     });
@@ -598,13 +611,27 @@
   const MISSPELL = [[/([a-z])\1/i, "$1"], [/ie/, "ei"], [/ei/, "ie"], [/(?<=[^aeiou]{1,2}[aeiou][^aeiou]+)[ae](?=[a-z])/, v => v === "a" ? "e" : "a"],
     [/(?<=[^aeiou]{1,2}[aeiou][^aeiou]+)i(?=[a-z])/, "e"], [/e(?=(ly|ful|ment|ness)$)/, ""], [/(?<=w)h/, ""], [/(?<=[aeiou])[nlrst](?=[^aeiou])/, ""]];
   const SOUNDALIKE = { a: "e", e: "a", i: "e", o: "u", u: "o" };
-  /** A wrong try at word w: try 0 is the page's own, a higher try another (Another slip in the preview); kinds: as addMistakes. */
-  function slip(w, pageSeed, attempt = 0, kinds = {}) {
+  // words a hand writes for one that sounds the same, noticed as soon as they're down (both ways round)
+  const SOUNDS = Object.fromEntries([["their", "there"], ["there", "their"], ["your", "you're"], ["its", "it's"], ["too", "to"], ["then", "than"],
+    ["than", "then"], ["where", "were"], ["were", "where"], ["here", "hear"], ["hear", "here"], ["know", "no"], ["knew", "new"], ["new", "knew"],
+    ["write", "right"], ["right", "write"], ["weather", "whether"], ["whether", "weather"], ["whose", "who's"], ["lose", "loose"], ["loose", "lose"],
+    ["affect", "effect"], ["effect", "affect"], ["accept", "except"], ["quite", "quiet"], ["quiet", "quite"], ["passed", "past"], ["past", "passed"],
+    ["piece", "peace"], ["peace", "piece"], ["through", "threw"], ["threw", "through"], ["week", "weak"], ["weak", "week"], ["hole", "whole"], ["whole", "hole"]]);
+  /** A wrong try at word w: try 0 is the page's own, a higher try another (Another slip in the preview); kinds: as
+   *  addMistakes; prev, next: the words either side of it on its line (a hand writes the last word again, or jumps ahead).
+   *  wd.how says which: "sound" (a word that sounds the same), "again", "ahead", "spelling" or "start" (a false start);
+   *  a false start often stops in the middle of a letter (wd.stop: how much of its last stroke got written). */
+  function slip(w, pageSeed, attempt = 0, kinds = {}, prev = null, next = null) {
     // (a word's comma or full stop isn't part of the try: the hand stopped before it)
     const tag = `${pageSeed}|slip|${w.key}${attempt ? "|" + attempt : ""}`, r = k => chance(`${tag}|${k}`), s = w.word.replace(/[.,;:!?]$/, ""), n = s.length;
     const ways = MISSPELL.map(([re, to]) => s[0] + s.slice(1).replace(re, to)).filter(x => x !== s && x.length >= 2);
-    let wrong;
-    if (n >= 5 && ways.length && r(0) < 0.65) wrong = ways[Math.floor(r(1) * ways.length)];
+    const sound = SOUNDS[s.toLowerCase()], word = x => x && !x.parts && !x.glyph && !x.struck && /^[A-Za-z]{2,}$/.test(x.word);
+    let wrong, how = "start";
+    if (sound && r(4) < 0.7) [wrong, how] = [s[0] === s[0].toUpperCase() ? sound[0].toUpperCase() + sound.slice(1) : sound, "sound"];
+    else if (word(prev) && prev.word.toLowerCase() !== s.toLowerCase() && r(5) < 0.12) [wrong, how] = [prev.word, "again"];
+    else if (word(next) && next.word.length >= 4 && next.word.slice(0, 2).toLowerCase() !== s.slice(0, 2).toLowerCase() && r(6) < 0.12)
+      [wrong, how] = [next.word.slice(0, r(7) < 0.4 ? 3 : 2), "ahead"];
+    else if (n >= 5 && ways.length && r(0) < 0.65) [wrong, how] = [ways[Math.floor(r(1) * ways.length)], "spelling"];
     else if (n >= 4 && /[^aeiou]/i.test(s[2]) && s[2] !== s[1] && s[2].toLowerCase() !== s[0].toLowerCase() && r(2) < 0.25) wrong = s[0] + s[2]; // the hand ran ahead of itself: "tl" for talked
     else { // started it and went wrong at once: a sound-alike vowel, or the hand ran ahead; never a right start (that a hand just carries on)
       const k = 1 + Math.floor(r(1) * Math.min(2, n - 2)), c = s[k], vowel = SOUNDALIKE[c.toLowerCase()];
@@ -612,7 +639,8 @@
       if (wrong === s.slice(0, k + 1)) wrong = s.slice(0, k) + (s[k + 2] || "e"); // (a doubled letter ran ahead to itself)
     }
     const scribble = kinds.scribble !== false && (kinds.cut === false || (wrong.length >= 3 && wrong.length <= 6 && r(3) < 0.25));
-    return { word: wrong, key: `slip:${w.key}`, seed: hash(tag), struck: scribble ? "scribble" : "line",
+    const stop = (how === "start" || how === "ahead") && r(8) < 0.5 ? 0.4 + 0.35 * r(9) : 0; // the pen lifted the moment it went wrong
+    return { word: wrong, key: `slip:${w.key}`, seed: hash(tag), struck: scribble ? "scribble" : "line", how, ...(stop && { stop }),
       ...(w.underline && { underline: true }), ...(w.pen && { pen: w.pen }) };
   }
   /** Words of the header line on sheet k (0-based): [left: the header text, right: "Page k+1"]. Every sheet's header
@@ -629,7 +657,7 @@
   /** A word's ink, assembled from its separately written pieces (pieces()); drawn symbols in this hand (handOf).
    *  gap(figures): a random gap, between drawn symbols (figures) or between block capitals. */
   function wordInk(wd, inkOf, gap, hand, k) {
-    const inkFor = part => part.glyph ? glyph(part.word, part.seed, hand, k) : onBaseline(inkOf(part));
+    const inkFor = part => part.glyph ? glyph(part.word, part.seed, hand, k) : onBaseline(noStray(inkOf(part), part.word));
     if (!wd.parts) return inkFor(wd);
     const out = [];
     let x = 0, prev = null;
@@ -645,6 +673,29 @@
       prev = part;
     }
     return out;
+  }
+  /** The model now and then starts a word with a stray dot well left of its first letter, which reads as a full stop
+   *  in the margin: leave it out. (A word that starts with a mark, like "(see" or ".5", keeps its first stroke.) */
+  function noStray(ink, word) {
+    if (ink.length < 2 || !/^[A-Za-z0-9]/.test(word) || size(ink[0]) > 0.3) return ink;
+    let x0 = Infinity, x1 = -Infinity;
+    for (let i = 1; i < ink.length; i++) for (const p of ink[i]) x0 = Math.min(x0, p[0]);
+    for (const p of ink[0]) x1 = Math.max(x1, p[0]);
+    return x1 < x0 - 0.25 ? ink.slice(1) : ink;
+  }
+  /** A letter gone over again to make it clearer: about a letter's worth of the word's longest stroke, drawn once more
+   *  a hair off the first time (x-height units). The same each time for the word's seed. */
+  function goneOver(ink, seed) {
+    const N = normals(hash(`${seed}|touch`)), st = ink.reduce((a, b) => (size(b) > size(a) ? b : a)), len = size(st);
+    const part = Math.min(len, 0.9 + 0.5 * Math.abs(N())), from = clip(0.5 + 0.25 * N(), 0, 1) * (len - part);
+    const out = [];
+    for (let i = 0, at = 0; i < st.length; i++) {
+      if (i) at += Math.hypot(st[i][0] - st[i - 1][0], st[i][1] - st[i - 1][1]);
+      if (at >= from && at <= from + part) out.push(st[i]);
+    }
+    const piece = out.length >= 2 ? out : st.slice(0, 2), [ox, oy] = piece[0], k = 1 + N() * 0.03;
+    const dx = (0.03 + 0.03 * Math.abs(N())) * (N() < 0 ? -1 : 1), dy = N() * 0.03; // never quite on top of the first time
+    return piece.map(([x, y]) => [ox + (x - ox) * k + dx, oy + (y - oy) * k + dy]);
   }
   /** The model writes some words a little above the line (long ones up to a third of a letter), so a line of them
    *  hops word by word: set each on its baseline, judged from the bottoms of its letters (not the tails of g or y). */
@@ -677,16 +728,34 @@
   const clip = (v, a, b) => Math.min(Math.max(v, a), b);
 
   /** A word as a hand writes it this time: a little bigger or smaller, more or less slanted, at a slight angle (all
-   *  scaled by wobble k). Returns {ink, width}: strokes starting at x = 0, in x-height units. */
-  function shapeWord(wd, inkOf, k, N, hand) {
-    const ws = clip(1 + N() * 0.04 * k, 0.9, 1.1), shear = clip(N() * 0.05 * k, -0.12, 0.12), rot = clip(N() * 0.012 * k, -0.03, 0.03);
+   *  scaled by wobble k; lean: extra slant, how the page leans this time). Returns {ink, width}: strokes starting at
+   *  x = 0, in x-height units. */
+  function shapeWord(wd, inkOf, k, N, hand, lean = 0) {
+    const sig = wd.name ? Math.min(1, k) : 0; // a signed name leans further and rises a little
+    const ws = clip(1 + N() * 0.04 * k, 0.9, 1.1), shear = clip(N() * 0.05 * k, -0.12, 0.12) + 0.08 * sig + lean, rot = clip(N() * 0.012 * k, -0.03, 0.03) + 0.035 * sig;
     const cr = Math.cos(rot), sr = Math.sin(rot);
     // the word's baseline wanders a little along it (a slow wave, up and down only), instead of the whole word sitting on
     // one straight line; never sideways with height, which bends a tall straight stroke (an I, an l) into a curl
     const wy = clip(N() * 0.04 * k, -0.08, 0.08), py = N() * 3, ly = 3 + 1.5 * Math.abs(N());
     const wave = ([sx, sy]) => [sx, sy + wy * Math.sin(sx * 2 * Math.PI / ly + py)];
+    // and its letters differ from one another: here a little wider, taller or more upright than the next, varying
+    // smoothly along the word, so two copies of a word never match letter for letter. Judged along the writing's
+    // slant (u), so a downstroke moves as a whole and stays straight. Widths change by at most lw (never folds back).
+    const lw = clip(N() * 0.08 * k, -0.15, 0.15), lh = clip(N() * 0.07 * k, -0.14, 0.14), ls = clip(N() * 0.04 * k, -0.08, 0.08);
+    const pw = N() * 3, ph = N() * 3, ps = N() * 3, Lw = 1.1 + 0.5 * Math.abs(N()), Lh = 1.8 + 0.8 * Math.abs(N()), Ls = 2.4 + Math.abs(N());
+    const letters = ([sx, sy]) => {
+      const u = sx - hand.slant * sy;
+      return [sx + lw * Lw / (2 * Math.PI) * Math.sin(2 * Math.PI * u / Lw + pw) + ls * sy * Math.sin(2 * Math.PI * u / Ls + ps), sy * (1 + lh * Math.sin(2 * Math.PI * u / Lh + ph))];
+    };
     const gap = figures => (figures ? clip(FIGURE_GAP + N() * 0.04 * k, 0.2, 0.4) : Math.max(0.06, LETTER_GAP + N() * 0.06 * k));
-    let ink = wordInk(wd, inkOf, gap, hand, k).map(st => st.map(pt => { const [sx, sy] = wave(pt), a = (sx + shear * sy) * ws, b = sy * ws; return [a * cr - b * sr, a * sr + b * cr]; }));
+    let raw = wordInk(wd, inkOf, gap, hand, k);
+    if (wd.stop && raw.length) { // a false start: the pen lifted part way through its last stroke (dots and bars after it never came)
+      let j = raw.length - 1;
+      while (j > 0 && size(raw[j]) < 0.6) j--;
+      raw = [...raw.slice(0, j), raw[j].slice(0, Math.max(2, Math.ceil(raw[j].length * wd.stop)))];
+    }
+    if (wd.touch && raw.length) raw = [...raw, goneOver(raw, wd.seed)];
+    let ink = raw.map(st => st.map(pt => { const [sx, sy] = wave(letters(pt)), a = (sx + shear * sy) * ws, b = sy * ws; return [a * cr - b * sr, a * sr + b * cr]; }));
     let xmin = Infinity, width = 0;
     for (const st of ink) for (const pt of st) xmin = Math.min(xmin, pt[0]);
     ink = ink.map(st => st.map(([a, b]) => [a - xmin, b])); // the word still starts where it is placed
@@ -720,29 +789,42 @@
     const snap = d => grid.ruled ? Math.ceil(d / grid.step - 1e-9) * grid.step : d;
     const room = xh * k;
     let pageTilt = N() * 0.008 * vk, marginCreep = N() * 0.008 * k; // each sheet leans its own way
-    let walk = 0, scale = 1, y = grid.first; // first baseline, leaving room for capitals and ascenders
+    // And each time a person writes, the whole page comes out a little different: a bit bigger or smaller, spaced
+    // wider or tighter, more or less slanted, starting a little further in or lower down, growing or shrinking as it goes.
+    const occ = { size: clip(1 + N() * 0.035 * k, 0.93, 1.07), gap: clip(1 + N() * 0.07 * k, 0.86, 1.14), lean: clip(N() * 0.03 * k, -0.06, 0.06),
+      left: clip(N() * 0.45 * k, -1, 1) * xh, step: grid.ruled ? 1 : clip(1 + N() * 0.03 * k, 0.94, 1.06), grow: clip(N() * 0.002 * k, -0.004, 0.004) };
+    const lower = () => grid.ruled ? 0 : Math.min(Math.abs(N()) * 0.4 * k, 0.8) * xh; // how much lower than the first line a sheet starts
+    let walk = 0, scale = occ.size, y = grid.first + lower(); // first baseline, leaving room for capitals and ascenders
     // Lowest ink so far on this sheet per COL-wide column; new lines keep `gap` mm (pen centre to centre) below it.
     let floor = new Map();
     const gap = Math.max(0.8, 0.3 * xh), near = Math.ceil(gap / COL);
     // Ruled paper: a person writes on the next printed line even if a tail meets a tall letter there, so tips may cross
-    // a little (a third of a letter height); only more than that skips a printed line.
-    const clear = grid.ruled ? -xh / 3 : gap;
+    // a little (a third of a letter height); only more than that skips a printed line. Ink further to the side than the
+    // next column needs less room (it's that far away already).
+    const clear = grid.ruled ? -xh / 3 : gap, clearAt = d => Math.abs(d) <= 1 || grid.ruled ? clear : 0.5 * clear;
+    /** How far (mm) ink at these page points comes into the room it must leave below the ink above; 0 if it doesn't. */
+    const into = strokes => {
+      let c = 0;
+      columns(strokes, (col, py) => { for (let d = -near; d <= near; d++) { const fl = floor.get(col + d); if (fl !== undefined) c = Math.max(c, fl + clearAt(d) - py); } });
+      return c;
+    };
     const pages = [], inline = new Set(); // inline: forgotten words written in line after all (no next word on the line)
     let lines = [], onSheet = 0; // body lines on this sheet (the header doesn't count)
     const tooMuch = () => new WriteError(maxPages > 1
       ? `Too much text: it needs more than ${maxPages} pages. Use smaller letters or bigger paper.`
       : "Text doesn't fit on the page: use smaller letters or less text.");
-    const wordGap = lxh => Math.max(Math.min(0.6, w.word_spacing), w.word_spacing * (1 + N() * 0.15 * k)) * lxh; // never so tight that two words run together
+    // a writer's word spacing is one of their steadiest habits: it varies a little, and never so tight that two words run together
+    const wordGap = lxh => Math.max(Math.min(0.72, w.word_spacing), w.word_spacing * occ.gap * (1 + N() * 0.12 * k)) * lxh;
 
     /** The next line at y: where it starts and may end, its size, and its baseline (it slopes and bows). */
     function lineFrame() {
       walk = 0.85 * walk + N() * 0.22 * xh * k; // mean-reverting: the margin creeps either side and gets pulled back
-      const stray = clip(marginCreep * (y - top) + walk + N() * 0.1 * xh * k, -room, room);
+      const stray = clip(marginCreep * (y - top) + walk + N() * 0.1 * xh * k + occ.left, -room, room);
       const left = areaLeft + room + stray;
       const lineRight = right - Math.abs(N() * 1.2 * xh) * k; // sometimes a word goes to the next line early
       const tilt = clip(pageTilt + N() * 0.006 * vk, -0.025, 0.025);
       const bow = N() * 0.12 * xh * vk; // the line sags (+) or arches (-) mid-way
-      scale = clip(scale + N() * 0.02 * k, 0.92, 1.08);
+      scale = clip(scale + N() * 0.02 * k + occ.grow, 0.92 * occ.size, 1.08 * occ.size);
       const lxh = xh * scale, span = Math.max(lineRight - left, 1);
       const baseline = px => { const u = clip((px - left) / span, 0, 1); return y + tilt * (px - left) + bow * 4 * u * (1 - u); };
       return { left, lineRight, lxh, baseline, low: y + 1.3 * lxh + Math.abs(tilt) * span + Math.abs(bow) };
@@ -765,8 +847,8 @@
         throw new WriteError(`"${wd.word}": a word's size must be ${WORD_SIZE[0] * 100}% to ${WORD_SIZE[1] * 100}%.`);
       if (!(typeof dx === "number" && typeof dy === "number" && Math.abs(dx) <= lim && Math.abs(dy) <= lim))
         throw new WriteError(`"${wd.word}" was moved off the paper: reset it.`);
-      const s = shapeWord(wd, inkOf, k, N, hand);
-      return { wd, ink: s.ink, width: s.width * lxh * size, size, dx, dy };
+      const s = shapeWord(wd, inkOf, k, N, hand, occ.lean), big = wd.name ? 1 + 0.12 * Math.min(1, k) : 1; // a signature comes out bigger
+      return { wd, ink: s.ink, width: s.width * lxh * size * big, size: size * big, dx, dy };
     }
     /** One hand-drawn stroke under each run of _underlined_ words, just below the lowest baseline in the run. */
     function underline(strokes, placed, f) {
@@ -799,25 +881,26 @@
     }
     /** Each crossed-out slip (wd.struck), crossed out the way a hand does it, in one quick smooth stroke: a line through
      *  the middle of its letters that rises a little, runs on past the end and often comes back, or a dense scribble
-     *  taller than the letters, there and back, that hides the word. Placed from where the word's ink actually is. */
+     *  a little taller than the letters, there and back, that hides the word. Placed on the word's own baseline. */
     function strike(strokes, placed, f) {
       for (const p of placed) {
-        if (!p.wd.struck) continue;
-        const ys = strokes.slice(p.s0, p.s1).flat().map(q => q[1]).sort((m, n) => m - n);
-        if (!ys.length) continue;
-        const u = f.lxh * p.size, a = Math.abs, q = t => ys[Math.floor(t * (ys.length - 1))], c = q(0.5), xm = (p.x0 + p.x1) / 2;
+        if (!p.wd.struck || p.s1 <= p.s0) continue;
+        const u = f.lxh * p.size, a = Math.abs;
         const span = p.x1 - p.x0; // a quick stroke: it may start a little inside the word, and run past its end or stop short
-        const x0 = Math.max(areaLeft, p.x0 + clip(0.15 * N() - 0.05, -0.35, 0.2) * u), x1 = Math.min(right, Math.max(p.x0 + 0.7 * span, p.x1 + (0.15 + 0.3 * N()) * u)), w = x1 - x0;
-        // h: x-heights above the middle of the word's letters, which follows the line's slope
-        const at = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, c + f.baseline(px) - f.baseline(xm) - h * u]; };
+        // (but never into the next word: that was written after the crossing-out, beside it)
+        const next = Math.min(...placed.filter(o => o.x0 >= p.x1 - 1e-9 && !o.wd.inserted).map(o => o.x0)) - 0.3 * u;
+        const x0 = Math.max(areaLeft, p.x0 + clip(0.15 * N() - 0.05, -0.35, 0.2) * u), x1 = Math.min(right, next, Math.max(p.x0 + 0.7 * span, p.x1 + (0.15 + 0.3 * N()) * u)), w = x1 - x0;
         // a line goes through the bodies of the letters (the x-height band), never down by the baseline where it would read as an underline
         const body = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - (0.47 + clip(h, -0.16, 0.2)) * u]; };
         const pts = [];
         if (p.wd.struck === "scribble") {
-          // over the letters' bodies, slanted like writing, loose enough for paper to show, smaller where it starts and ends
-          const big = 0.8 + 0.4 * a(N()), step = 0.26 + 0.14 * a(N()); // each scribble its own size and pace
-          const top = (c - q(0.15)) / u + 0.1 * big, low = (c - q(0.85)) / u - 0.05 * big, lean = (0.06 + 0.12 * a(N())) * u, mid = (top + low) / 2;
-          const zig = (x, up, t) => at(x + (up ? lean : 0), mid + ((up ? top : low) - mid) * (0.55 + 0.45 * Math.sin(Math.PI * clip(t, 0, 1))) + N() * 0.1);
+          // a quick zigzag, slanted like writing, over the bodies of the letters and a little past them above and below
+          // (x-heights over the baseline), loose enough for paper to show, smaller where it starts and ends; each its own
+          // size and pace
+          const big = 0.8 + 0.4 * a(N()), step = 0.22 + 0.14 * a(N());
+          const top = 1 + (0.08 + 0.2 * a(N())) * big, low = -(0.05 + 0.15 * a(N())) * big, lean = (0.05 + 0.1 * a(N())) * u, mid = (top + low) / 2;
+          const band = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - h * u]; };
+          const zig = (x, up, t) => band(x + (up ? lean : 0), mid + ((up ? top : low) - mid) * (0.6 + 0.4 * Math.sin(Math.PI * clip(t, 0, 1))) + N() * 0.12);
           let up = N() < 0;
           for (let x = x0; x < x1; x += (step + 0.12 * a(N())) * u, up = !up) pts.push(zig(x, up, (x - x0) / w));
           if (N() > -0.2) for (let x = x1, end = x0 + (0.2 + 0.4 * a(N())) * w; x > end; x -= (0.38 + 0.14 * a(N())) * u, up = !up) pts.push(zig(x, up, (x - x0) / w));
@@ -856,10 +939,7 @@
         if (rise > 0) shift(strokes, snap(rise)); // a line sloping up must not climb out of the writing area
         // A line that tilts, bows or drifts into the ink above (or a tall letter under a hanging g) moves down
         // just enough to keep clear, like a person leaving room, instead of writing over it.
-        let clash = 0;
-        columns(fixed, (c, py) => {
-          for (let d = -near; d <= near; d++) { const fl = floor.get(c + d); if (fl !== undefined) clash = Math.max(clash, fl + clear - py); }
-        });
+        const clash = into(fixed);
         if (clash > 0) shift(strokes, snap(clash)); // later lines follow it down, so blank lines between paragraphs stay blank
         if (extent(fixed)[3] > bottom) return false;
         columns(fixed, (c, py) => floor.set(c, Math.max(floor.get(c) ?? py, py)));
@@ -894,7 +974,7 @@
       if (pages.length + 1 >= maxPages) throw tooMuch();
       pages.push(lines);
       lines = []; onSheet = 0;
-      y = grid.first; walk = 0; floor = new Map();
+      y = grid.first + lower(); walk = 0; floor = new Map();
       pageTilt = N() * 0.008 * vk; marginCreep = N() * 0.008 * k;
       header();
     };
@@ -923,8 +1003,9 @@
           if (it.width > f.lineRight - f.left) throw new WriteError(`The word "${wd.word}" is wider than a line: use smaller letters.`);
           // A forgotten word: the writer went on to the next one, then added it above the gap, smaller, with a caret.
           if (wd.inserted && prev && !inline.has(wd) && para[i + 1] && !para[i + 1].struck) {
-            left = { it: { ...it, size: 0.6 * it.size, width: 0.6 * it.width }, at: i++ };
-            x += 0.45 * f.lxh; // a little more room where the caret will go
+            const small = clip(0.63 + 0.06 * N(), 0.52, 0.75);
+            left = { it: { ...it, size: small * it.size, width: small * it.width }, at: i++ };
+            x += (0.45 + 0.1 * Math.abs(N())) * f.lxh; // a little more room where the caret will go
             continue;
           }
           if (x + it.width > f.lineRight && x > x0) {
@@ -941,17 +1022,39 @@
           i++;
           rate = 0.6 * rate + N() * 0.015 * vk; // the words wander up and down smoothly along the line, not word by word
           drift = clip(drift + rate, -0.25, 0.25);
+          // a tall letter under a tail of the line above: the hand writes that word a little lower; only if that isn't
+          // enough does the whole line move down (finish)
+          const u = f.lxh * it.size, dip = !grid.ruled && floor.size ? into(it.ink.map(st => st.map(([sx, sy]) => { const px = x + sx * u; return [px, f.baseline(px) + drift * xh - sy * u]; }))) : 0;
+          if (dip > 0) drift = Math.max(drift, Math.min(drift + dip / xh, 0.25));
           put(it, x, f, strokes, placed, drift);
-          if (left) { // above the middle of the gap it belongs in, then the caret under it
-            const cx = (prev.x + prev.width + x) / 2, L = f.lxh, yb = f.baseline(cx) + drift * xh;
-            put(left.it, cx - left.it.width * (0.5 + 0.2 * N()), f, strokes, placed, drift - (1.65 + 0.1 * N()) * L / xh); // over the neighbours' tall letters
-            // the ^ goes under the line, its point at the baseline, so it can't be read as a letter; one stroke, up and down
-            const hw = (0.26 + 0.06 * Math.abs(N())) * L, tip = [cx + N() * 0.04 * L, yb - (0.12 + 0.06 * N()) * L], feet = yb + (0.6 + 0.08 * N()) * L;
-            strokes.push([...spline([[cx - hw, feet + N() * 0.04 * L], [(cx - hw + tip[0]) / 2 + 0.02 * L, (feet + tip[1]) / 2], tip], 0.2 * xh),
-              ...spline([tip, [(cx + hw + tip[0]) / 2 + 0.02 * L, (feet + tip[1]) / 2], [cx + hw, feet + N() * 0.04 * L]], 0.2 * xh).slice(1)]);
+          if (left) { // above the gap it belongs in, clear of its neighbours' tall letters, then the caret under it
+            const L = f.lxh, cx = (prev.x + prev.width + x) / 2 + (/[,;:]$/.test(prev.wd.word) ? 0.15 * L : 0), yb = f.baseline(cx) + drift * xh;
+            const ins = left.it, ui = L * ins.size, lean = 0.2 * N(), want = yb - (1.45 + 0.12 * N()) * L;
+            // where there's room over the gap, raised only as far as it must be for none of its letters to sit on a tall
+            // letter of the two words under it (and never so high it reaches into the line above: then it may touch a tip)
+            const tops = new Map();
+            for (const p of placed.slice(-2)) columns(strokes.slice(p.s0, p.s1), (c, py) => tops.set(c, Math.min(tops.get(c) ?? py, py)));
+            const baseAt = lx => {
+              let b = want;
+              for (const st of ins.ink) for (const [sx, sy] of st) {
+                const px = lx + sx * ui, c = Math.floor(px / COL), lift = f.baseline(px) - f.baseline(cx);
+                for (let d = -1; d <= 1; d++) { const t = tops.get(c + d); if (t !== undefined) b = Math.min(b, t - 0.15 * L + sy * ui - lift); }
+              }
+              return Math.max(b, yb - 2.3 * L);
+            };
+            const [lx, base] = [-0.35, -0.15, 0, 0.15, 0.35].map(o => cx - ins.width * (0.5 + o)).map(lx => [lx, baseAt(lx)])
+              .reduce((a, b) => b[1] - 0.1 * L * Math.abs((cx - b[0]) / ins.width - 0.5 - lean) > a[1] - 0.1 * L * Math.abs((cx - a[0]) / ins.width - 0.5 - lean) ? b : a);
+            put(ins, lx, f, strokes, placed, (base - f.baseline(cx)) / xh);
+            // the ^ goes under the line, its point at the baseline, so it can't be read as a letter; one quick stroke, up
+            // and down, never quite even
+            const hl = (0.3 + 0.08 * Math.abs(N())) * L, hr = (0.3 + 0.08 * Math.abs(N())) * L, bend = N() * 0.04 * L;
+            const tip = [cx + N() * 0.07 * L, yb - (0.08 + 0.06 * Math.abs(N())) * L], fl = yb + (0.72 + 0.1 * N()) * L, fr = yb + (0.72 + 0.1 * N()) * L;
+            strokes.push([...spline([[cx - hl, fl], [(cx - hl + tip[0]) / 2 + bend, (fl + tip[1]) / 2], tip], 0.2 * xh),
+              ...spline([tip, [(cx + hr + tip[0]) / 2 + bend, (fr + tip[1]) / 2], [cx + hr, fr]], 0.2 * xh).slice(1)]);
             left = null;
           }
-          prev = { ...it, x }; gapMm = wordGap(f.lxh) * (/[.!?]["')\]]*$/.test(wd.word) ? 1.35 : 1); // a little more room after a full stop
+          // a little more room after a full stop, and after a crossing-out (the next word comes after the crossing, not the word)
+          prev = { ...it, x }; gapMm = wordGap(f.lxh) * (/[.!?]["')\]]*$/.test(wd.word) ? 1.35 : 1) * (wd.struck ? 1.3 : 1);
           x += it.width + gapMm;
         }
         if (strokes.length) {
@@ -963,7 +1066,7 @@
           }
           onSheet++;
         }
-        y += grid.ruled ? grid.step : grid.step * clip(1 + N() * 0.06 * k, 0.85, 1.2);
+        y += grid.ruled ? grid.step : grid.step * occ.step * clip(1 + N() * 0.06 * k, 0.85, 1.2);
         if (i >= para.length) break;
       }
     }
@@ -1091,8 +1194,10 @@
     // height), never higher: a bed a little lower toward the front would otherwise leave the last lines faint.
     const bedY = (pt, shift) => p.y + shift + p.height - pt[1] - pr.offset_y, firstPt = order(passes[0])[0][0];
     const clampY = bedY(firstPt, 0), press = (pt, shift) => pr.press_bottom * clip((clampY - bedY(pt, shift)) / p.height, 0, 1);
-    // from the writing height as the file writes it, rounded up: never deeper than that height less press_bottom
-    const down = (pt, shift) => z(Math.ceil((round2(pr.z_draw) + dz - press(pt, shift)) * 100 - 1e-6) / 100);
+    // from the writing height as the file writes it, rounded up: never deeper than that height less press_bottom (the
+    // pen-down for writing, d = the dry run's lift; and where pen 2 is clamped, at the writing height itself)
+    const pressed = (pt, shift, d = 0) => z(Math.ceil((round2(pr.z_draw) + d - press(pt, shift)) * 100 - 1e-6) / 100);
+    const down = (pt, shift) => pressed(pt, shift, dz);
     const firstPen2 = passes.length === 1 && passes[0].strokes.some(s => s.pen !== PEN2) ? passes[0].strokes.find(s => s.pen === PEN2) : null;
     out.push("G90", ...(pr.dialect === "bambu" ? ["G21"] : []), ...sound("start"), home); // always home: every move after this assumes a known position
     out.push("M104 S0"); // nozzle heater off: nothing here needs heat, and the pen holder sits next to the hotend
@@ -1147,7 +1252,7 @@
           // The only tune plays with the head up, never with a pen on the paper.
           if (s === firstPen2) out.push(z(Math.max(pr.z_draw + CLEARANCE, pr.z_lift + dz)), `G0 ${xy(s[0], ps.shift)} ${travel}`,
             "; PEN CHANGE: take pen 1 out of the holder", ...sound("pause"), wait(pr.pen_pause_s),
-            z(pr.z_draw - press(s[0], ps.shift)), "; put pen 2 in: slide it down until it touches the paper, then clamp it", wait(pr.pen_pause_s), up, ...sound("resume"));
+            pressed(s[0], ps.shift), "; put pen 2 in: slide it down until it touches the paper, then clamp it", wait(pr.pen_pause_s), up, ...sound("resume"));
           out.push(`G0 ${xy(s[0], ps.shift)} ${travel}`, down(s[0], ps.shift), ...settle);
           const feed = Math.min(12000, pr.draw_feed * (0.85 + 0.3 * frac(++strokeNo))); // a hand's speed varies stroke to stroke
           for (let j = 1; j < s.length; j++) out.push(`G1 ${xy(s[j], ps.shift)}` + (j === 1 ? ` F${i(feed)}` : ""));

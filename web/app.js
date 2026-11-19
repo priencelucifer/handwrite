@@ -21,6 +21,7 @@
     ...[2, 6, 9].map((b, i) => ["Casual", `casual-${i + 1}`, `Casual ${i + 1}`, b, 0, 1, 0.8]),
     ...[1, 5, 7, 10, 12].map((b, i) => ["Casual", `quick-${i + 1}`, `Quick ${i + 1}`, b, 10, 1.1, 0.9]),
   ];
+  const COMMON = /^(the|and|to|of|a|an|in|is|it|you|that|was|for|on|are|with|as|i|be|at|have|this|from|or|by|we|but|not|my|me|so|all|he|she|his|her|they|them|will|your|our|us|do|if|can|had|has)$/i; // the most-written words
   const presets = CATALOG.map(([group, id, label, b, slant, width, bias]) => ({ key: "s:" + id, label, group, bias,
     data: { chars: base[b].chars, strokes: E.transformPrimer(base[b].strokes, slant, width) } }));
   const state = {
@@ -76,7 +77,7 @@
     syncBar(); scheduleRender(0);
   }
   /** What G.words needs to make the mistakes: the kinds switched on, and each word's own choice from the preview. */
-  const slipsOf = w => ({ kinds: { cut: w.slip_cut, scribble: w.slip_scribble, forgot: w.slip_forgot },
+  const slipsOf = w => ({ kinds: { cut: w.slip_cut, scribble: w.slip_scribble, forgot: w.slip_forgot, touch: w.slip_touch },
     forced: new Map([...state.edits].filter(([, e]) => e.slip).map(([k, e]) => [k, { kind: e.slip, n: e.slipTry || 0 }])) });
   /** The text's words with their edits applied (G.words output, changed in place). */
   function applyEdits(paras) {
@@ -273,7 +274,9 @@
     const k = cfg.writing.wobble, at = new Map();
     all.forEach((w, i) => { for (const p of w.parts || [w]) at.set(p, i); }); // which word of the text
     const wiggle = s => (((s & 1023) + (s >>> 10 & 1023) + (s >>> 20 & 1023)) / 1023 - 1.5) * 2; // about normal, -3..3
-    const biasOf = w => Math.round(Math.min(2, Math.max(0, cfg.writing.bias * (1 + 0.1 * k * wiggle(w.seed) - 0.12 * k * Math.min(1, (at.get(w) || 0) / 300)))) * 100) / 100;
+    // the words a hand writes most it writes fastest, so a little looser and never twice alike; a name is signed
+    const fast = w => cfg.writing.code ? 0 : w.name ? 0.15 : COMMON.test(w.word.replace(/[^A-Za-z]+$/, "")) ? 0.12 : 0;
+    const biasOf = w => Math.round(Math.min(2, Math.max(0, cfg.writing.bias * (1 + 0.1 * k * wiggle(w.seed) - 0.12 * k * Math.min(1, (at.get(w) || 0) / 200) - fast(w) * Math.min(1, k)))) * 100) / 100;
     const keyOf = w => inkKey(w.style || style.key, biasOf(w), w); // a word can have its own handwriting
     const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !w.glyph && !inkCache.has(keyOf(w))).map(w => [keyOf(w), w])).values()]; // drawn symbols need no model
     /** Have the workers write these words into inkCache. False if this render was replaced or failed (fail() shown). */
@@ -923,7 +926,7 @@
     // only neatness and mistakes need new handwriting; the others just re-lay the cached words
     el.addEventListener("input", () => { W_()[key] = +el.value; show(); fill(); scheduleRender(key === "bias" || key === "mistakes" ? 400 : 60); });
   }
-  for (const [id, key] of [["slipCut", "slip_cut"], ["slipScribble", "slip_scribble"], ["slipForgot", "slip_forgot"]]) {
+  for (const [id, key] of [["slipCut", "slip_cut"], ["slipScribble", "slip_scribble"], ["slipForgot", "slip_forgot"], ["slipTouch", "slip_touch"]]) {
     $(id).checked = W_()[key] !== false;
     $(id).onchange = () => { W_()[key] = $(id).checked; scheduleRender(400); };
   }
