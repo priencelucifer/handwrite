@@ -10,7 +10,7 @@ It runs in your browser, works offline, and needs no install.
 
 **Use it now: [handplot.org](https://handplot.org)**
 
-![Tests](https://img.shields.io/badge/tests-60_passing-2ea043)
+![Tests](https://img.shields.io/badge/tests-61_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
 ![Printers](https://img.shields.io/badge/printers-Bambu_Lab_%2B_400%2B_from_OrcaSlicer-e08a00)
 [![Discord](https://img.shields.io/badge/Discord-join_the_chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/knwsvtPMGE)
