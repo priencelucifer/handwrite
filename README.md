@@ -10,7 +10,7 @@ It runs in your browser, works offline, and needs no install.
 
 **Use it now: [handplot.org](https://handplot.org)**
 
-![Tests](https://img.shields.io/badge/tests-57_passing-2ea043)
+![Tests](https://img.shields.io/badge/tests-60_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
 ![Printers](https://img.shields.io/badge/printers-Bambu_Lab_%2B_400%2B_from_OrcaSlicer-e08a00)
 [![Discord](https://img.shields.io/badge/Discord-join_the_chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/knwsvtPMGE)
@@ -39,7 +39,8 @@ and word gaps are never the same twice.
   crossed out, then written right. A false start often stops in the middle of a letter, and a word the writer can't
   spell comes out the same wrong way on every page. Now and then a small word is
   left out and added above the line with a caret, or part of a letter is gone over again to make it clearer. As with a person, the count varies from page to page around the
-  setting. Switch each kind on or off, and click a word in the preview to give it a mistake, take one away or try another.
+  setting. Switch each kind on or off (**Crossed out**, **Scribbled out**, **Forgotten words**, **Letters gone over**),
+  and click a word in the preview to give it a mistake, take one away or try another.
 - **No two copies alike**: letters vary within each word (a little wider, taller or more upright than the next), the
   words you write most are written a little faster and looser, and each page comes out a little different as a whole
   (size, spacing, slant, where it starts). Each line wanders gently, ends where it ends (a word may run on toward the
@@ -99,6 +100,7 @@ The first time, open **Printer settings** and set your pen heights and [pen offs
 
 1. **Bed levelling** (where it's on): after homing, the printer levels the bed under where it will write, about a minute. Keep the plate empty until it's done.
 2. **Pause 1:** the head rises and stops over where the first letter goes. Now put the paper where the preview shows it and tape it down.
+   With **Pause until I resume** on, the printer waits until you resume it instead of a set time.
 3. **Pause 2:** the head lowers. Slide the pen down until it touches the paper, then clamp it.
 4. It writes the page. With sounds on, the A1, A1 mini and P2S play a tune at each pause and when it's done.
 
@@ -167,6 +169,8 @@ A wrong move can crash the print head, so the G-code is checked in layers before
   ever heats it.
 - **Bed levelling** runs only before the head moves anywhere (no paper, no pen yet), only as that printer's maker does
   it, and is never saved (no `M500` or `SAVE_CONFIG`).
+- **Pauses that wait until resumed** come only before the pen is in or between pages, with the pen well clear of the
+  paper, and both heaters are switched off again after each. Bambu's own pause is written only when you asked for it.
 - **Tests** run the output through an independent G-code simulator, including 4,000 random settings, papers, offsets,
   lined paper, dry runs, pen changes and bed levelling on every method.
 
