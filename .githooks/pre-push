@@ -1,0 +1,5 @@
+#!/bin/sh
+# Before anything goes to GitHub (and so live on handplot.org): the pages' tags and script stamps, and every page's
+# layout at phone to desktop sizes. Turn on once per clone: git config core.hooksPath .githooks
+echo "pre-push: checking the pages (tags, script stamps, layout at 8 screen sizes; about 2 minutes)..."
+node --test web/tests/pages.test.js web/tests/layout.test.js || { echo "pre-push: a page check failed, nothing was pushed"; exit 1; }

@@ -10,7 +10,7 @@ It runs in your browser, works offline, and needs no install.
 
 **Use it now: [handplot.org](https://handplot.org)**
 
-![Tests](https://img.shields.io/badge/tests-61_passing-2ea043)
+![Tests](https://img.shields.io/badge/tests-62_passing-2ea043)
 ![Runs in the browser](https://img.shields.io/badge/runs_in-the_browser-1b2a6b)
 ![Printers](https://img.shields.io/badge/printers-Bambu_Lab_%2B_400%2B_from_OrcaSlicer-e08a00)
 [![Discord](https://img.shields.io/badge/Discord-join_the_chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/knwsvtPMGE)
@@ -214,8 +214,14 @@ docs/images/      screenshots
 No build step: edit the files in `web/` and reload the page. After changing a script, run `node web/tools/stamp.js` so browsers fetch the new copy (a test checks). Tests need [Node.js](https://nodejs.org) 20 or newer:
 
 ```bash
-node --test web/tests/gcode.test.js web/tests/engine.test.js web/tests/pages.test.js
+node --test web/tests/gcode.test.js web/tests/engine.test.js web/tests/pages.test.js web/tests/layout.test.js
 ```
+
+`layout.test.js` opens every page in Edge or Chrome (whichever is installed) at eight screen sizes, from a 320 px phone
+to a 1920 px desktop, with every folded part open, and fails on squeezed text, sideways scrolling, anything off the
+screen, overlapping cards, cut-off labels, broken images or script errors. To see the pages yourself:
+`node web/tools/layout-check.js --shots shots` saves a screenshot of each. `pages.test.js` checks every tag is closed.
+Both run before every push once you turn on the hook: `git config core.hooksPath .githooks`.
 
 Build the zip for a release:
 
