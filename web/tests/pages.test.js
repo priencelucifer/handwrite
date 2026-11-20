@@ -28,3 +28,10 @@ test("app.html loads each script by its current version, so browsers can't keep 
   assert.equal((html.match(/<script src="[\w-]+\.js\?v=\w{8}">/g) || []).length, 7);
   assert.ok(html === stamped(html), "a script changed: run node web/tools/stamp.js");
 });
+
+test("every page closes each <div> it opens (one missing close once nested the guide's setting cards inside each other)", () => {
+  for (const f of ["index.html", "app.html", "printers.html"]) {
+    const html = read(f), open = (html.match(/<div[\s>]/g) || []).length, close = (html.match(/<\/div>/g) || []).length;
+    assert.strictEqual(open, close, f);
+  }
+});
