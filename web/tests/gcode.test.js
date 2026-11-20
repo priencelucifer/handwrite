@@ -155,6 +155,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
     s.printer.z_lift = s.printer.z_draw + U(0.9, 12);
     if (rng.random() < 0.4) s.printer.press_bottom = U(0, 2); // pressing harder toward the bottom (refused if too low)
     s.printer.level = rng.random() < 0.7; // bed levelling first (where the printer's commands are known)
+    s.printer.wait_resume = rng.random() < 0.3; // the printer's own pause for the paper and between pages
     Object.assign(s.writing, { x_height: U(1.5, 8), wobble: U(0, 2), word_spacing: U(0.3, 3), indent: U(0, 1.5) });
     s.writing.line_spacing = s.writing.x_height * U(1.4, 4);
     s.writing.code = rng.random() < 0.35;
@@ -222,8 +223,17 @@ test("mistakes: crossed-out slips and words added above the line, as many as set
     else if (s.how === "ahead") assert.ok(ws[at + 2].word.startsWith(s.word) && s.word.slice(0, 2).toLowerCase() !== right.word.slice(0, 2).toLowerCase(), `${s.word} ahead of ${right.word}`); // the next word begun
     else assert.ok(s.word[0].toLowerCase() === right.word[0].toLowerCase() && ["start", "spelling"].includes(s.how), `${s.how}: ${s.word} for ${right.word}`);
     assert.ok(["line", "scribble"].includes(s.struck) && s.key === `slip:${right.key}`);
-    assert.ok(!s.stop || (s.stop >= 0.4 && s.stop <= 0.75 && ["start", "ahead"].includes(s.how)));
+    assert.ok(!s.stop || (s.stop >= 0.75 && s.stop <= 0.95 && s.word.length >= 3 && ["start", "ahead"].includes(s.how)));
   }
+  // false starts of different lengths; and a word this writer can't spell comes out the same wrong way on every page
+  const starts = new Set(pages.flat().filter(w => w.how === "start").map(w => w.word.length));
+  assert.ok(starts.size >= 3, `false starts all ${[...starts]} letters long`);
+  const letter = "We were so happened to hear about everything that happened, and we believe the beautiful garden is separate from the house. ".repeat(3);
+  const tries = Array.from({ length: 30 }, (_, seed) => G.words(letter, seed, false, 6).flat().filter(w => w.how === "spelling"));
+  const byWord = new Map();
+  for (const t of tries.flat()) { const k = t.key.split("|")[0]; byWord.set(k, [...(byWord.get(k) || []), t.word]); }
+  const habits = [...byWord].filter(([, ws]) => ws.length >= 5);
+  assert.ok(habits.length > 0 && habits.every(([, ws]) => new Set(ws).size <= 2), `misspellings: ${JSON.stringify(habits)}`);
   const hows = new Set(pages.flat().map(w => w.how).filter(Boolean));
   assert.ok(["start", "spelling", "again", "ahead"].every(h => hows.has(h)), `kinds of slip: ${[...hows]}`);
   // a word that sounds like another is often written as that one first
@@ -473,19 +483,23 @@ test("separate side and top/bottom borders", () => {
   assert.strictEqual(G.resolve(old).paper.margin_y, 15);
 });
 
-test("lines never write into the line above, even at full wobble", () => {
+test("lines never write into the line above, even at full wobble: at most a light touch now and then, like a hand", () => {
   // every word has tall letters and long tails (like "lg"), the worst case for touching lines
   const tall = ({ word }) => Array.from({ length: word.length }, (_, j) => [[0.6 * j, -1.1], [0.6 * j + 0.2, 2.2]]);
   const text = Array.from({ length: 8 }, () => Array.from({ length: 40 }, (_, i) => "lgylgy".slice(0, 2 + i % 5)).join(" ")).join("\n");
-  for (const [wobble, spacing, seed] of [[2, 8, 1], [2, 8, 2], [1, 8, 3], [2, 6, 4], [0, 4.2, 5]]) {
-    const cfg = G.resolve(withSet({ "writing.wobble": wobble, "writing.line_spacing": spacing }));
-    const pages = G.layoutPages(G.words(text, seed), tall, cfg, mulberry(seed));
-    let closest = Infinity;
+  for (const [wobble, spacing, seed] of [[2, 8, 1], [2, 8, 2], [1, 8, 3], [2, 6, 4], [0, 4.2, 5], [1, 8, 6], [1, 6, 7]]) {
+    const cfg = G.resolve(withSet({ "writing.wobble": wobble, "writing.line_spacing": spacing })), xh = cfg.writing.x_height;
+    const pages = G.layoutPages(G.words(text, seed), tall, cfg, mulberry(seed)), gaps = []; // each line's closest approach to the ink above
     for (const lines of pages)
-      for (let i = 1; i < lines.length; i++) for (let j = 0; j < i; j++)
-        for (const s of lines[i]) for (const [px, py] of s) for (const u of lines[j]) for (const [qx, qy] of u)
+      for (let i = 1; i < lines.length; i++) {
+        let closest = Infinity;
+        for (let j = 0; j < i; j++) for (const s of lines[i]) for (const [px, py] of s) for (const u of lines[j]) for (const [qx, qy] of u)
           if (Math.abs(px - qx) <= 0.5) closest = Math.min(closest, py - qy);
-    assert.ok(closest >= 0.8 - 1e-9, `wobble ${wobble}, spacing ${spacing}: lines ${closest.toFixed(2)} mm apart`);
+        gaps.push(closest);
+      }
+    const touching = gaps.filter(g => g < 0.8 - 1e-9).length, msg = `wobble ${wobble}, spacing ${spacing}: ${gaps.map(g => g.toFixed(2))}`;
+    assert.ok(gaps.every(g => g >= -0.12 * xh - 1e-9), msg); // a tip may cross a tail by an eighth of a letter, never more
+    assert.ok(wobble ? touching <= 0.7 * gaps.length : touching === 0, msg); // and most lines still leave room
   }
 });
 
@@ -751,7 +765,7 @@ test("all pages in one file: one start, then after each page the pen well up at 
   assert.ok(lf.split("\n").filter(l => l === "G4 P60000").length === 1 && !/^(M0|M25|M226|M601|PAUSE|M600.*)$/m.test(lf), "Lulzbot: one timed wait");
   assert.throws(() => G.toGcode(pages[0].passes, cfg, ["t"], { pages: [run(s, "Hello *there*", 8).passes] }), /second pen/);
   // the simulator refuses Bambu's own pause anywhere, and a pause with the pen at the paper
-  assert.throws(() => simulate(book.replace(/^G4 S60$/m, "M400 U1"), cfg), /malformed/);
+  assert.throws(() => simulate(book.replace(/^G4 S60$/m, "M400 U1"), cfg), /pause where it can't be/); // (Bambu's pause only when the user asked for it)
   const [va] = two("Voron 2.4 350");
   assert.throws(() => simulate(va.gcode.replace(/^(G1 X\S+ Y\S+ F\d+)$/m, "$1\nPAUSE"), va.cfg), /pause where it can't be/);
 });
@@ -1061,4 +1075,35 @@ test("starting at line N: only lines N onward, and pause 1 stops over line N's f
   assert.ok(gcode.split("\n").find(l => l.startsWith("G0 X")).includes(at), "head waits over line 3's first letter");
   const strokes = lines.slice(from - 1).reduce((n, l) => n + l.length, 0), touch = `G1 Z${pr.z_draw.toFixed(2)} F${pr.z_feed}`;
   assert.strictEqual(gcode.split("\n").filter(x => x === touch).length, 1 + strokes, "lines 1 and 2 not written again");
+});
+
+test("pause until resumed: the printer's own pause for placing the paper and between pages; Bambu's only when asked for", () => {
+  const text = "Dear Sam,\nA few lines to check the pauses.\nWith love,\nAnna";
+  const lines = g => g.split("\n"), after = (g, i, n) => lines(g).slice(i + 1, i + 1 + n);
+  // A1, asked for: M400 U1 while placing the paper (no pen in yet), heaters off again, back over the first letter, then the timed pen pause
+  const s = withSet({ "printer.wait_resume": true }), one = run(s, text, 3), g = one.gcode, at = lines(g).indexOf("M400 U1");
+  assert.ok(at > 0 && at < lines(g).findIndex(l => l.startsWith("; attach the pen")), "paper pause before the pen goes in");
+  assert.deepStrictEqual(after(g, at, 2), ["M104 S0", "M140 S0"]);
+  assert.match(after(g, at, 4)[3], /^G0 X/);
+  assert.strictEqual(lines(g).filter(l => l === "M400 U1").length, 1);
+  assert.ok(lines(g).includes(`G4 S${one.cfg.printer.pen_pause_s}`), "attaching the pen stays timed");
+  simulate(g, { ...s, printer: one.cfg.printer, paper: one.cfg.paper });
+  // and between pages in one file
+  const book = G.toGcode(one.passes, one.cfg, ["t"], { pages: [run(s, "Page two. " + text, 4).passes] });
+  assert.strictEqual(lines(book).filter(l => l === "M400 U1").length, 2);
+  simulate(book, { ...s, printer: one.cfg.printer, paper: one.cfg.paper });
+  // not asked for: timed waits only, and the simulator refuses Bambu's pause in such a file
+  const off = run(G.DEFAULT_SETTINGS, text, 3);
+  assert.ok(!off.gcode.includes("M400 U1") && off.gcode.includes(`G4 S${off.cfg.printer.paper_pause_s}`));
+  const sneaked = off.gcode.replace("; place the paper", "M400 U1\nM104 S0\nM140 S0\n; place the paper");
+  assert.throws(() => simulate(sneaked, off.cfg), /pause where it can't be/);
+  // never once the pen is in: a pause after clamping (before anything is written) is refused
+  const late = g.replace(/(; attach the pen[^\n]*\n)/, "$1M400 U1\nM104 S0\nM140 S0\n");
+  assert.notStrictEqual(late, g);
+  assert.throws(() => simulate(late, { ...s, printer: one.cfg.printer, paper: one.cfg.paper }), /pause where it can't be/);
+  // another printer's own pause (Prusa's M601), asked for
+  const ps = withSet({ "printer.model": "Prusa MK4", "printer.wait_resume": true }), prusa = run(ps, text, 3);
+  assert.ok(prusa.gcode.includes("M601") && !prusa.gcode.includes("M400 U1"));
+  simulate(prusa.gcode, { ...ps, printer: prusa.cfg.printer, paper: prusa.cfg.paper });
+  assert.throws(() => G.resolve(withSet({ "printer.wait_resume": "yes" })), /on or off/);
 });

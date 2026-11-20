@@ -36,12 +36,14 @@ and word gaps are never the same twice.
 - **Neatness, line wobble, letter size, word and line spacing** controls. Gaps vary randomly around the average you set.
 - **Mistakes** (off by default): a few words started wrong or misspelt (by ear, like a pen does: *hapened*, *beleive*),
   written as a word that sounds the same (*right* for *write*), begun with the next word, or the last word written again;
-  crossed out, then written right. A false start often stops in the middle of a letter. Now and then a small word is
+  crossed out, then written right. A false start often stops in the middle of a letter, and a word the writer can't
+  spell comes out the same wrong way on every page. Now and then a small word is
   left out and added above the line with a caret, or part of a letter is gone over again to make it clearer. As with a person, the count varies from page to page around the
   setting. Switch each kind on or off, and click a word in the preview to give it a mistake, take one away or try another.
 - **No two copies alike**: letters vary within each word (a little wider, taller or more upright than the next), the
   words you write most are written a little faster and looser, and each page comes out a little different as a whole
-  (size, spacing, slant, where it starts). A letter's sign-off (*With love,*) goes to the right and the name under it is
+  (size, spacing, slant, where it starts). Each line wanders gently, ends where it ends (a word may run on toward the
+  edge), and now and then a tall letter lightly touches a tail of the line above. A letter's sign-off (*With love,*) goes to the right and the name under it is
   signed: bigger, leaning more, rising a little. Each word's neatness also varies, and long texts loosen toward the end
   like a tiring hand.
 - **Live preview** of the page on your printer's build plate. Drag the paper to where it will sit.
@@ -50,8 +52,9 @@ and word gaps are never the same twice.
   of the plate (a sliding bed comes forward) while you put in a new sheet. Printers with a pause that waits until
   resumed use it (Klipper `PAUSE`, Prusa `M601`, Marlin `M0` or `M25`, Duet `M226`), then switch both heaters off again;
   Bambu Lab printers, and any without one, wait a set time instead (Printer settings, Between pages), with Bambu's tune.
-  Bambu's own pause (`M400 U1`) warms the nozzle, right beside the pen holder. The paper and pen pauses stay timed: a
-  printer's pause may park the head, and those two need it to stay put.
+  Bambu's own pause (`M400 U1`) warms the nozzle, right beside the pen holder, so it's only used if you switch on
+  **Pause until I resume** (Printing). That switch also makes placing the paper wait until you resume (the head may move
+  away meanwhile, so place it by the preview). Attaching the pen stays timed: the head must stay put over the paper.
 - **Lined paper**: pick the ruling and every line of writing sits on a printed line, right of the margin line.
 - **Underlines and a second pen**: `_like this_` is underlined by hand, `*like this*` is written with a second pen after a pen change.
   A `*` or `_` on its own, as in `5 * 3`, is simply written.

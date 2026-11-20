@@ -275,7 +275,7 @@
     all.forEach((w, i) => { for (const p of w.parts || [w]) at.set(p, i); }); // which word of the text
     const wiggle = s => (((s & 1023) + (s >>> 10 & 1023) + (s >>> 20 & 1023)) / 1023 - 1.5) * 2; // about normal, -3..3
     // the words a hand writes most it writes fastest, so a little looser and never twice alike; a name is signed
-    const fast = w => cfg.writing.code ? 0 : w.name ? 0.15 : COMMON.test(w.word.replace(/[^A-Za-z]+$/, "")) ? 0.12 : 0;
+    const fast = w => cfg.writing.code ? 0 : w.name ? 0.25 : COMMON.test(w.word.replace(/[^A-Za-z]+$/, "")) ? 0.12 : 0;
     const biasOf = w => Math.round(Math.min(2, Math.max(0, cfg.writing.bias * (1 + 0.1 * k * wiggle(w.seed) - 0.12 * k * Math.min(1, (at.get(w) || 0) / 200) - fast(w) * Math.min(1, k)))) * 100) / 100;
     const keyOf = w => inkKey(w.style || style.key, biasOf(w), w); // a word can have its own handwriting
     const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !w.glyph && !inkCache.has(keyOf(w))).map(w => [keyOf(w), w])).values()]; // drawn symbols need no model
@@ -986,6 +986,17 @@
       : "Before the paper goes in, the printer measures the bed with its probe as its maker's start G-code does (pen out, nozzle cold), so the pen presses the same everywhere. A minute or two.";
   };
   $("level").onchange = () => { PR_().level = $("level").checked; scheduleRender(0); };
+  /** Pause until resumed: the printer's own pause for placing the paper and between pages, instead of a set time. */
+  const syncWaitResume = () => {
+    const pr = PR_(), row = G.PRINTERS[pr.model] || [], bambu = row[5] === "bambu", own = !bambu && /^(M0|M25|M226|M601|PAUSE)$/.test(row[7] || "");
+    $("waitResume").checked = (bambu || own) && pr.wait_resume === true; $("waitResume").disabled = !(bambu || own);
+    $("waitResumeNote").textContent = bambu
+      ? "Placing the paper, and the wait between pages, last until you press resume on the printer instead of a set time. Careful: Bambu's pause warms the nozzle while it waits, right beside the pen holder, so resume soon. The head may move away while paused: place the paper by the preview. Attaching the pen stays timed (the head must stay over the paper)."
+      : own ? "Placing the paper waits until you resume on the printer instead of a set time (between pages it always does). Attaching the pen stays timed (the head must stay over the paper)."
+      : "Not on this printer: it has no pause Handplot can use, so it waits the times set in Printer settings.";
+  };
+  $("waitResume").onchange = () => { PR_().wait_resume = $("waitResume").checked; scheduleRender(0); };
+  $("printer").addEventListener("change", syncWaitResume);
   $("printer").addEventListener("change", syncLevel);
   /** What happens between pages in one file, for the user. */
   function pageChange(pr) {
@@ -996,7 +1007,7 @@
   $("slide").checked = P_().slide === true;
   $("slide").onchange = () => { P_().slide = $("slide").checked; scheduleRender(0); };
   $("printer").addEventListener("change", syncSounds);
-  syncSounds(); syncLevel();
+  syncSounds(); syncLevel(); syncWaitResume();
   $("reroll").onclick = () => { state.seed = (Math.random() * 2 ** 31) | 0; state.rerolls.clear(); seedOrigin.clear(); scheduleRender(0); };
   // ruled paper: how far apart its printed lines are, where the first one is, and its margin line
   const RULINGS = [[0, "Plain paper"], [6, "Ruled 6 mm"], [7, "Ruled 7 mm"], [7.1, "Ruled 7.1 mm (US college)"], [8, "Ruled 8 mm"],
@@ -1062,10 +1073,10 @@
 
   // ---------- printer settings dialog ----------
   const HELP = {
-    paper_pause_s: ["Pause 1: place the paper", "s", "After homing, the head rises and stops right above where the first letter will be written, then waits this long. Put the paper where the preview shows it and tape it down. The pen is not in the holder yet."],
+    paper_pause_s: ["Pause 1: place the paper", "s", "After homing, the head rises and stops right above where the first letter will be written, then waits this long (or until you resume, with Pause until I resume on). Put the paper where the preview shows it and tape it down. The pen is not in the holder yet."],
     pen_pause_s: ["Pause 2: attach the pen", "s", "The head lowers to the writing height over the first letter and waits this long. Slide the pen down through the holder until the tip just touches the paper, then clamp it. Writing starts when the pause ends."],
     shift_pause_s: ["Pause 3: slide the paper", "s", "Only with \"Slide the paper\" on, for pages longer than the pen reaches, like A4 on an A1. The pen stops just above where the last written mark must end up; slide the paper toward the back until that mark is right under the pen tip. Once per extra pass."],
-    page_pause_s: ["Between pages", "s", "Only for \"Save all pages in one file\", on printers that can't pause until resumed (Bambu Lab's pause warms the nozzle beside the pen holder). After each page the pen lifts to the back of the plate (a bed that slides comes forward) and the printer waits this long: take the page out and put a new sheet where it was."],
+    page_pause_s: ["Between pages", "s", "Only for \"Save all pages in one file\", on printers that can't pause until resumed, or Bambu Lab printers without Pause until I resume (their pause warms the nozzle beside the pen holder). After each page the pen lifts to the back of the plate (a bed that slides comes forward) and the printer waits this long: take the page out and put a new sheet where it was."],
     z_draw: ["Writing height", "mm", "Nozzle height while the pen is down. The pen is clamped touching the paper at this height in pause 2, so any height that clears the holder works. At least 2 mm."],
     press_bottom: ["Press harder toward the bottom", "mm", "If the writing gets fainter down the page, the bed sits a little lower there (the printer can't level the bed with a pen fitted). The pen goes this much lower by the bottom of the page, starting from nothing at the first letter. Try 0.3, then more if the last lines are still faint. 0 is off; at most 2."],
     z_lift: ["Pen-up height", "mm", "Nozzle height when moving between strokes. About 2 mm above the writing height: handwriting lifts the pen thousands of times."],
@@ -1352,12 +1363,13 @@
     steps.push(measures ? "Take the pen out of the holder and leave the plate empty: no paper yet." : "Take the pen out of the holder.",
       `Start the file. The printer homes${measures ? `, then levels the bed ${/^G29 A/.test(how) ? "under where you'll write (about a minute): the nozzle touches"
         : "(a minute or two): the nozzle or its probe touches"} the plate here and there` : " (homing touches the nozzle to the plate)"}. ` +
-        `Then the head moves over the first letter and waits ${pr.paper_pause_s} s: now put the paper where the preview shows and tape it down.`,
+        (pr.wait_resume && pr.pause ? `Then the head moves over the first letter and the printer pauses: put the paper where the preview shows, tape it down, and resume on the printer.${/^M400 U1$/.test(pr.pause) ? " (The nozzle warms while it's paused, so don't wait long.)" : ""}`
+          : `Then the head moves over the first letter and waits ${pr.paper_pause_s} s: now put the paper where the preview shows and tape it down.`),
       `The head lowers and waits ${pr.pen_pause_s} s: slide the pen down until it touches the paper, then clamp it.`);
     if (penChange(v.passes)) steps.push(`When the first pen is done, the head rises and waits ${pr.pen_pause_s} s: take that pen out. Then it lowers and waits ${pr.pen_pause_s} s: slide the second pen in until it touches the paper, and clamp it.`);
     if (v.passes.length > 1) steps.push(G.passNote(v.passes) + ` You have ${pr.shift_pause_s} s each time.`);
     if (pages > 1) steps.push(`${pageChange(pr)} That's ${pages - 1} times. Take the page out, leaving the pen clamped, and tape the new sheet down. ` +
-      (pr.pause ? "Wait until the printer shows it's paused before you reach in, and resume it on its screen or web page. While paused it may park the head; it brings it back when resumed."
+      (pr.pause ? "Wait until the printer shows it's paused before you reach in, and resume it on its screen or web page. While paused it may park the head; it brings it back when resumed." + (pr.pause === "M400 U1" ? " The nozzle warms while it's paused, right beside the pen holder: resume as soon as the sheet is in." : "")
         : "The head stays put while it waits, and the nozzle stays cold."));
     steps.push("Stay with the printer for the first run.");
     $("savedSteps").textContent = "";
