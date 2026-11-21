@@ -911,7 +911,8 @@
       tipOnce("code", "Writing code? Turn on Code under the text box: every line and indent stays as typed, and _ and * are written as they are.");
   });
   /** Code: the text box shows indents in a fixed-width font, without spelling marks; the markup tip doesn't apply. */
-  const syncCode = () => { const on = W_().code === true; $("codeMode").checked = on; $("text").classList.toggle("code", on); $("text").spellcheck = !on; $("markupTip").hidden = on; };
+  const syncCode = () => { const on = W_().code === true; $("codeMode").checked = on; $("text").classList.toggle("code", on); $("text").spellcheck = !on; $("markupTip").hidden = on;
+    $("codeSlips").hidden = !on; $("slipForgotRow").hidden = on; $("wbSlip").querySelector('[value="forgot"]').disabled = on; }; // code: mistakes on names only, none left out
   syncCode();
   $("codeMode").onchange = () => { W_().code = $("codeMode").checked; if (W_().code) $("tipToast").hidden = true; syncCode(); syncIndent(); scheduleRender(0); }; // the tip said to do this
   for (const [id, key] of [["bias", "bias"], ["mistakes", "mistakes"], ["wobble", "wobble"], ["wordSpacing", "word_spacing"], ["indent", "indent"]]) {

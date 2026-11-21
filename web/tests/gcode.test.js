@@ -196,7 +196,7 @@ test("fuzz: thousands of random setups -> every produced file passes the indepen
   assert.ok(tally.ok > 500 && tally.edited > 100 && tally.code > 150 && tally.levelled > 30 && tally.pressed > 100 && tally.books > 30, `too few accepted cases to mean anything: ${JSON.stringify(tally)}`);
 });
 
-test("mistakes: crossed-out slips and words added above the line, as many as set per 100 words; never in code", () => {
+test("mistakes: crossed-out slips and words added above the line, as many as set per 100 words; in code only on names", () => {
   const text = Array.from({ length: 400 }, (_, i) => ["hello", "world", "writing", "the", "pen", "at", "7:30", "Paris,"][i % 8]).join(" ");
   assert.deepStrictEqual(G.words(text, 5, false, 0), G.words(text, 5)); // off: exactly as before
   const all = G.words(text, 5, false, 3).flat(), slips = all.filter(w => w.struck), added = all.filter(w => w.inserted);
@@ -241,7 +241,15 @@ test("mistakes: crossed-out slips and words added above the line, as many as set
     { forced: new Map([["write|1", { kind: "cut" }], ["weather|1", { kind: "cut" }], ["there|1", { kind: "cut" }]]) }).flat().filter(w => w.how === "sound").map(w => w.word)).flat();
   assert.ok(sounds.length > 30 && sounds.every(w => ["right", "whether", "their"].includes(w)), `sound-alikes: ${[...new Set(sounds)]}`);
   assert.deepStrictEqual(G.words(text, 5, false, 3), G.words(text, 5, false, 3)); // the same page seed, the same slips
-  assert.ok(!G.words(text, 5, true, 10).flat().some(w => w.struck));
+  // code: slips only on names of plain letters, never a symbol, a number or a line's first word; none left out or sound-alike
+  const prog = Array.from({ length: 60 }, (_, i) => ["    int count = 0;", "    while (count < limit) {", "        total += value * count;", "        count++;", "    }", "    return total;"][i % 6]).join("\n");
+  const cp = G.words(prog, 5, true, 10), cw = cp.flat(), cs = cw.filter(w => w.struck);
+  assert.ok(cs.length >= 5 && cw.some(w => w.touch), `${cs.length} slips in code`);
+  assert.ok(!cw.some(w => w.inserted) && cs.every(w => w.how !== "sound"));
+  cp.forEach(para => { assert.ok(!para[0].struck && !para[0].touch, "a line's first word: its indent stays put"); para.forEach((w, j) => {
+    if (w.struck) assert.match(para[j + 1].word, /^[A-Za-z]{3,}$/, "only before a name of plain letters"); if (w.touch) assert.match(w.word, /^[A-Za-z]{3,}$/); }); });
+  assert.deepStrictEqual(cw.filter(w => !w.struck).map(w => w.word), G.words(prog, 5, true).flat().map(w => w.word), "the code itself unchanged");
+  assert.ok(!G.words(prog, 5, true, 10, { forced: new Map([["count|2", { kind: "forgot" }]]) }).flat().some(w => w.inserted), "never left out in code, even when chosen");
   // laid out: one or two more strokes per slip (through or over it), a caret under each word added above its line, all inside the writing area
   const cfg = G.resolve(withSet({ "writing.mistakes": 3 })), ink = () => [[[0, 0], [1, 1]]];
   const short = G.words(text.split(" ").filter(t => t !== "7:30").slice(0, 80).join(" "), 5, false, 10), lines = G.layoutPages(short, ink, cfg, mulberry(1)).flat();

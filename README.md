@@ -40,7 +40,8 @@ and word gaps are never the same twice.
   spell comes out the same wrong way on every page. Now and then a small word is
   left out and added above the line with a caret, or part of a letter is gone over again to make it clearer. As with a person, the count varies from page to page around the
   setting. Switch each kind on or off (**Crossed out**, **Scribbled out**, **Forgotten words**, **Letters gone over**),
-  and click a word in the preview to give it a mistake, take one away or try another.
+  and click a word in the preview to give it a mistake, take one away or try another. With **Code** on, only names made
+  of letters get a slip, never a symbol, a number or a line's first word, and no word is left out.
 - **No two copies alike**: letters vary within each word (a little wider, taller or more upright than the next), the
   words you write most are written a little faster and looser, and each page comes out a little different as a whole
   (size, spacing, slant, where it starts). Each line wanders gently, ends where it ends (a word may run on toward the

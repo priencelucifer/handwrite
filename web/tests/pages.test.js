@@ -52,7 +52,8 @@ test("every page closes each tag it opens, in order", () => {
   assert.ok(pages.length >= 4);
   for (const f of pages) assert.deepEqual(tagProblems(read(f)), [], f);
   // the check itself: the guide as it was with the missing </div>
-  const broken = read("index.html").replace(/(not used for code\.<\/p><span class="def">[^<]*<\/span><\/div>)<\/div>/, "$1");
+  const broken = read("index.html").replace(/(<h3>Mistakes<\/h3>.*?<span class="def">[^<]*<\/span><\/div>)<\/div>/, "$1");
+  assert.notEqual(broken, read("index.html"));
   assert.match(tagProblems(broken).join("\n"), /<div> is never closed \(<\/section> on line \d+ comes first\)/);
   assert.deepEqual(tagProblems("<ul><li>a<li>b</ul>"), ["line 1: <li> is never closed (</ul> on line 1 comes first)", "line 1: <li> is never closed (</ul> on line 1 comes first)"]);
   assert.deepEqual(tagProblems("<p>a</p></div>"), ["line 1: </div> closes nothing"]);

@@ -514,7 +514,8 @@
    *  each runs to its closing mark or the end of the line. Words get underline: true / pen: PEN2.
    *  A line that starts with spaces is indented by them (para.indent). code: the text is a program: no markup (_ and *
    *  are written), and a line's run-on lines are indented 4 spaces more (para.runOn).
-   *  mistakes: about that many slips per 100 words, each crossed out and then written right (addMistakes; not in code);
+   *  mistakes: about that many slips per 100 words, each crossed out and then written right (addMistakes; in code only
+   *  on words of plain letters);
    *  slips: {kinds: {cut, scribble, forgot} (false: never that kind), forced: Map key -> {kind: "cut"|"forgot"|"none", n}}
    *  for slips chosen in the preview (n: which try). A letter's sign-off ("With love,") and the name under it go to the right. */
   function words(text, pageSeed, code = false, mistakes = 0, slips = {}) {
@@ -553,16 +554,17 @@
         if (i > at) for (const w of paras[i]) w.name = true; // the name under it is signed: bigger, faster, leaning more
       }
     }
-    return !code && (mistakes > 0 || slips.forced?.size) ? addMistakes(paras, pageSeed, mistakes, slips) : paras;
+    return mistakes > 0 || slips.forced?.size ? addMistakes(paras, pageSeed, mistakes, slips, code) : paras;
   }
   /** A writer's slips: before some words, a wrong try at it (wd.struck: "line" or "scribble"), which the layout crosses
    *  out; and now and then a small word left out and added above the line with a caret (wd.inserted). Only words of
    *  plain letters, so a slip always reads as a try at that word. About `rate` per 100 words of the whole text: like
    *  a person, more on one page and fewer on another, and a different mix each time; long words more often than short
    *  ones, never in the first words, the sign-off or two close together; which words depends on the page seed and the
-   *  word (like its handwriting). */
-  function addMistakes(paras, pageSeed, rate, { kinds = {}, forced = new Map() } = {}) {
-    const ok = { cut: true, scribble: true, forgot: true, touch: true, ...kinds }, want = w => forced.get(w.key);
+   *  word (like its handwriting). In code (a program): only on names of plain letters, never on a symbol, a number or a
+   *  line's first word (its indent stays put), no word left out and none swapped for one that sounds the same. */
+  function addMistakes(paras, pageSeed, rate, { kinds = {}, forced = new Map() } = {}, code = false) {
+    const ok = { cut: true, scribble: true, forgot: true, touch: true, ...kinds, ...(code && { forgot: false, sound: false }) }, want = w => forced.get(w.key);
     const all = paras.flat(), index = new Map(all.map((w, i) => [w, i]));
     // a count around `rate` per 100 words (spread like a Poisson count), but a short text with mistakes on still gets
     // one (a few words alone get none); none in its first words (fewer of those in a short text)
@@ -572,14 +574,15 @@
     const kind = Array.from({ length: m }, (_, i) => chance(`${pageSeed}|kind|${i}`)), lost = kind.filter(c => c < 0.25).length, touched = kind.filter(c => c >= 0.25 && c < 0.45).length;
     const inside = new Set(paras.flatMap(para => para.slice(1, -1))); // a forgotten word sits between two others
     const signed = new Set(paras.filter(para => para.signoff).flat()); // nobody gets "With love" or their own name wrong
-    const plain = w => !w.parts && !w.glyph && /^[A-Za-z]{3,}[.,;:!?]?$/.test(w.word), free = (w, i) => i >= first && !want(w) && !signed.has(w);
+    const lead = new Set(code ? paras.map(para => para[0]) : []);
+    const plain = w => !w.parts && !w.glyph && (code ? /^[A-Za-z]{3,}$/ : /^[A-Za-z]{3,}[.,;:!?]?$/).test(w.word) && !lead.has(w), free = (w, i) => i >= first && !want(w) && !signed.has(w);
     const bare = w => w.word.replace(/[.,;:!?]$/, "").toLowerCase(), likely = w => plain(w) && (bare(w).length >= 4 || SOUNDS[bare(w)]); // not "you" or "the" (unless it sounds like another word)
     // long words more often than short ones, and most of all the words this writer can't spell (whatever the page)
     const score = w => chance(`${pageSeed}|slip|${w.key}`) * 6 / Math.min(10, w.word.length) * (habit(w.word) ? 0.25 : 1);
     const picked = new Set(), at = [], room = w => !at.some(i => Math.abs(i - index.get(w)) < SLIP_APART);
     for (const w of all) { // the ones chosen in the preview come first, wherever they are
       const f = want(w);
-      if (f && f.kind === "forgot" && inside.has(w) && !w.parts && !w.glyph) { w.inserted = true; at.push(index.get(w)); }
+      if (f && f.kind === "forgot" && !code && inside.has(w) && !w.parts && !w.glyph) { w.inserted = true; at.push(index.get(w)); }
       else if (f && f.kind === "cut" && plain(w)) { picked.add(w); at.push(index.get(w)); }
     }
     let auto = 0; // then about `rate` per 100 words more
@@ -631,7 +634,7 @@
     ["affect", "effect"], ["effect", "affect"], ["accept", "except"], ["quite", "quiet"], ["quiet", "quite"], ["passed", "past"], ["past", "passed"],
     ["piece", "peace"], ["peace", "piece"], ["through", "threw"], ["threw", "through"], ["week", "weak"], ["weak", "week"], ["hole", "whole"], ["whole", "hole"]]);
   /** A wrong try at word w: try 0 is the page's own, a higher try another (Another slip in the preview); kinds: as
-   *  addMistakes; prev, next: the words either side of it on its line (a hand writes the last word again, or jumps ahead).
+   *  addMistakes (sound: false, never a word that sounds the same); prev, next: the words either side of it on its line (a hand writes the last word again, or jumps ahead).
    *  wd.how says which: "sound" (a word that sounds the same), "again", "ahead", "spelling" or "start" (a false start);
    *  a false start often stops in the middle of a letter (wd.stop: how much of its last stroke got written). */
   function slip(w, pageSeed, attempt = 0, kinds = {}, prev = null, next = null) {
@@ -640,7 +643,7 @@
     const ways = misspell(s), mine = habit(s);
     const sound = SOUNDS[s.toLowerCase()], word = x => x && !x.parts && !x.glyph && !x.struck && /^[A-Za-z]{2,}$/.test(x.word);
     let wrong, how = "start";
-    if (sound && r(4) < 0.7) [wrong, how] = [s[0] === s[0].toUpperCase() ? sound[0].toUpperCase() + sound.slice(1) : sound, "sound"];
+    if (sound && kinds.sound !== false && r(4) < 0.7) [wrong, how] = [s[0] === s[0].toUpperCase() ? sound[0].toUpperCase() + sound.slice(1) : sound, "sound"];
     else if (mine && !attempt && r(10) < 0.85) [wrong, how] = [mine, "spelling"]; // the writer's own misspelling, as on every page
     else if (word(prev) && prev.word.toLowerCase() !== s.toLowerCase() && r(5) < 0.12) [wrong, how] = [prev.word, "again"];
     else if (word(next) && next.word.length >= 4 && next.word.slice(0, 2).toLowerCase() !== s.slice(0, 2).toLowerCase() && r(6) < 0.12)
