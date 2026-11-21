@@ -923,9 +923,14 @@
         const span = p.x1 - p.x0; // a quick stroke: it may start a little inside the word, and run past its end or stop short
         // (but never into the next word: that was written after the crossing-out, beside it)
         const next = Math.min(...placed.filter(o => o.x0 >= p.x1 - 1e-9 && !o.wd.inserted).map(o => o.x0)) - 0.3 * u;
-        const x0 = Math.max(areaLeft, p.x0 + clip(0.25 * N() - 0.1, -0.5, 0.25) * u), x1 = Math.min(right, next, Math.max(p.x0 + 0.65 * span, p.x1 + (0.1 + 0.4 * N()) * u)), w = x1 - x0;
-        // a line goes through the bodies of the letters (the x-height band), never down by the baseline where it would read as an underline
-        const body = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - (0.47 + clip(h, -0.16, 0.2)) * u]; };
+        // (mostly it lands on the word and trails off past its end, rather than poking out evenly both sides)
+        const x0 = Math.max(areaLeft, p.x0 + clip(0.2 * N() + 0.05, -0.3, 0.35) * u), x1 = Math.min(right, next, Math.max(p.x0 + 0.65 * span, p.x1 + (0.2 + 0.3 * N()) * u)), w = x1 - x0;
+        // a line goes through the middle of the word as the eye sees it: the bodies of the letters, a little higher in a word
+        // with capitals or tall letters, and never down by the baseline where it would read as an underline
+        let top = 1;
+        for (let i = p.s0; i < p.s1; i++) for (const [px, py] of strokes[i]) top = Math.max(top, (f.baseline(px - p.dx) + p.drift * xh + p.dy - py) / u);
+        const mid = clip(0.3 + 0.18 * top, 0.48, 0.66);
+        const body = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - (mid + clip(h, -0.06, 0.18)) * u]; };
         const pts = [];
         if (p.wd.struck === "scribble") {
           // a quick zigzag, slanted like writing, over the bodies of the letters and a little past them above and below
@@ -940,12 +945,20 @@
           for (let x = x0; x < x1; x += (step + 0.08 * a(N())) * u, up = !up) pts.push(zig(x, up, (x - x0) / w));
           if (N() > -1) for (let x = x1, end = x0 + (0.1 + 0.3 * a(N())) * w; x > end; x -= (0.24 + 0.12 * a(N())) * u, up = !up) pts.push(zig(x, up, (x - x0) / w));
         } else {
-          const base = N() * 0.06, rise = clip(0.04 + 0.08 * N(), -0.1, 0.2), arch = N() * 0.14;
-          const h = t => base + rise * (t - 0.5) * w / u + arch * 4 * t * (1 - t);
-          const nk = 4 + Math.floor(3 * a(N())), wob = 0.02 + 0.05 * a(N()); // one comes out straight, another wavy
-          for (let k = 0; k <= nk; k++) pts.push(body(x0 + w * k / nk, h(k / nk) + (k % nk ? N() * wob : 0)));
-          if (N() > 0.8) { // or two lines, the second one a separate stroke a little lower and shorter
-            const d = -(0.13 + 0.05 * a(N())), s0 = x0 + (0.05 + 0.1 * a(N())) * w, two = [0, 1, 2, 3].map(k => body(s0 + (x1 - s0) * (0.92 * k / 3), h(k / 3) + d + N() * 0.03));
+          // a hand's quick line is never ruler-straight: it rises a little (no more over a long word than a short one),
+          // bows gently and wavers a little along the way
+          const base = N() * 0.04, rise = clip(0.03 + 0.05 * N(), -0.06, 0.12), arch = (N() < 0 ? -1 : 1) * (0.03 + 0.05 * a(N()));
+          const len = Math.min(w / u, 4), wa = (0.015 + 0.02 * a(N())) * (0.7 + 0.15 * len), wl = (1.6 + 1.2 * a(N())) * u, wp = N() * 3; // (a long line wavers a little more)
+          // kept in the band through the letters by sloping a little less and moving the whole line, never by cutting it
+          // flat where it would stray (that left ruler-straight stretches)
+          const bend = t => arch * (0.6 + 0.2 * len) * 4 * t * (1 - t) + wa * Math.sin(2 * Math.PI * t * w / wl + wp), ts = Array.from({ length: 21 }, (_, k) => k / 20);
+          const span = Math.max(...ts.map(bend)) - Math.min(...ts.map(bend)), slope = clip(rise * len, -Math.max(0, 0.2 - span), Math.max(0, 0.2 - span));
+          const g = t => slope * (t - 0.5) + bend(t), lo = Math.min(...ts.map(g)), hi = Math.max(...ts.map(g)), lift = clip(base, -0.05 - lo, Math.max(-0.05 - lo, 0.17 - hi));
+          const h = t => lift + g(t);
+          const nk = Math.max(6, Math.ceil(w / (0.5 * u)));
+          for (let k = 0; k <= nk; k++) pts.push(body(x0 + w * k / nk, h(k / nk) + (k % nk ? N() * 0.012 : 0)));
+          if (N() > 0.8) { // or two lines, the second one a separate stroke a little higher and shorter
+            const d = 0.13 + 0.05 * a(N()), s0 = x0 + (0.05 + 0.1 * a(N())) * w, two = [0, 1, 2, 3].map(k => body(s0 + (x1 - s0) * (0.92 * k / 3), h(k / 3) + d + N() * 0.03));
             const st2 = spline(two, 0.3 * xh);
             if (p.wd.pen) st2.pen = p.wd.pen;
             if (p.dx || p.dy) st2.moved = true;

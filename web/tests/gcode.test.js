@@ -299,6 +299,24 @@ test("mistakes chosen in the preview, kinds switched off, the sign-off; a strike
     assert.ok(Math.max(...st.map(p => p[0])) < next - 0.2 * xh, `strike runs into the next word`);
   });
   assert.ok(n > 0 && words.length > 0);
+  // a word with capitals or tall letters (ink twice the x-height): the line goes through its middle as the eye sees it,
+  // never low in it like an underline; and it is a hand's line, gently curved, never ruler-straight nor wild
+  const tall = () => [[[0, 0], [0, 2], [3, 2], [3, 0]]];
+  let m = 0;
+  for (let seed = 1; seed <= 6; seed++) {
+    const tl = G.layoutPages(G.words(long, seed, false, 10, { kinds: { scribble: false } }), tall, cfg, mulberry(seed))[0];
+    for (const l of tl) l.forEach((st, i) => {
+      if (l.words.some(w => i >= w.s0 && i < w.s1) || st.length < 5) return;
+      const mx = st.reduce((s, p) => s + p[0], 0) / st.length, w = l.words.find(w => w.key.startsWith("slip:") && w.box[0] <= mx && w.box[2] >= mx);
+      if (!w) return;
+      m++;
+      const h = w.box[3] - w.box[1], up = st.filter(([x]) => x >= w.box[0] && x <= w.box[2]).map(([, y]) => (w.box[3] - y) / h);
+      assert.ok(up.every(f => f > 0.25 && f < 0.6), `strike at ${Math.min(...up).toFixed(2)}–${Math.max(...up).toFixed(2)} of a tall word's height`);
+      const [x0, y0] = st[0], [x1, y1] = st[st.length - 1], off = Math.max(...st.map(([x, y]) => Math.abs((y - y0) - (y1 - y0) * (x - x0) / (x1 - x0 || 1))));
+      if (Math.abs(x1 - x0) > 4 * xh) assert.ok(off > 0.03 * xh && off < 0.45 * xh, `strike strays ${(off / xh).toFixed(3)} x-heights from straight`);
+    });
+  }
+  assert.ok(m > 10, `${m} strikes`);
 });
 
 test("letters vary within a word, but a straight downstroke along the hand's slant stays straight; a signed name is bigger", () => {
