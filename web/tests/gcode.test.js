@@ -233,7 +233,13 @@ test("mistakes: crossed-out slips and words added above the line, as many as set
   const byWord = new Map();
   for (const t of tries.flat()) { const k = t.key.split("|")[0]; byWord.set(k, [...(byWord.get(k) || []), t.word]); }
   const habits = [...byWord].filter(([, ws]) => ws.length >= 5);
-  assert.ok(habits.length > 0 && habits.every(([, ws]) => new Set(ws).size <= 2), `misspellings: ${JSON.stringify(habits)}`);
+  // (a slip noticed as it went wrong stops a letter or two in: the same try, cut short)
+  const forms = ws => new Set(ws.filter(x => !ws.some(y => y !== x && y.startsWith(x))));
+  assert.ok(habits.length > 0 && habits.every(([, ws]) => forms(ws).size <= 2), `misspellings: ${JSON.stringify(habits)}`);
+  // most slips by ear are noticed as they go wrong and stop there, a letter or two after the wrong letter
+  const ear = tries.flat().filter(t => t.how === "spelling"), whole = t => t.key.split("|")[0].replace(/^slip:/, "").replace(/[.,;:!?]$/, "");
+  const cut = ear.filter(t => t.word.length < whole(t).length - 1);
+  assert.ok(cut.length > 0.15 * ear.length && cut.length < ear.length, `${cut.length} of ${ear.length} misspellings stop early`);
   const hows = new Set(pages.flat().map(w => w.how).filter(Boolean));
   assert.ok(["start", "spelling", "again", "ahead"].every(h => hows.has(h)), `kinds of slip: ${[...hows]}`);
   // a word that sounds like another is often written as that one first

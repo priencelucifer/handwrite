@@ -655,6 +655,13 @@
       wrong = s.slice(0, k) + (vowel ? (c === c.toUpperCase() ? vowel.toUpperCase() : vowel) : s[k + 1]);
       if (wrong === s.slice(0, k + 1)) wrong = s.slice(0, k) + (s[k + 2] || "e"); // (a doubled letter ran ahead to itself)
     }
+    // a misspelling is mostly noticed as it goes wrong: the pen stops a letter or two after the wrong letter (a writer's
+    // own habit goes unnoticed: written out in full)
+    if (how === "spelling" && wrong !== mine && wrong.length >= 4 && r(11) < 0.6) {
+      let d = 0;
+      while (d < Math.min(wrong.length, s.length) && wrong[d].toLowerCase() === s[d].toLowerCase()) d++;
+      wrong = wrong.slice(0, Math.min(wrong.length, Math.max(3, d + 1 + Math.floor(r(12) * 2))));
+    }
     const scribble = kinds.scribble !== false && (kinds.cut === false || (wrong.length >= 3 && wrong.length <= 6 && r(3) < 0.25));
     const stop = (how === "start" || how === "ahead") && wrong.length >= 3 && r(8) < 0.5 ? 0.75 + 0.2 * r(9) : 0; // the pen lifted as it went wrong (the wrong letter mostly there)
     return { word: wrong, key: `slip:${w.key}`, seed: hash(tag), struck: scribble ? "scribble" : "line", how, ...(stop && { stop }),
@@ -878,9 +885,9 @@
       const tilt = clip(pageTilt + N() * 0.006 * vk, -0.025, 0.025);
       const bow = N() * 0.12 * xh * vk; // the line sags (+) or arches (-) mid-way
       scale = clip(scale + N() * 0.02 * k + occ.grow, 0.92 * occ.size, 1.08 * occ.size);
-      // (two waves of unrelated lengths, so a long line never wavers in an even pattern; on about one line in two the
+      // (two waves of unrelated lengths, so a long line never wavers in an even pattern; on about one line in four the
       // writer leaves less room under the line above: ink may come up to touch it, never over it)
-      const wa = N() * 0.05 * xh * vk, wl = (9 + 7 * Math.abs(N())) * xh, wp = N() * 3, wq = N() * 3, cross = !grid.ruled && Math.abs(N()) * Math.min(k, 1.2) > 0.65 ? Math.min(gap, 0.15 * xh) : 0;
+      const wa = N() * 0.05 * xh * vk, wl = (9 + 7 * Math.abs(N())) * xh, wp = N() * 3, wq = N() * 3, cross = !grid.ruled && Math.abs(N()) * Math.min(k, 1.2) > 1.15 ? Math.min(gap, 0.15 * xh) : 0;
       const lxh = xh * scale, span = Math.max(lineRight - left, 1);
       const baseline = px => { const u = clip((px - left) / span, 0, 1), s = 2 * Math.PI * (px - left) / wl; return y + tilt * (px - left) + bow * 4 * u * (1 - u) + wa * (Math.sin(s + wp) + Math.sin(s / 1.63 + wq)); };
       return { left, lineRight, lxh, baseline, cross, low: y + 1.3 * lxh + Math.abs(tilt) * span + Math.abs(bow) + 2 * Math.abs(wa) };
@@ -949,40 +956,55 @@
         // (but never into the next word: that was written after the crossing-out, beside it)
         const next = Math.min(...placed.filter(o => o.x0 >= p.x1 - 1e-9 && !o.wd.inserted).map(o => o.x0)) - 0.3 * u;
         // (mostly it lands on the word and trails off past its end, rather than poking out evenly both sides)
-        const x0 = Math.max(areaLeft, p.x0 + clip(0.2 * N() + 0.05, -0.3, 0.35) * u), x1 = Math.min(right, next, Math.max(p.x0 + 0.65 * span, p.x1 + (0.2 + 0.3 * N()) * u)), w = x1 - x0;
+        // (now and then it stops short, inside the word: the writer already knew it was wrong)
+        const short = N() < -0.85, end = short ? p.x0 + (0.7 + 0.15 * a(N())) * span : Math.max(p.x0 + 0.65 * span, p.x1 + (0.2 + 0.3 * N()) * u);
+        const x0 = Math.max(areaLeft, p.x0 + clip(0.2 * N() + 0.05, -0.3, 0.35) * u), x1 = Math.min(right, next, end), w = x1 - x0;
+        // a short try is now and then struck with a quick tilted stroke, more slash than line
+        const tilt = span < 2.5 * u && N() > 0.4;
+        let cl0 = -0.06, cl1 = 0.18;
+        if (tilt) [cl0, cl1] = [-0.08, 0.26];
         // a line goes through the middle of the word as the eye sees it: the bodies of the letters, a little higher in a word
         // with capitals or tall letters, and never down by the baseline where it would read as an underline
         let top = 1;
         for (let i = p.s0; i < p.s1; i++) for (const [px, py] of strokes[i]) top = Math.max(top, (f.baseline(px - p.dx) + p.drift * xh + p.dy - py) / u);
         const mid = clip(0.3 + 0.18 * top, 0.48, 0.66);
-        const body = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - (mid + clip(h, -0.06, 0.18)) * u]; };
+        const body = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - (mid + clip(h, cl0, cl1)) * u]; };
         const pts = [];
         if (p.wd.struck === "scribble") {
-          // a quick zigzag, slanted like writing, over the bodies of the letters and a little past them above and below
-          // (x-heights over the baseline), loose enough for paper to show, smaller where it starts and ends; each its own
-          // size and pace
-          const big = 0.8 + 0.4 * a(N()), step = 0.15 + 0.1 * a(N()); // close enough to hide the word
-          const top = 1.1 + (0.1 + 0.25 * a(N())) * big, low = -(0.12 + 0.2 * a(N())) * big, mid = (top + low) / 2;
-          const band = (px, h) => { px = clip(px, areaLeft, right); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - h * u]; };
-          // each stroke its own lean and reach, so it loops here and zigzags there
-          const zig = (x, up, t) => band(x + (up ? (0.04 + 0.18 * a(N())) * u : 0), mid + ((up ? top : low) - mid) * (0.55 + 0.45 * Math.sin(Math.PI * clip(t, 0, 1))) + N() * 0.2);
-          let up = N() < 0;
-          for (let x = x0; x < x1; x += (step + 0.08 * a(N())) * u, up = !up) pts.push(zig(x, up, (x - x0) / w));
-          if (N() > -1) for (let x = x1, end = x0 + (0.1 + 0.3 * a(N())) * w; x > end; x -= (0.24 + 0.12 * a(N())) * u, up = !up) pts.push(zig(x, up, (x - x0) / w));
+          // the pen coils round and round as it travels along the word and part of the way back, each loop its own size
+          // and lean, a little past the letters above and below, dense enough to black the word out (an even zigzag
+          // inside the word's box, with the word showing through, read as drawn by machine)
+          const top = 1.2 + 0.3 * a(N()), low = -(0.15 + 0.12 * a(N())), mid = (top + low) / 2, R = (top - low) / 2;
+          const band = (px, h) => { px = clip(px, Math.max(areaLeft, x0 - 0.15 * u), Math.min(right, x1)); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - h * u]; };
+          const adv = (0.45 + 0.2 * a(N())) * u, back = x0 + (0.1 + 0.35 * a(N())) * w; // travel per loop (on average); where the way back ends
+          let x = x0 + 0.1 * u, th = N() * 3, dir = 1, wander = 0;
+          for (let loops = 0; loops < 60; loops++) {
+            // (no two loops alike: bigger and smaller, higher and lower, rounder and flatter, some further along than others)
+            wander = clip(0.6 * wander + 0.12 * N(), -0.2, 0.2);
+            const r = R * clip(0.85 + 0.25 * N(), 0.5, 1.15), rx = (0.28 + 0.2 * a(N())) * u, lean = 0.12 + 0.12 * N(), go = adv * clip(1 + 0.35 * N(), 0.5, 1.6);
+            for (let q = 0; q < 6; q++) {
+              th += (Math.PI / 3 + 0.15 * N()) * dir; x += dir * go / 6;
+              const h = mid + wander + r * Math.sin(th) + N() * 0.05;
+              pts.push(band(x + rx * Math.cos(th) + lean * (h - mid) * u, h));
+            }
+            if (dir > 0 && x >= x1 - 0.2 * u) dir = -1;
+            else if (dir < 0 && x <= back) break;
+          }
         } else {
           // a hand's quick line is never ruler-straight: it rises a little (no more over a long word than a short one),
           // bows gently and wavers a little along the way
-          const base = N() * 0.04, rise = clip(0.03 + 0.05 * N(), -0.06, 0.12), arch = (N() < 0 ? -1 : 1) * (0.03 + 0.05 * a(N()));
+          const base = N() * 0.04, rise = tilt ? (N() < -0.3 ? -1 : 1) * (0.3 + 0.08 * a(N())) / Math.max(1, Math.min(w / u, 4)) : clip(0.03 + 0.05 * N(), -0.06, 0.12), arch = (N() < 0 ? -1 : 1) * (0.03 + 0.05 * a(N()));
           const len = Math.min(w / u, 4), wa = (0.015 + 0.02 * a(N())) * (0.7 + 0.15 * len), wl = (1.6 + 1.2 * a(N())) * u, wp = N() * 3; // (a long line wavers a little more)
           // kept in the band through the letters by sloping a little less and moving the whole line, never by cutting it
           // flat where it would stray (that left ruler-straight stretches)
           const bend = t => arch * (0.6 + 0.2 * len) * 4 * t * (1 - t) + wa * Math.sin(2 * Math.PI * t * w / wl + wp), ts = Array.from({ length: 21 }, (_, k) => k / 20);
-          const span = Math.max(...ts.map(bend)) - Math.min(...ts.map(bend)), slope = clip(rise * len, -Math.max(0, 0.2 - span), Math.max(0, 0.2 - span));
-          const g = t => slope * (t - 0.5) + bend(t), lo = Math.min(...ts.map(g)), hi = Math.max(...ts.map(g)), lift = clip(base, -0.05 - lo, Math.max(-0.05 - lo, 0.17 - hi));
+          const room = (tilt ? 0.32 : 0.2), bot = cl0 + 0.01, tp = cl1 - 0.01;
+          const span = Math.max(...ts.map(bend)) - Math.min(...ts.map(bend)), slope = clip(rise * len, -Math.max(0, room - span), Math.max(0, room - span));
+          const g = t => slope * (t - 0.5) + bend(t), lo = Math.min(...ts.map(g)), hi = Math.max(...ts.map(g)), lift = clip(base, bot - lo, Math.max(bot - lo, tp - hi));
           const h = t => lift + g(t);
           const nk = Math.max(6, Math.ceil(w / (0.5 * u)));
           for (let k = 0; k <= nk; k++) pts.push(body(x0 + w * k / nk, h(k / nk) + (k % nk ? N() * 0.012 : 0)));
-          if (N() > 0.8) { // or two lines, the second one a separate stroke a little higher and shorter
+          if (N() > 0.6) { // or two lines, the second one a separate stroke a little higher and shorter
             const d = 0.13 + 0.05 * a(N()), s0 = x0 + (0.05 + 0.1 * a(N())) * w, two = [0, 1, 2, 3].map(k => body(s0 + (x1 - s0) * (0.92 * k / 3), h(k / 3) + d + N() * 0.03));
             const st2 = spline(two, 0.3 * xh);
             if (p.wd.pen) st2.pen = p.wd.pen;
@@ -1081,7 +1103,7 @@
           if (it.width > f.lineRight - f.left) throw new WriteError(`The word "${wd.word}" is wider than a line: use smaller letters.`);
           // A forgotten word: the writer went on to the next one, then added it above the gap, smaller, with a caret.
           if (wd.inserted && prev && !inline.has(wd) && para[i + 1] && !para[i + 1].struck) {
-            const small = clip(0.63 + 0.06 * N(), 0.52, 0.75);
+            const small = clip(0.72 + 0.05 * N(), 0.62, 0.82);
             left = { it: { ...it, size: small * it.size, width: small * it.width }, at: i++ };
             x += (0.45 + 0.1 * Math.abs(N())) * f.lxh; // a little more room where the caret will go
             continue;
@@ -1090,8 +1112,8 @@
             const tight = x - 0.35 * gapMm, over = x + it.width - f.lineRight;
             if (k > 0 && x + it.width <= right && over < Math.abs(N()) * 1.2 * f.lxh * k) { /* nearly fits: the hand carries on toward the edge */ }
             // at the edge itself a short word is often squeezed in (closer, narrower, a little smaller) rather than carried over
-            else if (k > 0 && !wd.struck && !wd.inserted && wd.word.length <= 7 && x + it.width > right && tight + 0.8 * it.width <= right && N() > 0.5)
-              [x, it] = [tight, { ...it, ink: it.ink.map(st => st.map(([a, b]) => [0.8 * a, 0.92 * b])), width: 0.8 * it.width }];
+            else if (k > 0 && !wd.struck && !wd.inserted && wd.word.length <= 7 && x + it.width > right && tight + 0.88 * it.width <= right && N() > 0.5)
+              [x, it] = [tight, { ...it, ink: it.ink.map(st => st.map(([a, b]) => [0.88 * a, 0.95 * b])), width: 0.88 * it.width }];
             else {
               if (left) { inline.add(para[left.at]); i = left.at; left = null; } // it never got its next word: write it next line
               break; // wrap

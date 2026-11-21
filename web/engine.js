@@ -322,15 +322,17 @@
       return out;
     }
 
-    /** Sample one [dx, dy, pen_up] like sjvasquez rnn_cell, incl. its <1% mixture cut-off. */
-    sample(g, bias, rng) {
+    /** Sample one [dx, dy, pen_up] like sjvasquez rnn_cell, incl. its <1% mixture cut-off. sbias: how much the bias
+     *  narrows each step's spread (as bias by default); pbias: how much it favours the likeliest stroke (likewise). Less
+     *  of either keeps a neat hand's letters from coming out alike. */
+    sample(g, bias, rng, sbias = bias, pbias = bias) {
       const M = this.M, pis = this.pis;
       let max = -Infinity, sum = 0;
-      for (let i = 0; i < M; i++) { pis[i] = g[i] * (1 + bias); if (pis[i] > max) max = pis[i]; }
+      for (let i = 0; i < M; i++) { pis[i] = g[i] * (1 + pbias); if (pis[i] > max) max = pis[i]; }
       for (let i = 0; i < M; i++) { pis[i] = Math.exp(pis[i] - max); sum += pis[i]; }
       for (let i = 0; i < M; i++) { pis[i] /= sum; if (pis[i] < 0.01) pis[i] = 0; }
       const k = rng.choice(pis);
-      const s1 = Math.max(Math.exp(g[M + k] - bias), 1e-4), s2 = Math.max(Math.exp(g[2 * M + k] - bias), 1e-4);
+      const s1 = Math.max(Math.exp(g[M + k] - sbias), 1e-4), s2 = Math.max(Math.exp(g[2 * M + k] - sbias), 1e-4);
       const rho = Math.min(Math.max(Math.tanh(g[3 * M + k]), -1 + 1e-8), 1 - 1e-8);
       const z1 = rng.normal(), z2 = rng.normal();
       const e = sigmoid(g[6 * M]);
@@ -402,6 +404,7 @@
       const st = model.zeroState();
       for (let t = 0; t < T; t++) model.step(strokes.subarray(3 * t, 3 * t + 3), st, idx);
       this.state = st; // attention now sits at the primer/space boundary; reused for every word
+      this.spread = 1; this.pick = 1; // how much the bias narrows each step's spread, and favours the likeliest stroke (1: as the original; the app lowers both)
 
       const y = new Float32Array(T); // float32 cumsum, as numpy does it on the float32 strokes
       for (let t = 0, acc = 0; t < T; t++) y[t] = acc = Math.fround(acc + strokes[3 * t + 1]);
@@ -445,7 +448,7 @@
       const m = this.m, xh = this.xh, U = idx.length;
       const st = {};
       for (const key in this.state) st[key] = this.state[key].slice();
-      let x = m.sample(m.mdn(st.h3), bias, rng);
+      let x = m.sample(m.mdn(st.h3), bias, rng, bias * this.spread, bias * this.pick);
       const cap = Math.min(40 * n + 160, MAX_STROKE_LEN);
       const traj = new Float64Array(3 * cap), dwell = new Float32Array(n);
       let len = 0, cx = 0, cy = this.startY, phi = null, cut = null, right = -Infinity, penUp = true;
@@ -461,7 +464,7 @@
         penUp = x[2] === 1;
         const r = yield [x, st, idx];
         phi = r.phi;
-        x = m.sample(r.g, bias, rng);
+        x = m.sample(r.g, bias, rng, bias * this.spread, bias * this.pick);
         for (let i = 0; i < n; i++) dwell[i] += phi[start + i];
       }
       if (len) traj[3 * len - 1] = 1; // the kept part ends with the pen up
@@ -472,7 +475,7 @@
       const m = this.m, k = this.k, xh = this.xh, U = idx.length;
       const st = {};
       for (const key in this.state) st[key] = this.state[key].slice();
-      let x = m.sample(m.mdn(st.h3), bias, rng);
+      let x = m.sample(m.mdn(st.h3), bias, rng, bias * this.spread, bias * this.pick);
       const maxSteps = Math.min(40 * n + 40, MAX_STROKE_LEN) /* +40: short words need room to finish */, cap = maxSteps + TRAIL_MAX_STEPS;
       const traj = new Float64Array(3 * cap), dwell = new Float32Array(n);
       let len = 0, cx = 0, cy = this.startY, phi = null, cut = null, box = null, trail = 0;
@@ -504,7 +507,7 @@
         }
         const r = yield [x, st, idx];
         phi = r.phi;
-        x = m.sample(r.g, bias, rng);
+        x = m.sample(r.g, bias, rng, bias * this.spread, bias * this.pick);
         for (let i = 0; i < n; i++) dwell[i] += phi[start + i];
       }
       return { traj: traj.subarray(0, 3 * (cut === null ? len : cut)), dwell, finished: cut !== null };

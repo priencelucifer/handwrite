@@ -113,7 +113,7 @@
           const fail = err => postMessage({ id: j.id, error: String((err && err.message) || err) });
           try {
             let h = hands.get(j.key);
-            if (!h) { h = new HWEngine.Hand(model, styles.get(j.key)); hands.set(j.key, h); }
+            if (!h) { h = new HWEngine.Hand(model, styles.get(j.key)); h.spread = 0.7; h.pick = 0.75; hands.set(j.key, h); }
             runner.add(h.wordSteps(j.word, j.seed, j.bias), ink => postMessage({ id: j.id, ink }), fail);
           } catch (err) { fail(err); }
         }
@@ -153,7 +153,7 @@
           const job = q.shift();
           try {
             let h = local.hands.get(job.key);
-            if (!h) { h = new E.Hand(local.model, job.style); local.hands.set(job.key, h); }
+            if (!h) { h = new E.Hand(local.model, job.style); h.spread = 0.7; h.pick = 0.75; local.hands.set(job.key, h); } // (a neat hand's letters still vary)
             job.resolve(h.word(job.word, job.seed, job.bias));
           } catch (err) { job.reject(err); }
           local.running = false;
@@ -275,7 +275,7 @@
     all.forEach((w, i) => { for (const p of w.parts || [w]) at.set(p, i); }); // which word of the text
     const wiggle = s => (((s & 1023) + (s >>> 10 & 1023) + (s >>> 20 & 1023)) / 1023 - 1.5) * 2; // about normal, -3..3
     // the words a hand writes most it writes fastest, so a little looser and never twice alike; a name is signed
-    const fast = w => cfg.writing.code ? 0 : w.name ? 0.25 : COMMON.test(w.word.replace(/[^A-Za-z]+$/, "")) ? 0.12 : 0;
+    const fast = w => cfg.writing.code ? 0 : w.struck ? 0.35 : w.name ? 0.4 : COMMON.test(w.word.replace(/[^A-Za-z]+$/, "")) ? 0.12 : 0;
     const biasOf = w => Math.round(Math.min(2, Math.max(0, cfg.writing.bias * (1 + 0.1 * k * wiggle(w.seed) - 0.12 * k * Math.min(1, (at.get(w) || 0) / 200) - fast(w) * Math.min(1, k)))) * 100) / 100;
     const keyOf = w => inkKey(w.style || style.key, biasOf(w), w); // a word can have its own handwriting
     const missing = ws => [...new Map(ws.flatMap(w => w.parts || [w]).filter(w => !w.glyph && !inkCache.has(keyOf(w))).map(w => [keyOf(w), w])).values()]; // drawn symbols need no model
