@@ -1133,3 +1133,23 @@ test("pause until resumed: the printer's own pause for placing the paper and bet
   simulate(prusa.gcode, { ...ps, printer: prusa.cfg.printer, paper: prusa.cfg.paper });
   assert.throws(() => G.resolve(withSet({ "printer.wait_resume": "yes" })), /on or off/);
 });
+
+test("a hand's page: lines never pile up at one left edge, and line spacing doesn't jump when lines crowd", () => {
+  // the margin wanders within its room but never stops at a limit: with a hard limit a fifth of the lines started at
+  // exactly one of two places, a ruler-straight left edge
+  const cfg = G.resolve(withSet({ "writing.wobble": 1.5 }));
+  const tall = ({ word }) => Array.from({ length: word.length }, (_, j) => [[0.6 * j, -1], [0.6 * j + 0.2, 2]]); // every line crowds the one above
+  const text = Array.from({ length: 6 }, () => Array(60).fill("word").join(" ")).join("\n");
+  const starts = [], steps = [];
+  for (let seed = 1; seed <= 4; seed++) {
+    const lines = G.layoutPages(G.words(text, seed), tall, cfg, mulberry(seed)).flat().filter(l => l.length);
+    starts.push(...lines.map(l => G.extent(l)[0]));
+    lines.slice(1).forEach((l, i) => steps.push(l.baseline - lines[i].baseline));
+  }
+  const lo = Math.min(...starts), hi = Math.max(...starts), edge = starts.filter(x => x - lo < 0.02 || hi - x < 0.02).length;
+  assert.ok(edge <= 0.03 * starts.length + 2, `${edge} of ${starts.length} lines start at the very edge of the margin's room`);
+  // crowded lines settle into a steady spacing (the hand leaves more room from then on), rather than tight, tight, wide
+  const ok = steps.filter(s => s > 0 && s < 3 * cfg.writing.line_spacing), m = ok.reduce((a, b) => a + b, 0) / ok.length;
+  const cv = Math.sqrt(ok.reduce((a, b) => a + (b - m) ** 2, 0) / ok.length) / m;
+  assert.ok(cv < 0.12, `line spacing varies ${cv.toFixed(3)} (sd/mean)`);
+});
