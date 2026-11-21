@@ -657,7 +657,7 @@
     }
     // a misspelling is mostly noticed as it goes wrong: the pen stops a letter or two after the wrong letter (a writer's
     // own habit goes unnoticed: written out in full)
-    if (how === "spelling" && wrong !== mine && wrong.length >= 4 && r(11) < 0.6) {
+    if (how === "spelling" && wrong !== mine && wrong.length >= 4 && r(11) < 0.75) {
       let d = 0;
       while (d < Math.min(wrong.length, s.length) && wrong[d].toLowerCase() === s[d].toLowerCase()) d++;
       wrong = wrong.slice(0, Math.min(wrong.length, Math.max(3, d + 1 + Math.floor(r(12) * 2))));
@@ -975,13 +975,13 @@
           // and lean, a little past the letters above and below, dense enough to black the word out (an even zigzag
           // inside the word's box, with the word showing through, read as drawn by machine)
           const top = 1.2 + 0.3 * a(N()), low = -(0.15 + 0.12 * a(N())), mid = (top + low) / 2, R = (top - low) / 2;
-          const band = (px, h) => { px = clip(px, Math.max(areaLeft, x0 - 0.15 * u), Math.min(right, x1)); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - h * u]; };
-          const adv = (0.45 + 0.2 * a(N())) * u, back = x0 + (0.1 + 0.35 * a(N())) * w; // travel per loop (on average); where the way back ends
-          let x = x0 + 0.1 * u, th = N() * 3, dir = 1, wander = 0;
+          const band = (px, h) => { px = clip(px, Math.max(areaLeft, x0 - 0.3 * u), Math.min(right, x1)); return [px + p.dx, f.baseline(px) + p.drift * xh + p.dy - h * u]; };
+          const adv = (0.55 + 0.25 * a(N())) * u, back = x0 + (0.1 + 0.35 * a(N())) * w; // travel per loop (on average); where the way back ends
+          let x = x0 - 0.1 * u, th = N() * 3, dir = 1, wander = 0; // (from just before the word: its first letter is covered too)
           for (let loops = 0; loops < 60; loops++) {
             // (no two loops alike: bigger and smaller, higher and lower, rounder and flatter, some further along than others)
             wander = clip(0.6 * wander + 0.12 * N(), -0.2, 0.2);
-            const r = R * clip(0.85 + 0.25 * N(), 0.5, 1.15), rx = (0.28 + 0.2 * a(N())) * u, lean = 0.12 + 0.12 * N(), go = adv * clip(1 + 0.35 * N(), 0.5, 1.6);
+            const r = R * clip(0.85 + 0.25 * N(), 0.5, 1.15), rx = (0.35 + 0.25 * a(N())) * u, lean = 0.12 + 0.12 * N(), go = adv * (N() < -1 ? -0.6 : clip(1 + 0.35 * N(), 0.5, 1.6)); // (now and then back over the last loop before going on)
             for (let q = 0; q < 6; q++) {
               th += (Math.PI / 3 + 0.15 * N()) * dir; x += dir * go / 6;
               const h = mid + wander + r * Math.sin(th) + N() * 0.05;
