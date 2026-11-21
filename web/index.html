@@ -698,6 +698,7 @@
   @media (max-width: 639px) { .extras { grid-template-columns: minmax(0,1fr); } }
   .extras svg { display: block; width: 100%; height: auto; margin: 0 0 16px; background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-sm); }
   .extras p { margin: 0; color: var(--text-2); font-size: 15.5px; }
+  #printing .send-warn { margin: 24px 0 48px; }
   .extras .wide { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap: 0 28px; align-content: center; } /* the featured one: picture beside the words */
   .extras .wide svg { grid-row: span 2; margin: 0; }
   .extras .wide h3 { align-self: end; }
@@ -1139,14 +1140,23 @@
     </div>
   </section>
 
-  <section class="block band" id="printing" data-fold="What the printer does from start to finish, and when to put in the paper and the pen.">
+  <section class="block band" id="printing" data-fold="How to start the file on your printer (Bambu Lab, Prusa, Klipper, Marlin, OctoPrint, Duet), what it does from start to finish, and when to put in the paper and the pen.">
     <div class="wrap">
       <div class="sec-head" data-stagger>
         <p class="kicker">Running the file</p>
         <h2>What happens when you print</h2>
-        <p class="intro">Send the <code>.gcode</code> file to the printer the same way as other plain G-code (for example on the SD card). The pauses are timed:
+        <p class="intro">Get the <code>.gcode</code> file onto your printer the way it takes files (below), then start it with the pen out and follow the pauses. The pauses are timed:
           the printer carries on by itself when the time is up. With <span class="ui">Printer sounds</span> on, it plays a tune at each pause.</p>
       </div>
+      <div class="extras send" id="send" data-stagger>
+        <div class="card"><h3>Bambu Lab</h3><p>A1, A1 mini, P1P, P1S, P2S, X1. Copy the file onto the printer's SD card, put the card back, and choose the file on the printer's screen. Bambu Studio and Bambu Handy can't open it.</p></div>
+        <div class="card"><h3>Prusa</h3><p>MK4, MK3.5, CORE One, MINI, XL: copy it onto a USB stick and pick it on the screen, or upload it in PrusaLink or Prusa Connect and start it there. MK3S: on the SD card, then <span class="ui">Print from SD</span>.</p></div>
+        <div class="card"><h3>Klipper printers</h3><p>Voron, Elegoo Neptune 4, Qidi, Sovol SV08 and others with Mainsail or Fluidd: type the printer's IP address into a browser, upload the file under G-code files, then click it and <span class="ui">Print</span>.</p></div>
+        <div class="card"><h3>Printers with a card slot</h3><p>Creality Ender, Anycubic, Artillery, Elegoo Neptune 3 and other Marlin printers: copy the file onto the SD or microSD card, put it in, and choose it under <span class="ui">Print from media</span> (or <span class="ui">Print</span>, by screen).</p></div>
+        <div class="card"><h3>OctoPrint</h3><p>Upload the file in OctoPrint's Files panel, then click the print button next to it.</p></div>
+        <div class="card"><h3>Duet</h3><p>In Duet Web Control, open <span class="ui">Jobs</span> and click <span class="ui">Upload &amp; Start</span>.</p></div>
+      </div>
+      <p class="note warn send-warn"><b>Don't open the file in a slicer first</b> (Bambu Studio, OrcaSlicer, PrusaSlicer, Cura, Creality Print). Their G-code viewers turn away a file that only moves a pen and prints no plastic, and saving it again from a slicer could change it. Several pages as a zip? Unzip it and run <code>1_page.gcode</code>, <code>2_page.gcode</code>, … in order, each on a fresh sheet.</p>
       <figure class="stepper rv fig" data-ms="5600">
         <div class="stage">
           <svg id="print" data-stage="1" viewBox="0 0 560 280" role="img" aria-label="The print head, pen and paper, seen from the side" data-anim>
