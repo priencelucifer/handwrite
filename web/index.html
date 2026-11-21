@@ -22,7 +22,7 @@
 <meta property="og:image:height" content="1000">
 <meta property="og:image:alt" content="The Handplot app with a handwritten page on the build-plate preview">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "WebSite", "name": "Handplot", "alternateName": ["Handwrite", "handplot.org"], "url": "https://handplot.org/"}, {"@type": "WebApplication", "name": "Handplot", "url": "https://handplot.org/app", "description": "Turn your 3D printer into a pen plotter that writes real-looking handwriting. Free G-code for Bambu Lab, Prusa, Creality and 400+ printers: type text or code.", "image": "https://handplot.org/guide-app.png", "applicationCategory": "DesignApplication", "operatingSystem": "Any (runs in a web browser)", "browserRequirements": "Requires JavaScript and WebAssembly", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "sameAs": ["https://github.com/priencelucifer/handwrite"], "author": {"@type": "Person", "name": "Ricky Kashyap", "url": "https://www.linkedin.com/in/ricky-kashyap-7b776723a", "sameAs": ["https://www.linkedin.com/in/ricky-kashyap-7b776723a", "https://github.com/priencelucifer"]}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "WebSite", "name": "Handplot", "alternateName": ["Handwrite", "handplot.org"], "url": "https://handplot.org/"}, {"@type": "WebApplication", "name": "Handplot", "url": "https://handplot.org/app", "description": "Turn your 3D printer into a pen plotter that writes real-looking handwriting. Free G-code for Bambu Lab, Prusa, Creality and 400+ printers: type text or code.", "image": "https://handplot.org/guide-app.png", "applicationCategory": "DesignApplication", "operatingSystem": "Any (runs in a web browser)", "browserRequirements": "Requires JavaScript and WebAssembly", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "sameAs": ["https://github.com/priencelucifer/handwrite"], "author": {"@type": "Person", "name": "Ricky Kashyap", "url": "https://rickykashyap.top/", "sameAs": ["https://rickykashyap.top/", "https://www.linkedin.com/in/ricky-kashyap-7b776723a", "https://github.com/priencelucifer"]}}]}</script>
 <style>
   /* ---------- 1. shared tokens (same block in app.html) ---------- */
   :root {
@@ -789,6 +789,7 @@
     .credit-cards .n { margin-top: 6px; font-size: 18px; }
     .foot-bottom { margin-top: 32px; }
     .foot-links { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } /* two even rows, no button left alone */
+    .foot-links li:last-child:nth-child(odd) { grid-column: 1 / -1; }
     .foot-links a { width: 100%; }
   }
 </style>
@@ -1473,6 +1474,7 @@
     <div class="foot-bottom">
       <p class="foot-made">Made by <b>Ricky Kashyap</b></p>
       <ul class="foot-links" aria-label="Links">
+        <li><a href="https://rickykashyap.top/" rel="me noopener" target="_blank">Portfolio</a></li>
         <li><a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener" target="_blank">LinkedIn</a></li>
         <li><a href="https://github.com/priencelucifer" rel="me noopener" target="_blank">GitHub</a></li>
         <li><a href="https://github.com/priencelucifer/handwrite" target="_blank" rel="noopener">Source code</a></li>

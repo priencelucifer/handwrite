@@ -221,6 +221,7 @@
     .credit-cards .n { margin-top: 6px; font-size: 18px; }
     .foot-bottom { margin-top: 32px; }
     .foot-links { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } /* two even rows, no button left alone */
+    .foot-links li:last-child:nth-child(odd) { grid-column: 1 / -1; }
     .foot-links a { width: 100%; }
   }
 </style>
@@ -1082,6 +1083,7 @@
     <div class="foot-bottom">
       <p class="foot-made">Made by <b>Ricky Kashyap</b></p>
       <ul class="foot-links" aria-label="Links">
+        <li><a href="https://rickykashyap.top/" rel="me noopener">Portfolio</a></li>
         <li><a href="https://www.linkedin.com/in/ricky-kashyap-7b776723a" rel="me noopener">LinkedIn</a></li>
         <li><a href="https://github.com/priencelucifer" rel="me noopener">GitHub</a></li>
         <li><a href="https://github.com/priencelucifer/handwrite">Source code</a></li>
